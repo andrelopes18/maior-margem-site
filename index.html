@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MaiorMargem - Monitoramento de Preços</title>
+<style>
+    body {
+        margin: 0;
+        font-family: 'Segoe UI', Arial, sans-serif;
+        background-color: #121212;
+        color: #fff;
+    }
+    header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 15px 30px;
+        background-color: #1c1c1c;
+        position: sticky;
+        top: 0;
+        z-index: 1000;
+        border-bottom: 1px solid #2a2a2a;
+    }
+    header img {
+        height: 45px;
+    }
+    .header-buttons button {
+        background-color: #00b140;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        margin-left: 10px;
+        border-radius: 25px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: transform 0.2s, background 0.3s;
+    }
+    .header-buttons button:hover {
+        background-color: #009b38;
+        transform: scale(1.05);
+    }
+    .hero {
+        text-align: center;
+        padding: 60px 20px;
+        animation: fadeIn 1.2s ease-in;
+    }
+    .hero h1 {
+        font-size: 32px;
+        color: #00b140;
+        margin-bottom: 10px;
+    }
+    .dashboard-preview {
+        background-color: #1e1e1e;
+        border: 1px solid #2a2a2a;
+        height: 220px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #777;
+        font-size: 18px;
+        margin-top: 20px;
+        border-radius: 8px;
+    }
+    .plans {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        padding: 40px 20px;
+        gap: 20px;
+    }
+    .plan {
+        border: 1px solid #2a2a2a;
+        border-radius: 10px;
+        padding: 25px;
+        width: 260px;
+        background-color: #1c1c1c;
+        box-shadow: 0px 2px 12px rgba(0,0,0,0.3);
+        text-align: center;
+        transition: transform 0.3s, border-color 0.3s;
+    }
+    .plan:hover {
+        transform: translateY(-5px);
+        border-color: #00b140;
+    }
+    .plan h2 {
+        color: #00b140;
+        font-size: 20px;
+    }
+    .plan ul {
+        list-style: none;
+        padding: 0;
+        margin: 15px 0;
+        text-align: left;
+    }
+    .plan ul li {
+        margin-bottom: 8px;
+    }
+    .plan .price {
+        font-size: 20px;
+        color: #e63946;
+        font-weight: bold;
+        margin-top: 10px;
+    }
+
+    /* Overlay de fundo */
+    .overlay {
+        display: none;
+        position: fixed;
+        z-index: 1500;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+    }
+
+    /* Painel lateral */
+    .side-panel {
+        position: fixed;
+        top: 0;
+        right: -400px;
+        width: 350px;
+        height: 100%;
+        background-color: #1c1c1c;
+        box-shadow: -4px 0 15px rgba(0,0,0,0.5);
+        z-index: 2000;
+        padding: 20px;
+        transition: right 0.4s ease;
+        overflow-y: auto;
+    }
+    .side-panel.active {
+        right: 0;
+    }
+    .side-panel h3 {
+        color: #00b140;
+        margin-top: 0;
+    }
+    .side-panel input {
+        width: 100%;
+        padding: 10px;
+        margin: 8px 0;
+        border: 1px solid #2a2a2a;
+        border-radius: 4px;
+        background-color: #121212;
+        color: white;
+    }
+    .side-panel button {
+        width: 100%;
+        background-color: #00b140;
+        color: white;
+        padding: 10px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+    .side-panel button:hover {
+        background-color: #009b38;
+    }
+
+    /* Animação fade */
+    @keyframes fadeIn {
+        from {opacity: 0;}
+        to {opacity: 1;}
+    }
+</style>
+</head>
+<body>
+
+<header>
+    <img src="data:image/png;base64,{{LOGO_BASE64}}" alt="MaiorMargem">
+    <div class="header-buttons">
+        <button onclick="openPanel('cadastro')">Cadastrar</button>
+        <button onclick="openPanel('login')">Entrar</button>
+    </div>
+</header>
+
+<section class="hero">
+    <h1>Monitoramento Inteligente de Preços</h1>
+    <p>Coletamos e comparamos preços de diversos sites, apresentando tudo de forma visual e organizada para você entender como o mercado está se comportando.</p>
+    <div class="dashboard-preview">
+        [ Prévia do Dashboard ]
+    </div>
+</section>
+
+<section class="plans">
+    <div class="plan">
+        <h2>Trial</h2>
+        <ul>
+            <li>Monitorar 100 SKUs</li>
+            <li>Sites monitorados: 2</li>
+            <li>Análise mensal: 1 inclusa</li>
+        </ul>
+        <div class="price">Gratuito</div>
+    </div>
+    <div class="plan">
+        <h2>Básico</h2>
+        <ul>
+            <li>Monitorar 1.000 SKUs</li>
+            <li>Sites monitorados: 5</li>
+            <li>Análise semanal: 4 inclusas</li>
+        </ul>
+        <div class="price">R$ 129,90</div>
+    </div>
+    <div class="plan">
+        <h2>Intermediário</h2>
+        <ul>
+            <li>Monitorar 5.000 SKUs</li>
+            <li>Sites monitorados: 8</li>
+            <li>Análise semanal: 4 inclusas</li>
+        </ul>
+        <div class="price">R$ 159,90</div>
+    </div>
+    <div class="plan">
+        <h2>Prime</h2>
+        <ul>
+            <li>Monitorar 20.000 SKUs</li>
+            <li>Sites monitorados: 12</li>
+            <li>Análise semanal: 4 inclusas</li>
+        </ul>
+        <div class="price">R$ 249,90</div>
+    </div>
+</section>
+<!-- Seção Planos -->
+
+<!-- Carrossel de empresas -->
+<section class="empresa-carousel">
+    <div class="carousel-track">
+        <img src="https://via.placeholder.com/120x60?text=Empresa+1" alt="Empresa 1">
+        <img src="https://via.placeholder.com/120x60?text=Empresa+2" alt="Empresa 2">
+        <img src="https://via.placeholder.com/120x60?text=Empresa+3" alt="Empresa 3">
+        <img src="https://via.placeholder.com/120x60?text=Empresa+4" alt="Empresa 4">
+        <img src="https://via.placeholder.com/120x60?text=Empresa+5" alt="Empresa 5">
+        <!-- duplicação para rolagem contínua -->
+        <img src="https://via.placeholder.com/120x60?text=Empresa+1" alt="Empresa 1">
+        <img src="https://via.placeholder.com/120x60?text=Empresa+2" alt="Empresa 2">
+        <img src="https://via.placeholder.com/120x60?text=Empresa+3" alt="Empresa 3">
+        <img src="https://via.placeholder.com/120x60?text=Empresa+4" alt="Empresa 4">
+        <img src="https://via.placeholder.com/120x60?text=Empresa+5" alt="Empresa 5">
+    </div>
+</section>
+
+<style>
+    .empresa-carousel {
+        background-color: #1c1c1c;
+        padding: 20px 0;
+        overflow: hidden;
+    }
+    .carousel-track {
+        display: flex;
+        gap: 40px;
+        animation: scrollLogos 20s linear infinite;
+    }
+    .empresa-carousel img {
+        filter: brightness(0) invert(1);
+        height: 60px;
+    }
+    @keyframes scrollLogos {
+        0% { transform: translateX(0); }
+        100% { transform: translateX(-50%); }
+    }
+</style>
+
+
+<!-- Overlay -->
+<div id="overlay" class="overlay" onclick="closePanel()"></div>
+
+<!-- Painel Cadastro -->
+<div id="panel-cadastro" class="side-panel">
+    <h3>Cadastre-se</h3>
+    <input type="text" placeholder="Nome">
+    <input type="email" placeholder="Email">
+    <input type="password" placeholder="Senha">
+    <button>Cadastrar</button>
+</div>
+
+<!-- Painel Login -->
+<div id="panel-login" class="side-panel">
+    <h3>Entrar</h3>
+    <input type="email" placeholder="Email">
+    <input type="password" placeholder="Senha">
+    <button>Login</button>
+</div>
+
+<script>
+    function openPanel(type) {
+        document.getElementById("overlay").style.display = "block";
+        if (type === 'cadastro') {
+            document.getElementById("panel-cadastro").classList.add("active");
+        } else if (type === 'login') {
+            document.getElementById("panel-login").classList.add("active");
+        }
+    }
+    function closePanel() {
+        document.getElementById("overlay").style.display = "none";
+        document.getElementById("panel-cadastro").classList.remove("active");
+        document.getElementById("panel-login").classList.remove("active");
+    }
+</script>
+
+</body>
+</html>
