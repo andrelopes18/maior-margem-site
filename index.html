@@ -5,139 +5,44 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MaiorMargem - Monitoramento de Preços</title>
 <style>
-    body {
-        margin: 0;
-        font-family: 'Segoe UI', Arial, sans-serif;
-        background-color: #121212;
-        color: #fff;
-    }
-    header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 15px 30px;
-        background-color: #1c1c1c;
-        position: sticky;
-        top: 0;
-        z-index: 1000;
-        border-bottom: 1px solid #2a2a2a;
-    }
-    header img { height: 45px; }
+    body { margin: 0; font-family: 'Segoe UI', Arial, sans-serif; background:#121212; color:#fff; }
+    header { display:flex; justify-content:space-between; align-items:center; padding:15px 30px; background:#1c1c1c; position:sticky; top:0; z-index:1000; border-bottom:1px solid #2a2a2a; }
+    header img { height:45px; }
+    .auth-chip { background:#0e4; color:#001; padding:6px 10px; border-radius:999px; font-size:12px; margin-left:12px; display:none; }
+    .header-buttons button { background:#00b140; color:#fff; border:none; padding:10px 20px; margin-left:10px; border-radius:25px; cursor:pointer; font-size:14px; transition:transform .2s, background .3s; }
+    .header-buttons button:hover { background:#009b38; transform:scale(1.05); }
 
-    .auth-chip {
-        background:#0e4;
-        color:#001;
-        padding:6px 10px;
-        border-radius:999px;
-        font-size:12px;
-        margin-left:12px;
-        display:none;
-    }
-    .header-buttons button {
-        background-color: #00b140;
-        color: white;
-        border: none;
-        padding: 10px 20px;
-        margin-left: 10px;
-        border-radius: 25px;
-        cursor: pointer;
-        font-size: 14px;
-        transition: transform 0.2s, background 0.3s;
-    }
-    .header-buttons button:hover {
-        background-color: #009b38;
-        transform: scale(1.05);
-    }
+    .hero { text-align:center; padding:60px 20px; animation:fadeIn 1.2s ease-in; }
+    .hero h1 { font-size:32px; color:#00b140; margin-bottom:10px; }
+    .dashboard-preview { background:#1e1e1e; border:1px solid #2a2a2a; height:220px; display:flex; align-items:center; justify-content:center; color:#777; font-size:18px; margin-top:20px; border-radius:8px; }
 
-    .hero {
-        text-align: center;
-        padding: 60px 20px;
-        animation: fadeIn 1.2s ease-in;
-    }
-    .hero h1 {
-        font-size: 32px;
-        color: #00b140;
-        margin-bottom: 10px;
-    }
-    .dashboard-preview {
-        background-color: #1e1e1e;
-        border: 1px solid #2a2a2a;
-        height: 220px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: #777;
-        font-size: 18px;
-        margin-top: 20px;
-        border-radius: 8px;
-    }
-    .plans {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: center;
-        padding: 40px 20px;
-        gap: 20px;
-    }
-    .plan {
-        border: 1px solid #2a2a2a;
-        border-radius: 10px;
-        padding: 25px;
-        width: 260px;
-        background-color: #1c1c1c;
-        box-shadow: 0px 2px 12px rgba(0,0,0,0.3);
-        text-align: center;
-        transition: transform 0.3s, border-color 0.3s;
-    }
-    .plan:hover { transform: translateY(-5px); border-color: #00b140; }
-    .plan h2 { color: #00b140; font-size: 20px; }
-    .plan ul { list-style: none; padding: 0; margin: 15px 0; text-align: left; }
-    .plan ul li { margin-bottom: 8px; }
-    .plan .price { font-size: 20px; color: #e63946; font-weight: bold; margin-top: 10px; }
+    .plans { display:flex; flex-wrap:wrap; justify-content:center; padding:40px 20px; gap:20px; }
+    .plan { border:1px solid #2a2a2a; border-radius:10px; padding:25px; width:260px; background:#1c1c1c; box-shadow:0 2px 12px rgba(0,0,0,.3); text-align:center; transition:transform .3s, border-color .3s; }
+    .plan:hover { transform:translateY(-5px); border-color:#00b140; }
+    .plan h2 { color:#00b140; font-size:20px; }
+    .plan ul { list-style:none; padding:0; margin:15px 0; text-align:left; }
+    .plan ul li { margin-bottom:8px; }
+    .plan .price { font-size:20px; color:#e63946; font-weight:bold; margin-top:10px; }
 
-    /* Carrossel de empresas */
-    .empresa-carousel { background-color: #1c1c1c; padding: 20px 0; overflow: hidden; }
-    .carousel-track { display: flex; gap: 40px; animation: scrollLogos 20s linear infinite; }
-    .empresa-carousel img { filter: brightness(0) invert(1); height: 60px; }
-    @keyframes scrollLogos { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+    .empresa-carousel { background:#1c1c1c; padding:20px 0; overflow:hidden; }
+    .carousel-track { display:flex; gap:40px; animation:scrollLogos 20s linear infinite; }
+    .empresa-carousel img { filter:brightness(0) invert(1); height:60px; }
+    @keyframes scrollLogos { 0%{ transform:translateX(0);} 100%{ transform:translateX(-50%);} }
+    @keyframes fadeIn { from{opacity:0;} to{opacity:1;} }
 
-    /* Overlay e painéis */
-    .overlay {
-        display: none;
-        position: fixed;
-        z-index: 1500;
-        top: 0; left: 0; width: 100%; height: 100%;
-        background: rgba(0,0,0,0.5);
-    }
-    .side-panel {
-        position: fixed; top: 0; right: -400px;
-        width: 350px; height: 100%;
-        background-color: #1c1c1c;
-        box-shadow: -4px 0 15px rgba(0,0,0,0.5);
-        z-index: 2000; padding: 20px;
-        transition: right 0.4s ease;
-        overflow-y: auto;
-    }
-    .side-panel.active { right: 0; }
-    .side-panel h3 { color: #00b140; margin-top: 0; }
-    .side-panel input {
-        width: 100%; padding: 10px; margin: 8px 0;
-        border: 1px solid #2a2a2a; border-radius: 4px;
-        background-color: #121212; color: white;
-    }
-    .side-panel button {
-        width: 100%; background-color: #00b140; color: white;
-        padding: 10px; border: none; border-radius: 4px; cursor: pointer;
-    }
-    .side-panel button:hover { background-color: #009b38; }
-
-    /* Animação fade */
-    @keyframes fadeIn { from {opacity: 0;} to {opacity: 1;} }
+    .overlay { display:none; position:fixed; z-index:1500; inset:0; background:rgba(0,0,0,.5); }
+    .side-panel { position:fixed; top:0; right:-400px; width:350px; height:100%; background:#1c1c1c; box-shadow:-4px 0 15px rgba(0,0,0,.5); z-index:2000; padding:20px; transition:right .4s ease; overflow-y:auto; }
+    .side-panel.active { right:0; }
+    .side-panel h3 { color:#00b140; margin-top:0; }
+    .side-panel input { width:100%; padding:10px; margin:8px 0; border:1px solid #2a2a2a; border-radius:4px; background:#121212; color:#fff; }
+    .side-panel button { width:100%; background:#00b140; color:#fff; padding:10px; border:none; border-radius:4px; cursor:pointer; }
+    .side-panel button:hover { background:#009b38; }
 </style>
 </head>
 <body>
 
 <header>
-    <img src="data:image/png;base64,{{LOGO_BASE64}}" alt="MaiorMargem">
+    <img src="https://via.placeholder.com/180x45?text=MaiorMargem" alt="MaiorMargem">
     <div style="display:flex; align-items:center;">
         <span id="authChip" class="auth-chip"></span>
         <div id="headerBtns" class="header-buttons">
@@ -159,43 +64,26 @@
 <section class="plans">
     <div class="plan">
         <h2>Trial</h2>
-        <ul>
-            <li>Monitorar 100 SKUs</li>
-            <li>Sites monitorados: 2</li>
-            <li>Análise mensal: 1 inclusa</li>
-        </ul>
+        <ul><li>Monitorar 100 SKUs</li><li>Sites monitorados: 2</li><li>Análise mensal: 1 inclusa</li></ul>
         <div class="price">Gratuito</div>
     </div>
     <div class="plan">
         <h2>Básico</h2>
-        <ul>
-            <li>Monitorar 1.000 SKUs</li>
-            <li>Sites monitorados: 5</li>
-            <li>Análise semanal: 4 inclusas</li>
-        </ul>
+        <ul><li>Monitorar 1.000 SKUs</li><li>Sites monitorados: 5</li><li>Análise semanal: 4 inclusas</li></ul>
         <div class="price">R$ 129,90</div>
     </div>
     <div class="plan">
         <h2>Intermediário</h2>
-        <ul>
-            <li>Monitorar 5.000 SKUs</li>
-            <li>Sites monitorados: 8</li>
-            <li>Análise semanal: 4 inclusas</li>
-        </ul>
+        <ul><li>Monitorar 5.000 SKUs</li><li>Sites monitorados: 8</li><li>Análise semanal: 4 inclusas</li></ul>
         <div class="price">R$ 159,90</div>
     </div>
     <div class="plan">
         <h2>Prime</h2>
-        <ul>
-            <li>Monitorar 20.000 SKUs</li>
-            <li>Sites monitorados: 12</li>
-            <li>Análise semanal: 4 inclusas</li>
-        </ul>
+        <ul><li>Monitorar 20.000 SKUs</li><li>Sites monitorados: 12</li><li>Análise semanal: 4 inclusas</li></ul>
         <div class="price">R$ 249,90</div>
     </div>
 </section>
 
-<!-- Carrossel de empresas -->
 <section class="empresa-carousel">
     <div class="carousel-track">
         <img src="https://via.placeholder.com/120x60?text=Empresa+1" alt="Empresa 1">
@@ -203,7 +91,6 @@
         <img src="https://via.placeholder.com/120x60?text=Empresa+3" alt="Empresa 3">
         <img src="https://via.placeholder.com/120x60?text=Empresa+4" alt="Empresa 4">
         <img src="https://via.placeholder.com/120x60?text=Empresa+5" alt="Empresa 5">
-        <!-- duplicação para rolagem contínua -->
         <img src="https://via.placeholder.com/120x60?text=Empresa+1" alt="Empresa 1">
         <img src="https://via.placeholder.com/120x60?text=Empresa+2" alt="Empresa 2">
         <img src="https://via.placeholder.com/120x60?text=Empresa+3" alt="Empresa 3">
@@ -242,127 +129,109 @@
     <button onclick="recuperarSenha()">Enviar link</button>
 </div>
 
-<!-- Scripts -->
+<!-- 1) Config central + 2) Supabase + 3) App -->
+<script src="/config.js"></script>
 <script src="https://unpkg.com/@supabase/supabase-js"></script>
 <script>
-  // ========= 1) CONFIG DO SUPABASE (troque pelos seus) =========
-const SUPABASE_URL = "https://maprezivxfitqyifmepq.supabase.co"; // troque pelo seu
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hcHJleml2eGZpdHF5aWZtZXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM2MTc4OTcsImV4cCI6MjA2OTE5Mzg5N30.qz8iMEZY0mkh5QgeBKh8lYLITRjcAADbApJkGFwACJI";             // troque pelo seu
-const SITE_URL = "https://maior-margem-site.vercel.app";      // troque pelo seu
+  const { SUPABASE_URL, SUPABASE_ANON_KEY, SITE_URL } = window.CONFIG;
   const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  // ========= 2) UI: abrir/fechar painéis =========
   function openPanel(type) {
-      document.getElementById("overlay").style.display = "block";
-      if (type === 'cadastro') document.getElementById("panel-cadastro").classList.add("active");
-      if (type === 'login') document.getElementById("panel-login").classList.add("active");
-      if (type === 'recuperar') document.getElementById("panel-recuperar").classList.add("active");
+    document.getElementById("overlay").style.display = "block";
+    if (type === 'cadastro') document.getElementById("panel-cadastro").classList.add("active");
+    if (type === 'login') document.getElementById("panel-login").classList.add("active");
+    if (type === 'recuperar') document.getElementById("panel-recuperar").classList.add("active");
   }
   function closePanel() {
-      document.getElementById("overlay").style.display = "none";
-      ["panel-cadastro","panel-login","panel-recuperar"].forEach(id => {
-          document.getElementById(id).classList.remove("active");
-      });
+    document.getElementById("overlay").style.display = "none";
+    ["panel-cadastro","panel-login","panel-recuperar"].forEach(id => {
+      document.getElementById(id).classList.remove("active");
+    });
   }
 
-  // ========= 3) Validações auxiliares =========
   function isEmail(val){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val); }
 
-  // ========= 4) CADASTRO (bloqueio de duplicidade + emailRedirectTo) =========
+  // Cadastro com bloqueio de duplicidade e redirect configurado
   async function registrarUsuario() {
-      const btn = document.getElementById("btnCadastrar");
-      const nome  = document.getElementById("nomeCadastro").value.trim();
-      const email = document.getElementById("emailCadastro").value.trim();
-      const senha = document.getElementById("senhaCadastro").value;
+    const btn   = document.getElementById("btnCadastrar");
+    const nome  = document.getElementById("nomeCadastro").value.trim();
+    const email = document.getElementById("emailCadastro").value.trim();
+    const senha = document.getElementById("senhaCadastro").value;
 
-      if (!email || !senha) { alert("Preencha email e senha."); return; }
-      if (!isEmail(email))  { alert("Email inválido."); return; }
-      if (senha.length < 6) { alert("A senha deve ter pelo menos 6 caracteres."); return; }
+    if (!email || !senha) { alert("Preencha email e senha."); return; }
+    if (!isEmail(email))  { alert("Email inválido."); return; }
+    if (senha.length < 6) { alert("A senha deve ter pelo menos 6 caracteres."); return; }
 
-      const oldText = btn.textContent; btn.disabled = true; btn.textContent = "Cadastrando...";
+    const oldText = btn.textContent; btn.disabled = true; btn.textContent = "Cadastrando...";
 
-      try {
-        const { data, error } = await sb.auth.signUp({
-          email,
-          password: senha,
-          options: {
-            data: nome ? { nome } : {},
-            emailRedirectTo: SITE_URL
-          }
-        });
+    try {
+      const { data, error } = await sb.auth.signUp({
+        email,
+        password: senha,
+        options: { data: nome ? { nome } : {}, emailRedirectTo: SITE_URL }
+      });
 
-        // 1) Erro explícito (já confirmado etc.)
-        if (error) {
-          const msg = (error.message || "").toLowerCase();
-          if (
-            msg.includes("already registered") ||
-            msg.includes("user already exists") ||
-            msg.includes("duplicate") ||
-            msg.includes("email exists")
-          ) { alert("Este email já está cadastrado. Use o Login ou a Recuperação de Senha."); return; }
-          if (msg.includes("email rate limit")) { alert("Muitos envios para este email em pouco tempo. Aguarde alguns minutos e tente novamente."); return; }
-          alert("Erro no cadastro: " + error.message); return;
-        }
-
-        // 2) Sem erro, mas o usuário já existia (geralmente pendente): identities vazio
-        if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
-          alert("Este email já está cadastrado. Caso não tenha confirmado, verifique sua caixa de entrada ou use Recuperar Senha.");
+      if (error) {
+        const msg = (error.message || "").toLowerCase();
+        if (msg.includes("already registered") || msg.includes("user already exists") || msg.includes("duplicate") || msg.includes("email exists")) {
+          alert("Este email já está cadastrado. Use o Login ou a Recuperação de Senha.");
           return;
         }
-
-        // 3) Novo cadastro → email enviado
-        alert("Cadastro criado! Verifique seu email para confirmar a conta.");
-        closePanel();
-
-      } catch(e){
-        alert("Falha inesperada ao cadastrar: " + (e?.message || e));
-      } finally {
-        btn.disabled = false; btn.textContent = oldText;
+        if (msg.includes("email rate limit")) { alert("Muitos envios para este email. Aguarde alguns minutos e tente novamente."); return; }
+        alert("Erro no cadastro: " + error.message); return;
       }
+
+      // Se identities vier vazio, geralmente o usuário já existia (pendente)
+      if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+        alert("Este email já está cadastrado. Caso não tenha confirmado, verifique sua caixa de entrada ou use Recuperar Senha.");
+        return;
+      }
+
+      alert("Cadastro criado! Verifique seu email para confirmar a conta.");
+      closePanel();
+
+    } catch (e) {
+      alert("Falha inesperada ao cadastrar: " + (e?.message || e));
+    } finally {
+      btn.disabled = false; btn.textContent = oldText;
+    }
   }
 
-  // ========= 5) LOGIN =========
   async function fazerLogin() {
-      const email = document.getElementById("emailLogin").value.trim();
-      const senha = document.getElementById("senhaLogin").value;
-
-      const { error } = await sb.auth.signInWithPassword({ email, password: senha });
-      if (error) alert("Erro no login: " + error.message);
-      else { alert("Login realizado!"); closePanel(); atualizarUIAuth(); }
+    const email = document.getElementById("emailLogin").value.trim();
+    const senha = document.getElementById("senhaLogin").value;
+    const { error } = await sb.auth.signInWithPassword({ email, password: senha });
+    if (error) alert("Erro no login: " + error.message);
+    else { alert("Login realizado!"); closePanel(); atualizarUIAuth(); }
   }
 
-  // ========= 6) LOGOUT =========
   async function sair() { await sb.auth.signOut(); await atualizarUIAuth(); alert("Você saiu da conta."); }
 
-  // ========= 7) RECUPERAR SENHA =========
   async function recuperarSenha() {
-      const email = document.getElementById("emailRecuperar").value.trim();
-      if (!email) { alert("Informe o email."); return; }
-
-      const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: SITE_URL + "/reset.html" });
-      if (error) alert("Erro: " + error.message);
-      else { alert("Enviamos um link de recuperação para seu email."); closePanel(); }
+    const email = document.getElementById("emailRecuperar").value.trim();
+    if (!email) { alert("Informe o email."); return; }
+    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: SITE_URL + "/reset.html" });
+    if (error) alert("Erro: " + error.message);
+    else { alert("Enviamos um link de recuperação para seu email."); closePanel(); }
   }
 
-  // ========= 8) UI reativa ao estado de auth =========
   async function atualizarUIAuth() {
-      const { data: { session } } = await sb.auth.getSession();
-      const chip = document.getElementById("authChip");
-      const headerBtns = document.getElementById("headerBtns");
-      const logoutBox = document.getElementById("logoutBox");
-
-      if (session && session.user) {
-          chip.textContent = "Logado: " + (session.user.email || "");
-          chip.style.display = "inline-block";
-          headerBtns.style.display = "none";
-          logoutBox.style.display = "block";
-      } else {
-          chip.style.display = "none";
-          headerBtns.style.display = "block";
-          logoutBox.style.display = "none";
-      }
+    const { data: { session } } = await sb.auth.getSession();
+    const chip = document.getElementById("authChip");
+    const headerBtns = document.getElementById("headerBtns");
+    const logoutBox = document.getElementById("logoutBox");
+    if (session && session.user) {
+      chip.textContent = "Logado: " + (session.user.email || "");
+      chip.style.display = "inline-block";
+      headerBtns.style.display = "none";
+      logoutBox.style.display = "block";
+    } else {
+      chip.style.display = "none";
+      headerBtns.style.display = "block";
+      logoutBox.style.display = "none";
+    }
   }
-  sb.auth.onAuthStateChange((_event, _session) => atualizarUIAuth());
+  sb.auth.onAuthStateChange((_e,_s) => atualizarUIAuth());
   atualizarUIAuth();
 </script>
 

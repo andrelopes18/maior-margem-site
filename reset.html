@@ -41,11 +41,11 @@
   </div>
 </div>
 
+<!-- 1) Config central + 2) Supabase + 3) App -->
+<script src="/config.js"></script>
 <script src="https://unpkg.com/@supabase/supabase-js"></script>
 <script>
-const SUPABASE_URL = "https://maprezivxfitqyifmepq.supabase.co"; // troque pelo seu
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hcHJleml2eGZpdHF5aWZtZXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM2MTc4OTcsImV4cCI6MjA2OTE5Mzg5N30.qz8iMEZY0mkh5QgeBKh8lYLITRjcAADbApJkGFwACJI";             // troque pelo seu
-const HOME_URL = "https://maior-margem-site.vercel.app";      // troque pelo seu
+const { SUPABASE_URL, SUPABASE_ANON_KEY, HOME_URL } = window.CONFIG;
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const $ = (id)=>document.getElementById(id);
@@ -73,9 +73,8 @@ function parseTokensFrom(urlLike) {
     const u = new URL(urlLike, window.location.origin);
     const hash = u.hash?.startsWith('#') ? u.hash.slice(1) : '';
     const allParams = new URLSearchParams(hash);
-    // também inclui querystring (fallback quando e-mail remove '#')
+    // inclui querystring (fallback quando cliente de e-mail remove '#')
     u.searchParams.forEach((v,k)=>allParams.set(k,v));
-
     return {
       access_token:  allParams.get('access_token'),
       refresh_token: allParams.get('refresh_token'),
@@ -97,15 +96,15 @@ async function tryOpenSessionFrom(urlLike) {
 
 async function bootstrap() {
   try {
-    // 1) tenta a URL atual
+    // 1) Tenta abrir sessão a partir da URL atual
     const okNow = await tryOpenSessionFrom(window.location.href);
     if (okNow) return;
 
-    // 2) se não deu, talvez a sessão já esteja ativa (ex.: abriu e voltou)
+    // 2) Caso a sessão já esteja ativa (ex.: reabriu a página)
     const { data: { session } } = await sb.auth.getSession();
     if (session && session.user) { enableForm(); return; }
 
-    // 3) ainda não deu: instrui o usuário a colar o link manualmente
+    // 3) Orienta a usar o campo manual
     status.textContent = 'Não foi possível iniciar a sessão de recuperação.';
     showError('Abra o link diretamente do e-mail em um navegador. Se o seu e-mail remove o trecho após o #, copie o endereço do link e cole no campo "Usar este link".');
   } catch (e) {
