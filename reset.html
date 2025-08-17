@@ -34,18 +34,22 @@
   <div class="manual">
     <details>
       <summary>Problemas? Clique aqui para colar o link do email manualmente</summary>
-      <p class="hint">No seu cliente de e-mail, copie o <b>endereço do link</b> de recuperação (incluindo tudo após o <code>#</code>) e cole abaixo:</p>
+      <p class="hint">No seu e-mail, copie o <b>endereço do link</b> (incluindo tudo após <code>#</code> ou <code>?</code>) e cole abaixo:</p>
       <textarea id="linkManual" placeholder="Cole aqui a URL completa recebida por email"></textarea>
       <button id="btnAplicar" onclick="aplicarLinkManual()">Usar este link</button>
     </details>
   </div>
 </div>
 
-<!-- 1) Config central + 2) Supabase + 3) App -->
-<script src="/config.js"></script>
+<!-- ORDEM IMPORTA: 1) config → 2) supabase lib → 3) app -->
+<script src="config.js?v=1"></script>
 <script src="https://unpkg.com/@supabase/supabase-js"></script>
 <script>
-const { SUPABASE_URL, SUPABASE_ANON_KEY, HOME_URL } = window.CONFIG;
+const { SUPABASE_URL, SUPABASE_ANON_KEY, HOME_URL } = window.CONFIG || {};
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  alert("Erro de configuração: o arquivo config.js não carregou.");
+  throw new Error("CONFIG ausente");
+}
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const $ = (id)=>document.getElementById(id);
@@ -61,25 +65,16 @@ function enableForm() {
   input1.disabled = false; input2.disabled = false; btn.disabled = false;
   errBox.style.display = 'none'; errBox.textContent = '';
 }
-
-function showError(m) {
-  errBox.style.display = 'block';
-  errBox.textContent = m;
-}
+function showError(m) { errBox.style.display = 'block'; errBox.textContent = m; }
 
 function parseTokensFrom(urlLike) {
   try {
-    // aceita hash (#a=b&c=d) e/ou query (?a=b&c=d)
     const u = new URL(urlLike, window.location.origin);
     const hash = u.hash?.startsWith('#') ? u.hash.slice(1) : '';
     const allParams = new URLSearchParams(hash);
-    // inclui querystring (fallback quando cliente de e-mail remove '#')
+    // fallback: alguns e-mails movem o hash para a querystring
     u.searchParams.forEach((v,k)=>allParams.set(k,v));
-    return {
-      access_token:  allParams.get('access_token'),
-      refresh_token: allParams.get('refresh_token'),
-      type:          allParams.get('type')
-    };
+    return { access_token: allParams.get('access_token'), refresh_token: allParams.get('refresh_token') };
   } catch { return {}; }
 }
 
@@ -96,17 +91,16 @@ async function tryOpenSessionFrom(urlLike) {
 
 async function bootstrap() {
   try {
-    // 1) Tenta abrir sessão a partir da URL atual
-    const okNow = await tryOpenSessionFrom(window.location.href);
-    if (okNow) return;
+    // 1) Tenta com a URL atual
+    if (await tryOpenSessionFrom(window.location.href)) return;
 
-    // 2) Caso a sessão já esteja ativa (ex.: reabriu a página)
+    // 2) Se já houver sessão ativa
     const { data: { session } } = await sb.auth.getSession();
     if (session && session.user) { enableForm(); return; }
 
-    // 3) Orienta a usar o campo manual
+    // 3) Orienta a colar o link manualmente
     status.textContent = 'Não foi possível iniciar a sessão de recuperação.';
-    showError('Abra o link diretamente do e-mail em um navegador. Se o seu e-mail remove o trecho após o #, copie o endereço do link e cole no campo "Usar este link".');
+    showError('Abra o link diretamente do e-mail. Se o cliente removeu o #, cole o endereço do link no campo "Usar este link".');
   } catch (e) {
     status.textContent = 'Erro ao iniciar a recuperação.';
     showError('Falha: ' + (e?.message || e));
@@ -118,35 +112,25 @@ async function aplicarLinkManual() {
   if (!raw) { alert('Cole a URL completa do e-mail.'); return; }
   try {
     const ok = await tryOpenSessionFrom(raw);
-    if (!ok) { showError('Não encontrei tokens na URL colada. Confirme que ela contém "#access_token=...&refresh_token=...".'); return; }
-  } catch(e) {
-    showError('Erro ao aplicar link: ' + (e?.message || e));
-  }
+    if (!ok) showError('Não encontrei tokens na URL colada. Confirme que ela contém "access_token" e "refresh_token".');
+  } catch(e) { showError('Erro ao aplicar link: ' + (e?.message || e)); }
 }
 
 async function salvarNovaSenha() {
-  const nova = input1.value;
-  const conf = input2.value;
-
+  const nova = input1.value, conf = input2.value;
   if (!nova || !conf) { alert('Preencha os dois campos.'); return; }
   if (nova !== conf)  { alert('As senhas não conferem.'); return; }
   if (nova.length < 6){ alert('A senha deve ter pelo menos 6 caracteres.'); return; }
 
-  const old = btn.textContent;
-  btn.disabled = true; btn.textContent = 'Salvando...';
-
+  const old = btn.textContent; btn.disabled = true; btn.textContent = 'Salvando...';
   try {
     const { data: { session } } = await sb.auth.getSession();
-    if (!session) throw new Error('Sessão de recuperação ausente ou expirada. Gere um novo link e tente novamente.');
-
+    if (!session) throw new Error('Sessão ausente/expirada. Gere um novo link e tente novamente.');
     const { error } = await sb.auth.updateUser({ password: nova });
     if (error) throw error;
-
-    msg.style.display = 'block';
-    msg.textContent = 'Senha alterada com sucesso! Redirecionando...';
+    msg.style.display = 'block'; msg.textContent = 'Senha alterada com sucesso! Redirecionando...';
     setTimeout(() => { window.location.href = HOME_URL; }, 1800);
-
-  } catch (e) {
+  } catch(e) {
     alert('Erro ao redefinir senha: ' + (e?.message || e));
     btn.disabled = false; btn.textContent = old;
   }
