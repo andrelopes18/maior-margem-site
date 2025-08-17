@@ -5,44 +5,61 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Redefinir Senha - MaiorMargem</title>
 <style>
-  body { margin:0; font-family:'Segoe UI', Arial, sans-serif; background:#121212; color:#fff; display:flex; align-items:center; justify-content:center; height:100vh; }
-  .card { width: 360px; background:#1c1c1c; border:1px solid #2a2a2a; border-radius:10px; padding:24px; text-align:center; }
+  body { margin:0; font-family:'Segoe UI', Arial, sans-serif; background:#121212; color:#fff; display:flex; align-items:center; justify-content:center; min-height:100vh; }
+  .card { width: 380px; background:#1c1c1c; border:1px solid #2a2a2a; border-radius:10px; padding:24px; text-align:center; }
   h1 { font-size:20px; color:#00b140; margin:0 0 12px; }
   input { width:100%; padding:10px; margin:8px 0; border:1px solid #2a2a2a; border-radius:4px; background:#121212; color:#fff; }
   button { width:100%; background:#00b140; color:#fff; padding:10px; border:none; border-radius:4px; cursor:pointer; }
-  button[disabled] { opacity:.6; cursor:not-allowed; }
-  button:hover:not([disabled]) { background:#009b38; }
+  button[disabled]{ opacity:.6; cursor:not-allowed; }
+  button:hover:not([disabled]){ background:#009b38; }
   .hint { font-size:12px; color:#aaa; margin-top:6px; }
-  .err { color:#ff7676; font-size:12px; margin-top:8px; display:none; }
+  .err  { color:#ff7b7b; font-size:12px; margin-top:8px; display:none; }
+  .manual { margin-top:14px; text-align:left; }
+  .manual summary { cursor:pointer; color:#9cf; }
+  .manual textarea { width:100%; height:76px; }
 </style>
 </head>
 <body>
 <div class="card">
   <h1>Definir nova senha</h1>
-  <p class="hint">Abrindo sessão de recuperação…</p>
+  <p id="status" class="hint">Abrindo sessão de recuperação…</p>
+
   <input id="novaSenha" type="password" placeholder="Nova senha" disabled />
   <input id="confSenha" type="password" placeholder="Confirmar nova senha" disabled />
   <button id="btnSalvar" onclick="salvarNovaSenha()" disabled>Salvar nova senha</button>
+
   <p id="msg" class="hint" style="display:none; margin-top:10px;"></p>
   <p id="err" class="err"></p>
+
+  <div class="manual">
+    <details>
+      <summary>Problemas? Clique aqui para colar o link do email manualmente</summary>
+      <p class="hint">No seu cliente de e-mail, copie o <b>endereço do link</b> de recuperação (incluindo tudo após o <code>#</code>) e cole abaixo:</p>
+      <textarea id="linkManual" placeholder="Cole aqui a URL completa recebida por email"></textarea>
+      <button id="btnAplicar" onclick="aplicarLinkManual()">Usar este link</button>
+    </details>
+  </div>
 </div>
 
 <script src="https://unpkg.com/@supabase/supabase-js"></script>
 <script>
-const SUPABASE_URL = "https://maprezivxfitqyifmepq.supabase.co"; // troque pelo seu
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hcHJleml2eGZpdHF5aWZtZXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM2MTc4OTcsImV4cCI6MjA2OTE5Mzg5N30.qz8iMEZY0mkh5QgeBKh8lYLITRjcAADbApJkGFwACJI";             // troque pelo seu
-const HOME_URL = "https://maior-margem-site.vercel.app";      // troque pelo seu
+const SUPABASE_URL = "https://SEU-PROJETO.supabase.co";   // 🔹 troque pelo seu
+const SUPABASE_ANON_KEY = "SUA-CHAVE-ANON-PUBLICA";       // 🔹 troque pelo seu
+const HOME_URL = "https://seu-projeto.vercel.app";        // 🔹 troque pelo seu
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const input1 = document.getElementById('novaSenha');
-const input2 = document.getElementById('confSenha');
-const btn    = document.getElementById('btnSalvar');
-const msg    = document.getElementById('msg');
-const errBox = document.getElementById('err');
+const $ = (id)=>document.getElementById(id);
+const input1 = $('novaSenha');
+const input2 = $('confSenha');
+const btn    = $('btnSalvar');
+const msg    = $('msg');
+const errBox = $('err');
+const status = $('status');
 
 function enableForm() {
-  document.querySelector('.hint').textContent = 'Defina sua nova senha abaixo.';
+  status.textContent = 'Defina sua nova senha abaixo.';
   input1.disabled = false; input2.disabled = false; btn.disabled = false;
+  errBox.style.display = 'none'; errBox.textContent = '';
 }
 
 function showError(m) {
@@ -50,38 +67,63 @@ function showError(m) {
   errBox.textContent = m;
 }
 
-(async function bootstrap() {
+function parseTokensFrom(urlLike) {
   try {
-    // 1) Tente pegar tokens do hash (#access_token&refresh_token)
-    const hash = window.location.hash?.startsWith('#') ? window.location.hash.slice(1) : '';
-    const params = new URLSearchParams(hash);
-    const access_token  = params.get('access_token');
-    const refresh_token = params.get('refresh_token');
-    const type          = params.get('type'); // geralmente "recovery"
+    // aceita hash (#a=b&c=d) e/ou query (?a=b&c=d)
+    const u = new URL(urlLike, window.location.origin);
+    const hash = u.hash?.startsWith('#') ? u.hash.slice(1) : '';
+    const allParams = new URLSearchParams(hash);
+    // também inclui querystring (fallback quando e-mail remove '#')
+    u.searchParams.forEach((v,k)=>allParams.set(k,v));
 
-    if (access_token && refresh_token) {
-      // 2) Estabelece sessão com os tokens do link
-      const { data, error } = await sb.auth.setSession({ access_token, refresh_token });
-      if (error) throw error;
-      enableForm();
-      return;
-    }
+    return {
+      access_token:  allParams.get('access_token'),
+      refresh_token: allParams.get('refresh_token'),
+      type:          allParams.get('type')
+    };
+  } catch { return {}; }
+}
 
-    // 3) Se não veio no hash, talvez a sessão já esteja ativa (ex.: voltou da mesma aba)
-    const { data: { session } } = await sb.auth.getSession();
-    if (session && session.user) {
-      enableForm();
-      return;
-    }
-
-    // 4) Sem tokens e sem sessão ativa → não dá pra redefinir
-    showError('Não foi possível iniciar a sessão de recuperação. Abra o link de recuperação que enviamos ao seu e-mail. Se o erro persistir, solicite um novo link.');
-    document.querySelector('.hint').textContent = 'Erro ao abrir sessão de recuperação.';
-  } catch (e) {
-    showError('Falha ao iniciar a recuperação: ' + (e?.message || e));
-    document.querySelector('.hint').textContent = 'Erro ao abrir sessão de recuperação.';
+async function tryOpenSessionFrom(urlLike) {
+  const { access_token, refresh_token } = parseTokensFrom(urlLike);
+  if (access_token && refresh_token) {
+    const { error } = await sb.auth.setSession({ access_token, refresh_token });
+    if (error) throw error;
+    enableForm();
+    return true;
   }
-})();
+  return false;
+}
+
+async function bootstrap() {
+  try {
+    // 1) tenta a URL atual
+    const okNow = await tryOpenSessionFrom(window.location.href);
+    if (okNow) return;
+
+    // 2) se não deu, talvez a sessão já esteja ativa (ex.: abriu e voltou)
+    const { data: { session } } = await sb.auth.getSession();
+    if (session && session.user) { enableForm(); return; }
+
+    // 3) ainda não deu: instrui o usuário a colar o link manualmente
+    status.textContent = 'Não foi possível iniciar a sessão de recuperação.';
+    showError('Abra o link diretamente do e-mail em um navegador. Se o seu e-mail remove o trecho após o #, copie o endereço do link e cole no campo "Usar este link".');
+  } catch (e) {
+    status.textContent = 'Erro ao iniciar a recuperação.';
+    showError('Falha: ' + (e?.message || e));
+  }
+}
+
+async function aplicarLinkManual() {
+  const raw = $('linkManual').value.trim();
+  if (!raw) { alert('Cole a URL completa do e-mail.'); return; }
+  try {
+    const ok = await tryOpenSessionFrom(raw);
+    if (!ok) { showError('Não encontrei tokens na URL colada. Confirme que ela contém "#access_token=...&refresh_token=...".'); return; }
+  } catch(e) {
+    showError('Erro ao aplicar link: ' + (e?.message || e));
+  }
+}
 
 async function salvarNovaSenha() {
   const nova = input1.value;
@@ -95,9 +137,8 @@ async function salvarNovaSenha() {
   btn.disabled = true; btn.textContent = 'Salvando...';
 
   try {
-    // Confirma que temos sessão antes de atualizar
     const { data: { session } } = await sb.auth.getSession();
-    if (!session) throw new Error('Sessão de recuperação ausente ou expirada. Abra novamente o link enviado ao seu e-mail.');
+    if (!session) throw new Error('Sessão de recuperação ausente ou expirada. Gere um novo link e tente novamente.');
 
     const { error } = await sb.auth.updateUser({ password: nova });
     if (error) throw error;
@@ -111,6 +152,8 @@ async function salvarNovaSenha() {
     btn.disabled = false; btn.textContent = old;
   }
 }
+
+bootstrap();
 </script>
 </body>
 </html>
