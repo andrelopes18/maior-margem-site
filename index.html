@@ -136,14 +136,7 @@
   const { SUPABASE_URL, SUPABASE_ANON_KEY, SITE_URL } = window.CONFIG;
   const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-<script>
-  const { SUPABASE_URL, SUPABASE_ANON_KEY, SITE_URL } = window.CONFIG;
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    console.error("CONFIG ausente: verifique config.js");
-    alert("Erro de configuração. Verifique o arquivo config.js.");
-  }
-  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-</script>
+
 
   function openPanel(type) {
     document.getElementById("overlay").style.display = "block";
