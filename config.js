@@ -1,4 +1,4 @@
-<script>
+
 // Arquivo único de configuração do site
 window.CONFIG = {
   SUPABASE_URL: "https://maprezivxfitqyifmepq.supabase.co",
@@ -6,4 +6,3 @@ window.CONFIG = {
   SITE_URL: "https://maior-margem-site.vercel.app",  // usado no signUp e reset
   HOME_URL: "https://maior-margem-site.vercel.app"   // usado no reset.html
 };
-</script>
