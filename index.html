@@ -49,6 +49,10 @@
             <button onclick="openPanel('cadastro')">Cadastrar</button>
             <button onclick="openPanel('login')">Entrar</button>
         </div>
+        <!-- ✅ Botão para o Dashboard (só aparece logado) -->
+        <div id="goDashboard" class="header-buttons" style="display:none;">
+            <button onclick="goDashboard()">Ir para o Dashboard</button>
+        </div>
         <div id="logoutBox" class="header-buttons" style="display:none;">
             <button onclick="sair()">Sair</button>
         </div>
@@ -136,8 +140,6 @@
   const { SUPABASE_URL, SUPABASE_ANON_KEY, SITE_URL } = window.CONFIG;
   const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-
-
   function openPanel(type) {
     document.getElementById("overlay").style.display = "block";
     if (type === 'cadastro') document.getElementById("panel-cadastro").classList.add("active");
@@ -153,7 +155,7 @@
 
   function isEmail(val){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val); }
 
-  // Cadastro com bloqueio de duplicidade e redirect configurado
+  // ===== Cadastro (com checagem de duplicidade usável) =====
   async function registrarUsuario() {
     const btn   = document.getElementById("btnCadastrar");
     const nome  = document.getElementById("nomeCadastro").value.trim();
@@ -170,22 +172,25 @@
       const { data, error } = await sb.auth.signUp({
         email,
         password: senha,
-        options: { data: nome ? { nome } : {}, emailRedirectTo: SITE_URL }
+        options: { data: nome ? { nome } : {}, emailRedirectTo: SITE_URL + "/reset.html" }
       });
 
       if (error) {
         const msg = (error.message || "").toLowerCase();
-        if (msg.includes("already registered") || msg.includes("user already exists") || msg.includes("duplicate") || msg.includes("email exists")) {
+        if (msg.includes("already") || msg.includes("exists")) {
           alert("Este email já está cadastrado. Use o Login ou a Recuperação de Senha.");
           return;
         }
-        if (msg.includes("email rate limit")) { alert("Muitos envios para este email. Aguarde alguns minutos e tente novamente."); return; }
-        alert("Erro no cadastro: " + error.message); return;
+        if (msg.includes("rate limit")) {
+          alert("Muitos envios para este email. Aguarde alguns minutos e tente novamente.");
+          return;
+        }
+        alert("Erro no cadastro: " + error.message);
+        return;
       }
 
-      // Se identities vier vazio, geralmente o usuário já existia (pendente)
       if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
-        alert("Este email já está cadastrado. Caso não tenha confirmado, verifique sua caixa de entrada ou use Recuperar Senha.");
+        alert("Este email já está cadastrado. Verifique sua caixa de entrada ou use Recuperar Senha.");
         return;
       }
 
@@ -199,16 +204,27 @@
     }
   }
 
+  // ===== Login → redireciona para dashboard =====
   async function fazerLogin() {
     const email = document.getElementById("emailLogin").value.trim();
     const senha = document.getElementById("senhaLogin").value;
     const { error } = await sb.auth.signInWithPassword({ email, password: senha });
-    if (error) alert("Erro no login: " + error.message);
-    else { alert("Login realizado!"); closePanel(); atualizarUIAuth(); }
+    if (error) {
+      alert("Erro no login: " + error.message);
+      return;
+    }
+    // ✅ redireciona
+    window.location.href = (SITE_URL || "") + "/dashboard.html";
   }
 
-  async function sair() { await sb.auth.signOut(); await atualizarUIAuth(); alert("Você saiu da conta."); }
+  // ===== Logout =====
+  async function sair() {
+    await sb.auth.signOut();
+    await atualizarUIAuth();
+    alert("Você saiu da conta.");
+  }
 
+  // ===== Recuperar senha =====
   async function recuperarSenha() {
     const email = document.getElementById("emailRecuperar").value.trim();
     if (!email) { alert("Informe o email."); return; }
@@ -217,24 +233,43 @@
     else { alert("Enviamos um link de recuperação para seu email."); closePanel(); }
   }
 
+  // ===== UI Auth / Mostrar botões corretos =====
   async function atualizarUIAuth() {
     const { data: { session } } = await sb.auth.getSession();
     const chip = document.getElementById("authChip");
     const headerBtns = document.getElementById("headerBtns");
     const logoutBox = document.getElementById("logoutBox");
+    const goDash = document.getElementById("goDashboard");
+
     if (session && session.user) {
       chip.textContent = "Logado: " + (session.user.email || "");
       chip.style.display = "inline-block";
       headerBtns.style.display = "none";
       logoutBox.style.display = "block";
+      goDash.style.display = "block";
     } else {
       chip.style.display = "none";
       headerBtns.style.display = "block";
       logoutBox.style.display = "none";
+      goDash.style.display = "none";
     }
   }
   sb.auth.onAuthStateChange((_e,_s) => atualizarUIAuth());
   atualizarUIAuth();
+
+  // ✅ Auto-redirect se já estiver logado ao abrir a home
+  (async function autoGoIfLogged(){
+    const { data: { session } } = await sb.auth.getSession();
+    if (session && session.user) {
+      window.location.href = (SITE_URL || "") + "/dashboard.html";
+    }
+  })();
+
+  // ===== Navegar ao Dashboard (botão no header) =====
+  function goDashboard(){
+    window.location.href = (SITE_URL || "") + "/dashboard.html";
+  }
+  window.goDashboard = goDashboard; // para o onclick no botão
 </script>
 
 </body>
