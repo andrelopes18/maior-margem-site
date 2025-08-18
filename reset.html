@@ -29,17 +29,26 @@
   <pre id="err" class="err"></pre>
 </div>
 
+<!-- 1) Config central (MESMO NÍVEL DO ARQUIVO) -->
+<script src="config.js?v=4"></script>
+<!-- 2) Biblioteca Supabase -->
 <script src="https://unpkg.com/@supabase/supabase-js"></script>
+<!-- 3) App -->
 <script>
-/* ======== TROQUE AQUI PELAS SUAS CHAVES ======== */
-const SUPABASE_URL = "https://maprezivxfitqyifmepq.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hcHJleml2eGZpdHF5aWZtZXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM2MTc4OTcsImV4cCI6MjA2OTE5Mzg5N30.qz8iMEZY0mkh5QgeBKh8lYLITRjcAADbApJkGFwACJI";
-const HOME_URL = "https://maior-margem-site.vercel.app";
-/* ================================================ */
+/* ======== LÊ DO config.js ======== */
+const CFG = window.CONFIG || {};
+const SUPABASE_URL = CFG.SUPABASE_URL;
+const SUPABASE_ANON_KEY = CFG.SUPABASE_ANON_KEY;
+const HOME_URL = CFG.HOME_URL || '/';
 
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  alert("Erro de configuração: config.js não carregou ou está incompleto.");
+  throw new Error("CONFIG ausente");
+}
+
+/* ======== Supabase client (igual ao que funcionou) ======== */
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
-    // deixa o cliente procurar tokens na URL automaticamente
     detectSessionInUrl: true,
     autoRefreshToken: true,
     persistSession: true,
@@ -61,12 +70,14 @@ function showErr(e)   { errBox.style.display='block'; errBox.textContent = Strin
 function hideErr()    { errBox.style.display='none'; errBox.textContent=''; }
 function enableForm() { input1.disabled=false; input2.disabled=false; btn.disabled=false; }
 
+// Lê tokens do hash (#...) e/ou da query (?...)
 function tokensFrom(urlLike) {
   try {
     const u = new URL(urlLike, location.origin);
     const hash = u.hash?.startsWith('#') ? u.hash.slice(1) : '';
     const all  = new URLSearchParams(hash);
-    u.searchParams.forEach((v,k)=>all.set(k,v)); // fallback se tokens vierem na query
+    // fallback: alguns provedores movem o hash para a querystring
+    u.searchParams.forEach((v,k)=>all.set(k,v));
     return {
       access_token: all.get('access_token'),
       refresh_token: all.get('refresh_token'),
@@ -91,7 +102,6 @@ async function trySetSessionFrom(urlLike) {
   return false;
 }
 
-// Habilita o formulário se já estivermos com sessão válida
 async function checkAndEnable(reason='') {
   const { data: { session }, error } = await sb.auth.getSession();
   if (error) showErr('getSession: ' + error.message);
@@ -105,7 +115,6 @@ async function checkAndEnable(reason='') {
   return false;
 }
 
-// Escuta mudanças de auth (gatilho confiável do Supabase)
 sb.auth.onAuthStateChange((event) => {
   if (event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY' || event === 'TOKEN_REFRESHED') {
     checkAndEnable('Sessão detectada.');
@@ -115,18 +124,16 @@ sb.auth.onAuthStateChange((event) => {
 (async function bootstrap(){
   setStatus('Verificando sessão…');
 
-  // 1) Tenta detectar sessão já ativa (detectSessionInUrl pode resolver sozinho)
+  // 1) Detecta sessão já ativa (detectSessionInUrl pode resolver sozinho)
   if (await checkAndEnable('Aguardando tokens…')) return;
 
-  // 2) Se ainda não, tenta manualmente abrir a sessão a partir da URL
+  // 2) Fallback manual a partir da URL atual
   const didSet = await trySetSessionFrom(location.href);
   if (didSet && await checkAndEnable('Sessão configurada.')) return;
 
-  // 3) Ainda não? Mostra orientação, mas libera o formulário pra você tentar (vai falhar com erro claro se não houver sessão)
-  setStatus('Não foi possível validar automaticamente. Você pode tentar colar o link do e-mail novamente ou gerar um novo link.');
-  showErr('Dica: copie o endereço do link do e-mail e abra direto no navegador (ou gere um novo).');
-  // (Descomente para liberar mesmo sem sessão — útil para depurar o erro do updateUser)
-  // enableForm();
+  // 3) Se nada deu, informe e aguarde ação do usuário (gerar novo link)
+  setStatus('Não foi possível validar automaticamente. Gere um novo link e abra novamente.');
+  showErr('Dica: copie o endereço do link do e-mail e abra direto no navegador. Se o e-mail removeu o #, tente colar a URL completa na barra do navegador.');
 })();
 
 // Botão salvar
@@ -140,7 +147,6 @@ btn.addEventListener('click', async () => {
   if (nova !== conf)  { alert('As senhas não conferem.'); return; }
   if (nova.length < 6){ alert('A senha deve ter pelo menos 6 caracteres.'); return; }
 
-  // Confirma sessão válida antes de atualizar
   const { data: { session }, error } = await sb.auth.getSession();
   if (error) { showErr('getSession no submit: ' + error.message); return; }
   if (!session) { showErr('Sessão de recuperação ausente ou expirada. Gere um novo link e tente novamente.'); return; }
