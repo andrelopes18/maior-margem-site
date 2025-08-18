@@ -133,35 +133,29 @@
 </div>
 
 <!-- 1) Config + 2) Supabase + 3) App -->
-<script src="config.js?v=9"></script>
-<script src="https://unpkg.com/@supabase/supabase-js"></script>
+<script src="config.js?v=10"></script>
+<!-- SUPABASE v2 (UMD) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 <script>
-  // ===== Helpers de URL/Redirect =====
-  function baseSite() {
+  // ===== Helpers base e dashboard =====
+  function getBaseSite() {
     try { if (window.CONFIG?.SITE_URL) return window.CONFIG.SITE_URL.replace(/\/+$/,''); }
     catch(_) {}
     return window.location.origin;
   }
-  function forceGoToDashboard() {
-    const base = baseSite();
-    const targets = [ base + '/dashboard.html', '/dashboard.html', 'dashboard.html' ];
-    // tenta várias formas e caminhos em sequência
-    targets.forEach((t, idx) => {
-      setTimeout(() => { try { window.location.assign(t); } catch(_) {} }, idx*120);
-      setTimeout(() => { try { window.location.replace(t); } catch(_) {} }, idx*120 + 60);
-      setTimeout(() => { try { window.open(t, '_self'); } catch(_) {} }, idx*120 + 90);
-    });
-  }
-  function goDashboard(){ forceGoToDashboard(); }
+  const DASHBOARD_URL = getBaseSite() + '/dashboard.html';
+
+  function goDashboard(){ window.location.assign(DASHBOARD_URL); }
   window.goDashboard = goDashboard;
 
   // ===== Supabase =====
   const { SUPABASE_URL, SUPABASE_ANON_KEY } = window.CONFIG || {};
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    alert('Erro de configuração: config.js não carregado.');
+    alert('Erro de configuração: config.js não carregado (SUPABASE_URL/ANON_KEY ausentes).');
     throw new Error('CONFIG ausente');
   }
-  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
 
   // ===== Painéis =====
   function openPanel(type) {
@@ -196,7 +190,7 @@
         email, password: senha,
         options: {
           data: nome ? { nome } : {},
-          emailRedirectTo: baseSite() + '/reset.html'
+          emailRedirectTo: getBaseSite() + '/reset.html'
         }
       });
       if (error) {
@@ -218,24 +212,20 @@
     }
   }
 
-  // ===== Login → redireciona =====
+  // ===== Login → redireciona imediatamente =====
   async function fazerLogin() {
     const email = document.getElementById('emailLogin').value.trim();
     const senha = document.getElementById('senhaLogin').value;
 
-    const { data, error } = await sb.auth.signInWithPassword({ email, password: senha });
+    const { error } = await sb.auth.signInWithPassword({ email, password: senha });
     if (error) {
       alert('Erro no login: ' + error.message);
       console.error('[LOGIN error]', error);
       return;
     }
 
-    // feedback + redireciona (múltiplas tentativas)
-    const chip = document.getElementById('authChip');
-    if (chip) { chip.textContent = 'Entrando…'; chip.style.display = 'inline-block'; }
-    closePanel();
-    await atualizarUIAuth();
-    forceGoToDashboard();
+    // Redireciona direto
+    window.location.assign(DASHBOARD_URL);
   }
 
   // ===== Logout =====
@@ -249,12 +239,12 @@
   async function recuperarSenha() {
     const email = document.getElementById('emailRecuperar').value.trim();
     if (!email) { alert('Informe o email.'); return; }
-    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: baseSite() + '/reset.html' });
+    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: getBaseSite() + '/reset.html' });
     if (error) alert('Erro: ' + error.message);
     else { alert('Enviamos um link de recuperação para seu email.'); closePanel(); }
   }
 
-  // ===== UI Auth =====
+  // ===== UI Auth + auto-redirect se já logado =====
   async function atualizarUIAuth() {
     const { data: { session } } = await sb.auth.getSession();
     const chip = document.getElementById('authChip');
@@ -275,10 +265,23 @@
       goDash.style.display = 'none';
     }
   }
-  sb.auth.onAuthStateChange((_e,_s) => atualizarUIAuth());
-  atualizarUIAuth();
 
-  // expoe para os botões inline
+  // Se a sessão mudar para logado, navega para o dashboard
+  sb.auth.onAuthStateChange((event, session) => {
+    if (session?.user) window.location.assign(DASHBOARD_URL);
+  });
+
+  // Atualiza UI ao carregar
+  (async () => {
+    await atualizarUIAuth();
+    const { data: { session } } = await sb.auth.getSession();
+    if (session?.user) {
+      // Já está logado: manda pro dashboard
+      window.location.assign(DASHBOARD_URL);
+    }
+  })();
+
+  // expõe para botões inline
   window.openPanel = openPanel;
   window.closePanel = closePanel;
   window.registrarUsuario = registrarUsuario;
