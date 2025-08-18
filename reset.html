@@ -1,104 +1,91 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <title>Redefinir Senha</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #f4f4f4;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-    }
-    .container {
-      background: #fff;
-      padding: 20px;
-      border-radius: 8px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-      width: 320px;
-    }
-    h2 { margin-bottom: 16px; }
-    input {
-      width: 100%;
-      padding: 10px;
-      margin-bottom: 12px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-    }
-    button {
-      width: 100%;
-      padding: 10px;
-      background: #0070f3;
-      border: none;
-      color: #fff;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-    button:disabled { background: #999; cursor: not-allowed; }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Redefinir Senha - MaiorMargem</title>
+<style>
+  body {
+    margin:0;
+    font-family:'Segoe UI', Arial, sans-serif;
+    background:#121212;
+    color:#fff;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    height:100vh;
+  }
+  .card {
+    width: 360px;
+    background:#1c1c1c;
+    border:1px solid #2a2a2a;
+    border-radius:10px;
+    padding:24px;
+    text-align:center;
+  }
+  h1 { font-size:20px; color:#00b140; margin:0 0 12px; }
+  p { margin: 8px 0; }
+  input {
+    width:100%;
+    padding:10px;
+    margin:8px 0;
+    border:1px solid #2a2a2a;
+    border-radius:4px;
+    background:#121212;
+    color:#fff;
+  }
+  button {
+    width:100%;
+    background:#00b140;
+    color:#fff;
+    padding:10px;
+    border:none;
+    border-radius:4px;
+    cursor:pointer;
+    margin-top:10px;
+  }
+  button:hover { background:#009b38; }
+  .hint { font-size:12px; color:#aaa; margin-top:6px; }
+</style>
 </head>
 <body>
-  <div class="container">
-    <h2>Redefinir Senha</h2>
-    <input type="password" id="novaSenha" placeholder="Nova Senha" disabled>
-    <input type="password" id="confSenha" placeholder="Confirmar Senha" disabled>
-    <button id="btnSalvar" disabled>Salvar Nova Senha</button>
-  </div>
+<div class="card">
+  <h1>Definir nova senha</h1>
+  <p class="hint">Você chegou aqui pelo link enviado ao seu email.</p>
+  <input id="novaSenha" type="password" placeholder="Nova senha" />
+  <input id="confSenha" type="password" placeholder="Confirmar nova senha" />
+  <button onclick="salvarNovaSenha()">Salvar nova senha</button>
+  <p id="msg" class="hint" style="display:none; margin-top:10px;"></p>
+</div>
 
-  <!-- Biblioteca Supabase -->
-  <script src="https://unpkg.com/@supabase/supabase-js"></script>
-  <script>
-    // 🔑 Substitua pelas suas chaves reais:
-    const SUPABASE_URL = "https://maprezivxfitqyifmepq.supabase.co"; // troque pelo seu
+<script src="https://unpkg.com/@supabase/supabase-js"></script>
+<script>
+const SUPABASE_URL = "https://maprezivxfitqyifmepq.supabase.co"; // troque pelo seu
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hcHJleml2eGZpdHF5aWZtZXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM2MTc4OTcsImV4cCI6MjA2OTE5Mzg5N30.qz8iMEZY0mkh5QgeBKh8lYLITRjcAADbApJkGFwACJI";             // troque pelo seu
-const SITE_URL = "https://maior-margem-site.vercel.app";      // troque pelo seu
+const HOME_URL = "https://maior-margem-site.vercel.app";      // troque pelo seu
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+async function salvarNovaSenha() {
+  const novaSenha = document.getElementById("novaSenha").value;
+  const confSenha = document.getElementById("confSenha").value;
+  const msg = document.getElementById("msg");
 
-    function parseTokensFrom(urlLike) {
-      const u = new URL(urlLike, location.origin);
-      const hash = u.hash?.startsWith('#') ? u.hash.slice(1) : '';
-      const all = new URLSearchParams(hash);
-      u.searchParams.forEach((v,k)=>all.set(k,v));
-      return { access_token: all.get('access_token'), refresh_token: all.get('refresh_token') };
-    }
+  if (!novaSenha || !confSenha) { alert("Preencha os dois campos."); return; }
+  if (novaSenha !== confSenha) { alert("As senhas não conferem."); return; }
+  if (novaSenha.length < 6) { alert("A senha deve ter pelo menos 6 caracteres."); return; }
 
-    (async function bootstrap(){
-      const { access_token, refresh_token } = parseTokensFrom(location.href);
-      if (access_token && refresh_token) {
-        const { error } = await sb.auth.setSession({ access_token, refresh_token });
-        if (!error) {
-          document.getElementById('novaSenha').disabled = false;
-          document.getElementById('confSenha').disabled = false;
-          document.getElementById('btnSalvar').disabled = false;
-          return;
-        } else {
-          alert("Erro ao iniciar sessão de recuperação: " + error.message);
-        }
-      } else {
-        alert("Link inválido ou expirado. Solicite novamente.");
-      }
-    })();
+  try {
+    const { error } = await sb.auth.updateUser({ password: novaSenha });
+    if (error) throw error;
 
-    document.getElementById('btnSalvar').addEventListener('click', async ()=>{
-      const nova = document.getElementById('novaSenha').value;
-      const conf = document.getElementById('confSenha').value;
-      if (!nova || !conf) return alert('Preencha os dois campos.');
-      if (nova !== conf) return alert('As senhas não conferem.');
-      if (nova.length < 6) return alert('Mínimo 6 caracteres.');
+    msg.style.display = "block";
+    msg.textContent = "Senha alterada com sucesso! Redirecionando...";
+    setTimeout(() => { window.location.href = HOME_URL; }, 2000);
 
-      const { data: { session } } = await sb.auth.getSession();
-      if (!session) return alert('Sessão ausente ou expirada. Solicite novo link.');
-
-      const { error } = await sb.auth.updateUser({ password: nova });
-      if (error) alert('Erro: ' + error.message);
-      else {
-        alert('Senha alterada com sucesso!');
-        window.location.href = "index.html"; // redireciona para login
-      }
-    });
-  </script>
+  } catch (e) {
+    alert("Erro ao redefinir senha: " + (e?.message || e));
+  }
+}
+</script>
 </body>
 </html>
