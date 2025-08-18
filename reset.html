@@ -5,54 +5,49 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Redefinir Senha - MaiorMargem</title>
 <style>
-  body { margin:0; font-family:'Segoe UI', Arial, sans-serif; background:#121212; color:#fff; display:flex; align-items:center; justify-content:center; height:100vh; }
-  .card { width: 360px; background:#1c1c1c; border:1px solid #2a2a2a; border-radius:10px; padding:24px; text-align:center; }
+  body { margin:0; font-family:'Segoe UI', Arial, sans-serif; background:#121212; color:#fff; display:flex; align-items:center; justify-content:center; min-height:100vh; }
+  .card { width: 380px; background:#1c1c1c; border:1px solid #2a2a2a; border-radius:10px; padding:24px; text-align:center; }
   h1 { font-size:20px; color:#00b140; margin:0 0 12px; }
   input { width:100%; padding:10px; margin:8px 0; border:1px solid #2a2a2a; border-radius:4px; background:#121212; color:#fff; }
   button { width:100%; background:#00b140; color:#fff; padding:10px; border:none; border-radius:4px; cursor:pointer; margin-top:10px; }
   button[disabled]{ opacity:.6; cursor:not-allowed; }
-  button:hover:not([disabled]) { background:#009b38; }
+  button:hover:not([disabled]){ background:#009b38; }
   .hint { font-size:12px; color:#aaa; margin-top:6px; }
-  .err  { color:#ff7b7b; font-size:12px; margin-top:8px; display:none; }
-  .manual { margin-top:14px; text-align:left; }
-  .manual summary { cursor:pointer; color:#9cf; }
-  .manual textarea { width:100%; height:76px; }
+  .err  { color:#ff7b7b; font-size:12px; margin-top:8px; display:none; white-space:pre-wrap; text-align:left; }
 </style>
 </head>
 <body>
 <div class="card">
   <h1>Definir nova senha</h1>
-  <p id="status" class="hint">Abrindo sessão de recuperação…</p>
+  <p id="status" class="hint">Iniciando…</p>
 
   <input id="novaSenha" type="password" placeholder="Nova senha" disabled />
   <input id="confSenha" type="password" placeholder="Confirmar nova senha" disabled />
   <button id="btnSalvar" disabled>Salvar nova senha</button>
 
   <p id="msg" class="hint" style="display:none; margin-top:10px;"></p>
-  <p id="err" class="err"></p>
-
-  <div class="manual">
-    <details>
-      <summary>Problemas? Colar o link do e-mail manualmente</summary>
-      <p class="hint">No seu e-mail, copie o <b>endereço do link</b> completo (incluindo tudo após <code>#</code> ou <code>?</code>) e cole abaixo:</p>
-      <textarea id="linkManual" placeholder="Cole aqui a URL completa recebida por e-mail"></textarea>
-      <button id="btnAplicar">Usar este link</button>
-    </details>
-  </div>
+  <pre id="err" class="err"></pre>
 </div>
 
-<!-- Biblioteca Supabase -->
 <script src="https://unpkg.com/@supabase/supabase-js"></script>
 <script>
-// 🔑 SUBSTITUA AQUI PELAS SUAS CHAVES
+/* ======== TROQUE AQUI PELAS SUAS CHAVES ======== */
 const SUPABASE_URL = "https://maprezivxfitqyifmepq.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hcHJleml2eGZpdHF5aWZtZXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM2MTc4OTcsImV4cCI6MjA2OTE5Mzg5N30.qz8iMEZY0mkh5QgeBKh8lYLITRjcAADbApJkGFwACJI";
 const HOME_URL = "https://maior-margem-site.vercel.app";
+/* ================================================ */
 
-// Client
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    // deixa o cliente procurar tokens na URL automaticamente
+    detectSessionInUrl: true,
+    autoRefreshToken: true,
+    persistSession: true,
+    flowType: 'pkce'
+  }
+});
 
-// DOM
+// UI helpers
 const $ = (id)=>document.getElementById(id);
 const input1 = $('novaSenha');
 const input2 = $('confSenha');
@@ -60,106 +55,108 @@ const btn    = $('btnSalvar');
 const msg    = $('msg');
 const errBox = $('err');
 const status = $('status');
-const linkManual = $('linkManual');
-const btnAplicar = $('btnAplicar');
 
-function enableForm() {
-  status.textContent = 'Defina sua nova senha abaixo.';
-  input1.disabled = false; input2.disabled = false; btn.disabled = false;
-  errBox.style.display = 'none'; errBox.textContent = '';
-}
-function showError(m) { errBox.style.display = 'block'; errBox.textContent = m; }
+function setStatus(t) { status.textContent = t; }
+function showErr(e)   { errBox.style.display='block'; errBox.textContent = String(e || '').trim(); }
+function hideErr()    { errBox.style.display='none'; errBox.textContent=''; }
+function enableForm() { input1.disabled=false; input2.disabled=false; btn.disabled=false; }
 
-// Lê tokens do hash (#...) e da query (?...)
-function parseTokensFrom(urlLike) {
+function tokensFrom(urlLike) {
   try {
-    const u = new URL(urlLike, window.location.origin);
+    const u = new URL(urlLike, location.origin);
     const hash = u.hash?.startsWith('#') ? u.hash.slice(1) : '';
-    const allParams = new URLSearchParams(hash);
-    // fallback: alguns provedores movem o hash para a querystring
-    u.searchParams.forEach((v,k)=>allParams.set(k,v));
+    const all  = new URLSearchParams(hash);
+    u.searchParams.forEach((v,k)=>all.set(k,v)); // fallback se tokens vierem na query
     return {
-      access_token:  allParams.get('access_token'),
-      refresh_token: allParams.get('refresh_token'),
-      error:         allParams.get('error'),
-      error_code:    allParams.get('error_code'),
-      error_description: allParams.get('error_description')
+      access_token: all.get('access_token'),
+      refresh_token: all.get('refresh_token'),
+      error: all.get('error'),
+      error_code: all.get('error_code'),
+      error_description: all.get('error_description')
     };
   } catch { return {}; }
 }
 
-async function tryOpenSessionFrom(urlLike) {
-  const { access_token, refresh_token, error, error_code, error_description } = parseTokensFrom(urlLike);
+async function trySetSessionFrom(urlLike) {
+  const { access_token, refresh_token, error, error_code, error_description } = tokensFrom(urlLike);
   if (error || error_code) {
-    showError((error_description || error || 'Falha ao abrir link de recuperação') + '. Gere um novo link e tente novamente.');
-    status.textContent = 'Erro ao iniciar a recuperação.';
+    showErr(`${error_code || error}: ${decodeURIComponent(error_description || '')}`);
     return false;
   }
   if (access_token && refresh_token) {
     const { error } = await sb.auth.setSession({ access_token, refresh_token });
-    if (error) { showError('Erro ao validar sessão: ' + error.message); return false; }
-    enableForm();
+    if (error) { showErr('setSession: ' + error.message); return false; }
     return true;
   }
   return false;
 }
 
-async function bootstrap() {
-  try {
-    // 1) Tenta com a URL atual
-    if (await tryOpenSessionFrom(window.location.href)) return;
-
-    // 2) Tenta sessão já ativa (se o usuário abriu o link antes)
-    const { data: { session } } = await sb.auth.getSession();
-    if (session && session.user) { enableForm(); return; }
-
-    // 3) Orienta colar o link
-    status.textContent = 'Não foi possível iniciar a sessão de recuperação.';
-    showError('Abra o link diretamente do e-mail. Se o seu e-mail removeu o trecho após o #, cole o endereço do link no campo "Usar este link".');
-  } catch (e) {
-    status.textContent = 'Erro ao iniciar a recuperação.';
-    showError('Falha: ' + (e?.message || e));
+// Habilita o formulário se já estivermos com sessão válida
+async function checkAndEnable(reason='') {
+  const { data: { session }, error } = await sb.auth.getSession();
+  if (error) showErr('getSession: ' + error.message);
+  if (session && session.user) {
+    hideErr();
+    enableForm();
+    setStatus('Sessão de recuperação ativa. Defina sua nova senha.');
+    return true;
   }
+  if (reason) setStatus(reason);
+  return false;
 }
 
-btnAplicar.addEventListener('click', async (e) => {
-  e.preventDefault();
-  const raw = linkManual.value.trim();
-  if (!raw) { alert('Cole a URL completa do e-mail.'); return; }
-  try {
-    const ok = await tryOpenSessionFrom(raw);
-    if (!ok) showError('Não encontrei tokens na URL colada. Confirme que ela contém "access_token" e "refresh_token".');
-  } catch(e) { showError('Erro ao aplicar link: ' + (e?.message || e)); }
+// Escuta mudanças de auth (gatilho confiável do Supabase)
+sb.auth.onAuthStateChange((event) => {
+  if (event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY' || event === 'TOKEN_REFRESHED') {
+    checkAndEnable('Sessão detectada.');
+  }
 });
 
+(async function bootstrap(){
+  setStatus('Verificando sessão…');
+
+  // 1) Tenta detectar sessão já ativa (detectSessionInUrl pode resolver sozinho)
+  if (await checkAndEnable('Aguardando tokens…')) return;
+
+  // 2) Se ainda não, tenta manualmente abrir a sessão a partir da URL
+  const didSet = await trySetSessionFrom(location.href);
+  if (didSet && await checkAndEnable('Sessão configurada.')) return;
+
+  // 3) Ainda não? Mostra orientação, mas libera o formulário pra você tentar (vai falhar com erro claro se não houver sessão)
+  setStatus('Não foi possível validar automaticamente. Você pode tentar colar o link do e-mail novamente ou gerar um novo link.');
+  showErr('Dica: copie o endereço do link do e-mail e abra direto no navegador (ou gere um novo).');
+  // (Descomente para liberar mesmo sem sessão — útil para depurar o erro do updateUser)
+  // enableForm();
+})();
+
+// Botão salvar
 btn.addEventListener('click', async () => {
-  const nova = input1.value;
-  const conf = input2.value;
+  hideErr();
+  msg.style.display='none';
+  const nova = input1.value.trim();
+  const conf = input2.value.trim();
+
   if (!nova || !conf) { alert('Preencha os dois campos.'); return; }
   if (nova !== conf)  { alert('As senhas não conferem.'); return; }
   if (nova.length < 6){ alert('A senha deve ter pelo menos 6 caracteres.'); return; }
 
-  const old = btn.textContent;
-  btn.disabled = true; btn.textContent = 'Salvando...';
+  // Confirma sessão válida antes de atualizar
+  const { data: { session }, error } = await sb.auth.getSession();
+  if (error) { showErr('getSession no submit: ' + error.message); return; }
+  if (!session) { showErr('Sessão de recuperação ausente ou expirada. Gere um novo link e tente novamente.'); return; }
 
+  btn.disabled = true; const old = btn.textContent; btn.textContent = 'Salvando...';
   try {
-    const { data: { session } } = await sb.auth.getSession();
-    if (!session) throw new Error('Sessão ausente/expirada. Gere um novo link e tente novamente.');
-
     const { error } = await sb.auth.updateUser({ password: nova });
     if (error) throw error;
-
     msg.style.display = 'block';
     msg.textContent = 'Senha alterada com sucesso! Redirecionando...';
-    setTimeout(() => { window.location.href = HOME_URL; }, 1800);
-
+    setTimeout(() => { window.location.href = HOME_URL; }, 1500);
   } catch (e) {
-    alert('Erro ao redefinir senha: ' + (e?.message || e));
+    showErr('updateUser: ' + (e?.message || e));
     btn.disabled = false; btn.textContent = old;
   }
 });
-
-bootstrap();
 </script>
 </body>
 </html>
