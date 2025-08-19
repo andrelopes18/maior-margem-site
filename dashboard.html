@@ -115,7 +115,7 @@ const siteMap = {
 const siteOrder = Object.values(siteMap);
 
 /* ====== ESTADO ====== */
-let produtos = [];         // [{ sku, desc, sites: {NomeSite: {preco, data}} }]
+let produtos = [];         // [{ sku, desc, sites: {NomeSite: {precoRaw, precoNum, data}} }]
 let produtosFiltrados = [];
 let itemsPerLoad = 40;
 let itemsLoaded = 0;
@@ -134,13 +134,24 @@ async function ensureAuth(){
 
 /* ====== VIEW no Postgres ====== */
 /*
+Crie/atualize a view para já calcular um campo numérico confiável (sem parsing no browser):
+
 create or replace view public.vw_precos_com_desc as
 select
   p.ean,
   p.site,
   p.preco,
   p.data,
-  cp.descricao
+  cp.descricao,
+  -- Tenta converter 'preco' texto em numeric (remove R$, pontos de milhar e troca vírgula por ponto)
+  nullif(
+    replace(
+      replace(
+        regexp_replace(p.preco, '[^0-9,.-]', '', 'g')  -- deixa só dígitos, vírgula, ponto e sinal
+      , '.', ''),  -- remove separadores de milhar
+      ',', '.'     -- vírgula -> ponto decimal
+    )
+  ,'')::numeric as preco_num
 from public."Precos" p
 left join public.cadastro_produtos cp
   on p.ean = cp.ean1
@@ -149,18 +160,10 @@ left join public.cadastro_produtos cp
 */
 const VIEW = "vw_precos_com_desc";
 
-/* ====== Utils ====== */
-function parsePrecoToNumber(v){
-  if (v == null) return NaN;
-  if (typeof v === 'number') return v;
-  let s = String(v).replace(/[^0-9,.-]/g, '').replace('.', '').replace(',', '.');
-  const n = Number(s);
-  return Number.isFinite(n) ? n : NaN;
-}
+/* ====== Helpers ====== */
 function formatBRL(n){
-  try {
-    return n.toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
-  } catch { return String(n); }
+  try { return n.toLocaleString('pt-BR', { style:'currency', currency:'BRL' }); }
+  catch { return String(n); }
 }
 function withMarkup(n){
   if (!Number.isFinite(n)) return null;
@@ -174,7 +177,7 @@ async function buscarDados() {
 
   const { data, error } = await sb
     .from(VIEW)
-    .select('ean, site, preco, data, descricao')
+    .select('ean, site, preco, data, descricao, preco_num')
     .order('data', { ascending: false })
     .limit(5000);
 
@@ -188,7 +191,8 @@ async function buscarDados() {
   for (const row of data) {
     const ean = String(row.ean ?? '');
     const site = String(row.site ?? '');
-    const preco = row.preco;
+    const precoRaw = row.preco;
+    const precoNum = row.preco_num;   // já vem do banco como número confiável
     const dt = row.data;
     const desc = row.descricao || '';
 
@@ -199,7 +203,7 @@ async function buscarDados() {
     if (htmlSiteName) {
       const prev = agrupado[ean].sites[htmlSiteName];
       if (!prev || new Date(dt) > new Date(prev.data)) {
-        agrupado[ean].sites[htmlSiteName] = { preco, data: dt };
+        agrupado[ean].sites[htmlSiteName] = { precoRaw, precoNum, data: dt };
       }
     }
   }
@@ -211,17 +215,14 @@ async function buscarDados() {
 
 /* ====== Render com paginação infinita ====== */
 function computeMinMaxForRow(item){
-  // retorna {minSite, maxSite}
   let min = { site:null, val: Infinity };
   let max = { site:null, val: -Infinity };
   for (const s of siteOrder) {
     const d = item.sites[s];
-    if (!d) continue;
-    const n = parsePrecoToNumber(d.preco);
-    if (Number.isFinite(n)) {
-      if (n < min.val) { min = { site:s, val:n }; }
-      if (n > max.val) { max = { site:s, val:n }; }
-    }
+    if (!d || !Number.isFinite(d.precoNum)) continue;
+    const n = d.precoNum;
+    if (n < min.val) { min = { site:s, val:n }; }
+    if (n > max.val) { max = { site:s, val:n }; }
   }
   return { minSite: min.site, maxSite: max.site };
 }
@@ -250,12 +251,19 @@ function renderChunk(){
       const td = document.createElement('td');
       const d = item.sites[s];
       if (d) {
-        const raw = parsePrecoToNumber(d.preco);
-        const marked = withMarkup(raw);
-        const show = Number.isFinite(marked) ? formatBRL(marked) : (d.preco ?? '');
+        let contentPrice;
+        if (Number.isFinite(d.precoNum)) {
+          const marked = withMarkup(d.precoNum);
+          contentPrice = formatBRL(marked);
+        } else {
+          // sem número confiável: mostra string original sem markup nem destaque
+          td.innerHTML = `<span class="price">${d.precoRaw ?? ''}</span><span class="muted">${d.data ? new Date(d.data).toLocaleDateString('pt-BR') : ''}</span>`;
+          tr.appendChild(td);
+          continue;
+        }
         const dataStr = d.data ? new Date(d.data).toLocaleDateString('pt-BR') : '';
         const cls = (s === minSite) ? 'min' : (s === maxSite ? 'max' : '');
-        td.innerHTML = `<span class="price ${cls}">${show}</span><span class="muted">${dataStr}</span>`;
+        td.innerHTML = `<span class="price ${cls}">${contentPrice}</span><span class="muted">${dataStr}</span>`;
       } else {
         td.innerHTML = `<span class="muted">—</span>`;
       }
@@ -281,7 +289,6 @@ function onScroll(){
   const nearBottom = window.innerHeight + window.scrollY >= document.body.offsetHeight - 200;
   if (nearBottom && itemsLoaded < produtosFiltrados.length){
     loadingMore = true;
-    // pequeno timeout para evitar múltiplos disparos
     setTimeout(()=>{
       renderChunk();
       loadingMore = false;
