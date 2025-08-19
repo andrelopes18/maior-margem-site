@@ -5,72 +5,69 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MaiorMargem - Tabela de Produtos</title>
 <style>
+  :root { color-scheme: dark; }
   body { margin:0; font-family: Arial, sans-serif; background-color:#121212; color:white; padding:20px; }
-  header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+  header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; gap:12px; flex-wrap:wrap; }
   h1 { color:#00b140; margin:0; }
   .userbox { display:flex; gap:12px; align-items:center; }
   .chip { font-size:12px; background:#1e1e1e; border:1px solid #333; padding:6px 10px; border-radius:999px; }
   .btn { background:#00b140; color:#fff; border:none; padding:8px 14px; border-radius:6px; cursor:pointer; }
   .btn:hover { background:#009b38; }
-  .filters { display:flex; gap:20px; margin:16px 0; }
-  .filters input { padding:8px; border-radius:5px; border:1px solid #333; background-color:#1e1e1e; color:white; flex:1; }
-  table { width:100%; border-collapse:collapse; background-color:#1e1e1e; }
-  th, td { padding:10px; border-bottom:1px solid #333; text-align:center; }
-  th { background-color:#222; color:#00b140; position:sticky; top:0; z-index:2; }
-  tr:hover { background-color:#2a2a2a; }
-  .checkbox-container { display:flex; justify-content:center; align-items:center; }
-  .checkbox-container input { appearance:none; width:18px; height:18px; border:2px solid #00b140; border-radius:4px; background:transparent; cursor:pointer; position:relative; }
-  .checkbox-container input:checked { background:#00b140; }
-  .checkbox-container input:checked::after { content:'✔'; color:white; font-size:14px; position:absolute; top:-2px; left:2px; }
-  .status { font-size:12px; color:#aaa; margin:10px 0 0; }
-  .error { color:#ff7b7b; white-space:pre-wrap; font-size:12px; margin:8px 0 0; }
+  .filters { display:grid; grid-template-columns: 1fr 1fr auto; gap:12px; margin:16px 0; }
+  .filters input { padding:10px 12px; border-radius:6px; border:1px solid #333; background-color:#1e1e1e; color:white; }
+  .status { margin:10px 0; color:#aaa; font-size:12px; }
+  .err { display:none; color:#ff5d5d; margin:8px 0; font-size:13px; }
+  table { width:100%; border-collapse: collapse; }
+  thead th { position:sticky; top:0; background:#0f0f0f; z-index:1; }
+  th, td { border-bottom:1px solid #2a2a2a; padding:10px; text-align:left; font-size:14px; }
+  tbody tr:hover { background:#1a1a1a; }
+  .col-sku { width:160px; font-family: ui-monospace,Consolas,monospace; }
+  .col-desc { min-width:280px; }
+  .price { font-weight:600; }
+  .muted { color:#9aa0a6; font-size:12px; display:block; margin-top:4px; }
 </style>
+<script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="./config.js"></script>
 </head>
 <body>
-
 <header>
-  <h1>Produtos Monitorados</h1>
+  <h1>MaiorMargem — Dashboard</h1>
   <div class="userbox">
-    <span id="userChip" class="chip">Autenticando…</span>
+    <span id="userChip" class="chip">Usuário</span>
     <button id="btnSair" class="btn">Sair</button>
   </div>
 </header>
 
 <div class="filters">
-  <input type="text" id="eanFilter" placeholder="Pesquisar por EAN">
-  <input type="text" id="descFilter" placeholder="Pesquisar por Descrição">
+  <input id="eanFilter" placeholder="Filtrar por EAN/GTIN…" />
+  <input id="descFilter" placeholder="Filtrar por descrição…" />
+  <button id="btnReload" class="btn">Recarregar</button>
+</div>
+<div class="status"><span id="status"></span></div>
+<div id="err" class="err"></div>
+
+<div class="tablewrap">
+  <table id="produtosTable">
+    <thead>
+      <tr>
+        <th class="col-sku">EAN</th>
+        <th class="col-desc">Descrição</th>
+        <th>LeroyMerlin</th>
+        <th>QueroQuero</th>
+        <th>Cassol</th>
+        <th>RedeMac</th>
+        <th>MestreTinho</th>
+        <th>Tumelero</th>
+        <th>Supremeinox</th>
+        <th>Ghaus</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
 </div>
 
-<table id="produtosTable">
-  <thead>
-    <tr>
-      <th>Selecionar</th>
-      <th>SKU</th>
-      <th>Descrição</th>
-      <th>LeroyMerlin</th>
-      <th>QueroQuero</th>
-      <th>Cassol</th>
-      <th>RedeMac</th>
-      <th>MestreTinho</th>
-      <th>Tumelero</th>
-      <th>Supremeinox</th>
-      <th>Ghaus</th>
-    </tr>
-  </thead>
-  <tbody>
-    <!-- Linhas via JS -->
-  </tbody>
-</table>
-
-<p id="status" class="status"></p>
-<pre id="err" class="error" style="display:none;"></pre>
-
-<!-- 1) Config central (sem barra, mesmo nível) -->
-<script src="config.js?v=5"></script>
-<!-- 2) Supabase -->
-<script src="https://unpkg.com/@supabase/supabase-js"></script>
 <script>
-/* ====== CONFIG ====== */
+/* ====== Supabase setup (usa config.js) ====== */
 const CFG = window.CONFIG || {};
 const SUPABASE_URL = CFG.SUPABASE_URL;
 const SUPABASE_ANON_KEY = CFG.SUPABASE_ANON_KEY;
@@ -82,11 +79,12 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
 });
 
-/* ====== UI ====== */
+/* ====== UI els ====== */
 const statusEl = document.getElementById('status');
 const errEl = document.getElementById('err');
 const userChip = document.getElementById('userChip');
 const btnSair = document.getElementById('btnSair');
+const btnReload = document.getElementById('btnReload');
 const tableBody = document.querySelector("#produtosTable tbody");
 const eanFilter = document.getElementById("eanFilter");
 const descFilter = document.getElementById("descFilter");
@@ -95,8 +93,7 @@ function setStatus(t){ statusEl.textContent = t || ''; }
 function showErr(e){ errEl.style.display='block'; errEl.textContent = String(e||'').trim(); }
 function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
 
-/* ====== MAPAS E ESTADO ====== */
-const NOME_TABELA = "Precos";
+/* ====== MAPA DE COLUNAS -> NOMES DE SITE ====== */
 const siteMap = {
   "PrecoLeroyMerlin": "LeroyMerlin",
   "PrecoQueroQuero": "QueroQuero",
@@ -107,59 +104,84 @@ const siteMap = {
   "PrecoSupremeinox": "Supremeinox",
   "PrecoGhaus": "Ghaus"
 };
-let produtos = [];
-let produtosFiltrados = [];
-let itemsPerLoad = 30;
-let itemsLoaded = 0;
+const siteOrder = Object.values(siteMap);
 
-/* ====== PROTEÇÃO: exigir login ====== */
-async function ensureAuth() {
-  setStatus('Verificando autenticação…');
-  const { data: { session }, error } = await sb.auth.getSession();
-  if (error) { showErr('auth.getSession: ' + error.message); }
-  if (!session || !session.user) {
-    // não logado: volta para a home/login
-    window.location.href = (CFG.SITE_URL || 'index.html');
+/* ====== ESTADO ====== */
+let produtos = [];         // [{ sku, desc, sites: {NomeSite: {preco, data}} }]
+let produtosFiltrados = [];
+
+/* ====== Autenticação (exigir login) ====== */
+async function ensureAuth(){
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) {
+    window.location.href = CFG.SITE_URL || 'index.html';
     return null;
   }
-  userChip.textContent = `Logado: ${session.user.email || 'usuário'}`;
-  setStatus('');
+  userChip.textContent = session.user?.email || 'Logado';
   return session;
 }
 
-/* ====== BUSCA (via supabase-js, respeita RLS) ====== */
+/* ====== BUSCA COM VIEW ====== */
+/*
+  View a ser criada no banco:
+
+  create or replace view public.vw_precos_com_desc as
+  select
+    p.ean,
+    p.site,
+    p.preco,
+    p.data,
+    cp.descricao
+  from public."Precos" p
+  left join public.cadastro_produtos cp
+    on p.ean = cp.ean1
+    or p.ean = cp.ean2
+    or p.ean = cp.ean3;
+
+  Obs.: Ajuste políticas RLS para permitir select nessa view,
+  ou garanta que as tabelas base tenham políticas compatíveis.
+*/
+const VIEW = "vw_precos_com_desc";
+
 async function buscarDados() {
   setStatus('Carregando dados…');
   hideErr();
-  // Busca os campos necessários; RLS precisa permitir SELECT para "authenticated"
+
+  // Traz últimos 5000 registros já com descrição (pode ajustar)
   const { data, error } = await sb
-    .from(NOME_TABELA)
-    .select('ean, site, preco, data')         // ajuste se houver outros campos
+    .from(VIEW)
+    .select('ean, site, preco, data, descricao')
     .order('data', { ascending: false })
-    .limit(5000); // sanidade (ajuste se necessário)
+    .limit(5000);
 
   if (error) {
-    showErr('select Precos: ' + error.message);
+    showErr('select view: ' + error.message);
     setStatus('Falha ao carregar.');
     return;
   }
-  const agrupado = {};
-  for (const reg of data) {
-    const ean = String(reg.ean ?? '');
-    const site = String(reg.site ?? '');
-    const preco = reg.preco;
-    const data = reg.data;
 
-    if (!agrupado[ean]) agrupado[ean] = { sku: ean, desc: "", sites: {} };
+  // Agrupar por EAN e por site pegando o registro mais recente de cada site
+  const agrupado = {};
+  for (const row of data) {
+    const ean = String(row.ean ?? '');
+    const site = String(row.site ?? '');
+    const preco = row.preco;
+    const dt = row.data;
+    const desc = row.descricao || '';
+
+    if (!agrupado[ean]) agrupado[ean] = { sku: ean, desc: desc, sites: {} };
+    // Se já existia uma descrição não sobrescreve por vazia
+    if (!agrupado[ean].desc && desc) agrupado[ean].desc = desc;
 
     const htmlSiteName = siteMap[site];
     if (htmlSiteName) {
       const prev = agrupado[ean].sites[htmlSiteName];
-      if (!prev || new Date(data) > new Date(prev.data)) {
-        agrupado[ean].sites[htmlSiteName] = { preco, data };
+      if (!prev || new Date(dt) > new Date(prev.data)) {
+        agrupado[ean].sites[htmlSiteName] = { preco, data: dt };
       }
     }
   }
+
   produtos = Object.values(agrupado);
   produtosFiltrados = [...produtos];
   renderTable(true);
@@ -167,52 +189,60 @@ async function buscarDados() {
 }
 
 /* ====== RENDER ====== */
-function renderTable(reset=false) {
-  if (reset) {
-    tableBody.innerHTML = "";
-    itemsLoaded = 0;
+function renderTable(reset=false){
+  if (reset) tableBody.innerHTML = '';
+
+  const rows = [];
+  for (const item of produtosFiltrados) {
+    const tr = document.createElement('tr');
+
+    const tdSku = document.createElement('td');
+    tdSku.className = 'col-sku';
+    tdSku.textContent = item.sku;
+    tr.appendChild(tdSku);
+
+    const tdDesc = document.createElement('td');
+    tdDesc.className = 'col-desc';
+    tdDesc.innerHTML = (item.desc || '').replace(/</g,'&lt;');
+    tr.appendChild(tdDesc);
+
+    // Sites em ordem fixa
+    for (const s of siteOrder) {
+      const td = document.createElement('td');
+      const d = item.sites[s];
+      if (d) {
+        const preco = (d.preco ?? '').toString();
+        const dataStr = d.data ? new Date(d.data).toLocaleDateString('pt-BR') : '';
+        td.innerHTML = `<span class="price">${preco}</span><span class="muted">${dataStr}</span>`;
+      } else {
+        td.innerHTML = `<span class="muted">—</span>`;
+      }
+      tr.appendChild(td);
+    }
+
+    rows.push(tr);
   }
-  const nextItems = produtosFiltrados.slice(itemsLoaded, itemsLoaded + itemsPerLoad);
-  const rows = nextItems.map(prod => `
-    <tr>
-      <td class="checkbox-container"><input type="checkbox"></td>
-      <td>${prod.sku}</td>
-      <td>${prod.desc}</td>
-      <td>${prod.sites["LeroyMerlin"]?.preco ?? ""}</td>
-      <td>${prod.sites["QueroQuero"]?.preco ?? ""}</td>
-      <td>${prod.sites["Cassol"]?.preco ?? ""}</td>
-      <td>${prod.sites["RedeMac"]?.preco ?? ""}</td>
-      <td>${prod.sites["MestreTinho"]?.preco ?? ""}</td>
-      <td>${prod.sites["Tumelero"]?.preco ?? ""}</td>
-      <td>${prod.sites["Supremeinox"]?.preco ?? ""}</td>
-      <td>${prod.sites["Ghaus"]?.preco ?? ""}</td>
-    </tr>
-  `).join('');
-  tableBody.insertAdjacentHTML('beforeend', rows);
-  itemsLoaded += nextItems.length;
+
+  tableBody.replaceChildren(...rows);
 }
 
 /* ====== FILTROS ====== */
-function filterTable() {
-  const eanVal = eanFilter.value.trim().toLowerCase();
-  const descVal = descFilter.value.trim().toLowerCase();
-  produtosFiltrados = produtos.filter(prod =>
-    String(prod.sku).toLowerCase().includes(eanVal) &&
-    String(prod.desc).toLowerCase().includes(descVal)
-  );
+function aplicarFiltros(){
+  const eanQ = eanFilter.value.trim().toLowerCase();
+  const descQ = descFilter.value.trim().toLowerCase();
+  produtosFiltrados = produtos.filter(p => {
+    const okEan = !eanQ || p.sku.toLowerCase().includes(eanQ);
+    const okDesc = !descQ || (p.desc || '').toLowerCase().includes(descQ);
+    return okEan && okDesc;
+  });
   renderTable(true);
 }
-eanFilter.addEventListener("input", filterTable);
-descFilter.addEventListener("input", filterTable);
 
-/* ====== SCROLL INFINITO ====== */
-window.addEventListener("scroll", () => {
-  if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 200) {
-    if (itemsLoaded < produtosFiltrados.length) renderTable();
-  }
-});
+eanFilter.addEventListener('input', aplicarFiltros);
+descFilter.addEventListener('input', aplicarFiltros);
 
-/* ====== Logout ====== */
+/* ====== BOTÕES ====== */
+btnReload.addEventListener('click', buscarDados);
 btnSair.addEventListener('click', async ()=>{
   await sb.auth.signOut();
   window.location.href = CFG.SITE_URL || 'index.html';
