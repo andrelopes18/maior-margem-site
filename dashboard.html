@@ -23,8 +23,11 @@
   tbody tr:hover { background:#1a1a1a; }
   .col-sku { width:160px; font-family: ui-monospace,Consolas,monospace; }
   .col-desc { min-width:280px; }
-  .price { font-weight:600; }
-  .muted { color:#9aa0a6; font-size:12px; display:block; margin-top:4px; }
+  .price { font-weight:700; display:block; }
+  .price.min { color:#ff4d4f; }       /* vermelho: mais barato */
+  .price.max { color:#00d084; }       /* verde: mais caro */
+  .muted { color:#9aa0a6; font-size:12px; display:block; margin-top:2px; }
+  .end-marker { text-align:center; padding:18px; color:#9aa0a6; }
 </style>
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="./config.js"></script>
@@ -64,10 +67,11 @@
     </thead>
     <tbody></tbody>
   </table>
+  <div id="endMarker" class="end-marker"></div>
 </div>
 
 <script>
-/* ====== Supabase setup (usa config.js) ====== */
+/* ====== Config ====== */
 const CFG = window.CONFIG || {};
 const SUPABASE_URL = CFG.SUPABASE_URL;
 const SUPABASE_ANON_KEY = CFG.SUPABASE_ANON_KEY;
@@ -79,6 +83,9 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
 });
 
+/** Percentual de acréscimo apenas para exibição (ex.: 2% = 0.02) **/
+const PRICE_MARKUP_PCT = 0.02;
+
 /* ====== UI els ====== */
 const statusEl = document.getElementById('status');
 const errEl = document.getElementById('err');
@@ -86,6 +93,7 @@ const userChip = document.getElementById('userChip');
 const btnSair = document.getElementById('btnSair');
 const btnReload = document.getElementById('btnReload');
 const tableBody = document.querySelector("#produtosTable tbody");
+const endMarker = document.getElementById('endMarker');
 const eanFilter = document.getElementById("eanFilter");
 const descFilter = document.getElementById("descFilter");
 
@@ -109,6 +117,9 @@ const siteOrder = Object.values(siteMap);
 /* ====== ESTADO ====== */
 let produtos = [];         // [{ sku, desc, sites: {NomeSite: {preco, data}} }]
 let produtosFiltrados = [];
+let itemsPerLoad = 40;
+let itemsLoaded = 0;
+let loadingMore = false;
 
 /* ====== Autenticação (exigir login) ====== */
 async function ensureAuth(){
@@ -121,33 +132,46 @@ async function ensureAuth(){
   return session;
 }
 
-/* ====== BUSCA COM VIEW ====== */
+/* ====== VIEW no Postgres ====== */
 /*
-  View a ser criada no banco:
-
-  create or replace view public.vw_precos_com_desc as
-  select
-    p.ean,
-    p.site,
-    p.preco,
-    p.data,
-    cp.descricao
-  from public."Precos" p
-  left join public.cadastro_produtos cp
-    on p.ean = cp.ean1
-    or p.ean = cp.ean2
-    or p.ean = cp.ean3;
-
-  Obs.: Ajuste políticas RLS para permitir select nessa view,
-  ou garanta que as tabelas base tenham políticas compatíveis.
+create or replace view public.vw_precos_com_desc as
+select
+  p.ean,
+  p.site,
+  p.preco,
+  p.data,
+  cp.descricao
+from public."Precos" p
+left join public.cadastro_produtos cp
+  on p.ean = cp.ean1
+  or p.ean = cp.ean2
+  or p.ean = cp.ean3;
 */
 const VIEW = "vw_precos_com_desc";
 
+/* ====== Utils ====== */
+function parsePrecoToNumber(v){
+  if (v == null) return NaN;
+  if (typeof v === 'number') return v;
+  let s = String(v).replace(/[^0-9,.-]/g, '').replace('.', '').replace(',', '.');
+  const n = Number(s);
+  return Number.isFinite(n) ? n : NaN;
+}
+function formatBRL(n){
+  try {
+    return n.toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
+  } catch { return String(n); }
+}
+function withMarkup(n){
+  if (!Number.isFinite(n)) return null;
+  return n * (1 + PRICE_MARKUP_PCT);
+}
+
+/* ====== Dados ====== */
 async function buscarDados() {
   setStatus('Carregando dados…');
   hideErr();
 
-  // Traz últimos 5000 registros já com descrição (pode ajustar)
   const { data, error } = await sb
     .from(VIEW)
     .select('ean, site, preco, data, descricao')
@@ -160,7 +184,6 @@ async function buscarDados() {
     return;
   }
 
-  // Agrupar por EAN e por site pegando o registro mais recente de cada site
   const agrupado = {};
   for (const row of data) {
     const ean = String(row.ean ?? '');
@@ -170,7 +193,6 @@ async function buscarDados() {
     const desc = row.descricao || '';
 
     if (!agrupado[ean]) agrupado[ean] = { sku: ean, desc: desc, sites: {} };
-    // Se já existia uma descrição não sobrescreve por vazia
     if (!agrupado[ean].desc && desc) agrupado[ean].desc = desc;
 
     const htmlSiteName = siteMap[site];
@@ -183,17 +205,33 @@ async function buscarDados() {
   }
 
   produtos = Object.values(agrupado);
-  produtosFiltrados = [...produtos];
-  renderTable(true);
+  aplicarFiltros(true);
   setStatus(`Carregado: ${produtos.length} SKUs`);
 }
 
-/* ====== RENDER ====== */
-function renderTable(reset=false){
-  if (reset) tableBody.innerHTML = '';
+/* ====== Render com paginação infinita ====== */
+function computeMinMaxForRow(item){
+  // retorna {minSite, maxSite}
+  let min = { site:null, val: Infinity };
+  let max = { site:null, val: -Infinity };
+  for (const s of siteOrder) {
+    const d = item.sites[s];
+    if (!d) continue;
+    const n = parsePrecoToNumber(d.preco);
+    if (Number.isFinite(n)) {
+      if (n < min.val) { min = { site:s, val:n }; }
+      if (n > max.val) { max = { site:s, val:n }; }
+    }
+  }
+  return { minSite: min.site, maxSite: max.site };
+}
 
-  const rows = [];
-  for (const item of produtosFiltrados) {
+function renderChunk(){
+  const end = Math.min(itemsLoaded + itemsPerLoad, produtosFiltrados.length);
+  const frag = document.createDocumentFragment();
+
+  for (let i = itemsLoaded; i < end; i++){
+    const item = produtosFiltrados[i];
     const tr = document.createElement('tr');
 
     const tdSku = document.createElement('td');
@@ -206,28 +244,54 @@ function renderTable(reset=false){
     tdDesc.innerHTML = (item.desc || '').replace(/</g,'&lt;');
     tr.appendChild(tdDesc);
 
-    // Sites em ordem fixa
+    const { minSite, maxSite } = computeMinMaxForRow(item);
+
     for (const s of siteOrder) {
       const td = document.createElement('td');
       const d = item.sites[s];
       if (d) {
-        const preco = (d.preco ?? '').toString();
+        const raw = parsePrecoToNumber(d.preco);
+        const marked = withMarkup(raw);
+        const show = Number.isFinite(marked) ? formatBRL(marked) : (d.preco ?? '');
         const dataStr = d.data ? new Date(d.data).toLocaleDateString('pt-BR') : '';
-        td.innerHTML = `<span class="price">${preco}</span><span class="muted">${dataStr}</span>`;
+        const cls = (s === minSite) ? 'min' : (s === maxSite ? 'max' : '');
+        td.innerHTML = `<span class="price ${cls}">${show}</span><span class="muted">${dataStr}</span>`;
       } else {
         td.innerHTML = `<span class="muted">—</span>`;
       }
       tr.appendChild(td);
     }
 
-    rows.push(tr);
+    frag.appendChild(tr);
   }
 
-  tableBody.replaceChildren(...rows);
+  tableBody.appendChild(frag);
+  itemsLoaded = end;
+  endMarker.textContent = (itemsLoaded >= produtosFiltrados.length) ? 'Fim da lista' : '';
 }
 
-/* ====== FILTROS ====== */
-function aplicarFiltros(){
+function resetRender(){
+  tableBody.innerHTML = '';
+  itemsLoaded = 0;
+  renderChunk();
+}
+
+function onScroll(){
+  if (loadingMore) return;
+  const nearBottom = window.innerHeight + window.scrollY >= document.body.offsetHeight - 200;
+  if (nearBottom && itemsLoaded < produtosFiltrados.length){
+    loadingMore = true;
+    // pequeno timeout para evitar múltiplos disparos
+    setTimeout(()=>{
+      renderChunk();
+      loadingMore = false;
+    }, 50);
+  }
+}
+window.addEventListener('scroll', onScroll);
+
+/* ====== Filtros ====== */
+function aplicarFiltros(reset=false){
   const eanQ = eanFilter.value.trim().toLowerCase();
   const descQ = descFilter.value.trim().toLowerCase();
   produtosFiltrados = produtos.filter(p => {
@@ -235,13 +299,13 @@ function aplicarFiltros(){
     const okDesc = !descQ || (p.desc || '').toLowerCase().includes(descQ);
     return okEan && okDesc;
   });
-  renderTable(true);
+  if (reset) resetRender(); else { tableBody.innerHTML=''; resetRender(); }
 }
 
-eanFilter.addEventListener('input', aplicarFiltros);
-descFilter.addEventListener('input', aplicarFiltros);
+eanFilter.addEventListener('input', ()=>aplicarFiltros(true));
+descFilter.addEventListener('input', ()=>aplicarFiltros(true));
 
-/* ====== BOTÕES ====== */
+/* ====== Botões ====== */
 btnReload.addEventListener('click', buscarDados);
 btnSair.addEventListener('click', async ()=>{
   await sb.auth.signOut();
