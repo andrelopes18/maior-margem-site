@@ -348,16 +348,12 @@ async function buscarDados() {
     if (!agrupado[ean]) agrupado[ean] = { sku: ean, desc: desc, sites: {} };
     if (!agrupado[ean].desc && desc) agrupado[ean].desc = desc;
 
-    const htmlSiteName = siteOrder[site] ? siteOrder[site] : site;
-    const mappedSite = {
-      "PrecoLeroyMerlin":"LeroyMerlin","PrecoQueroQuero":"QueroQuero","PrecoCassol":"Cassol",
-      "PrecoRedeMac":"RedeMac","PrecoMestreTinho":"MestreTinho","PrecoTumelero":"Tumelero",
-      "PrecoSupremeinox":"Supremeinox","PrecoGhaus":"Ghaus"
-    }[site] || site;
-
-    const prev = agrupado[ean].sites[mappedSite];
-    if (!prev || new Date(dt) > new Date(prev?.data)) {
-      agrupado[ean].sites[mappedSite] = { precoRaw, precoNum, data: dt };
+    const htmlSiteName = siteMap[site]; // <-- CORRETO: mapeia "PrecoX" -> "X"
+    if (htmlSiteName) {
+      const prev = agrupado[ean].sites[htmlSiteName];
+      if (!prev || new Date(dt) > new Date(prev.data)) {
+        agrupado[ean].sites[htmlSiteName] = { precoRaw, precoNum, data: dt };
+      }
     }
   }
 
@@ -385,10 +381,6 @@ function aplicarFiltros(reset=false){
 }
 
 /* ====== Render: Geral (infinite no contêiner) ====== */
-let itemsPerLoad = 60;
-let itemsLoaded = 0;
-let loadingMore = false;
-
 function resetGeneral(){
   generalBody.innerHTML = '';
   generalChkMap.clear();
