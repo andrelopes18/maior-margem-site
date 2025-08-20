@@ -14,33 +14,47 @@
   .btn { background:#00b140; color:#fff; border:none; padding:8px 14px; border-radius:6px; cursor:pointer; }
   .btn:hover { background:#009b38; }
 
-  .grid { display:grid; grid-template-columns: 1fr; gap:20px; }
-  @media(min-width:1100px){ .grid { grid-template-columns: 2fr 1fr; } }
+  .panel { background:#0f0f0f; border:1px solid #2a2a2a; border-radius:12px; padding:12px; margin-bottom:18px; }
+  .panel-header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }
+  .panel-header h2 { margin:0; font-size:18px; color:#d5ffd5; }
+  .toggle-btn { background:none; border:1px solid #2a2a2a; color:#ddd; padding:6px 10px; border-radius:8px; cursor:pointer; }
+  .toggle-btn:hover { background:#1b1b1b; }
 
-  .panel { background:#0f0f0f; border:1px solid #2a2a2a; border-radius:12px; padding:12px; }
-  .panel h2 { margin:0 0 10px; font-size:18px; color:#d5ffd5; }
   .filters { display:grid; grid-template-columns: 1fr 1fr auto; gap:12px; margin:16px 0; }
   .filters input { padding:10px 12px; border-radius:6px; border:1px solid #333; background-color:#1e1e1e; color:white; }
   .status { margin:10px 0; color:#aaa; font-size:12px; }
   .err { display:none; color:#ff5d5d; margin:8px 0; font-size:13px; }
 
-  .wrap { height:60vh; overflow:auto; border:1px solid #2a2a2a; border-radius:10px; }
-  .wrap.small { height:30vh; }
+  .wrap { overflow:auto; border:1px solid #2a2a2a; border-radius:10px; }
+  /* Geral: altura fixa com scroll interno */
+  #generalWrap { height: 55vh; }
+  /* Favoritos: altura dinâmica; JS ajusta #favWrap.style.height até 20 itens; aqui só um fallback mínimo */
+  #favWrap { max-height: 60vh; }
 
   table { width:100%; border-collapse: collapse; }
   thead th { position:sticky; top:0; background:#0f0f0f; z-index:1; }
-  th, td { border-bottom:1px solid #2a2a2a; padding:10px; text-align:left; font-size:14px; }
+  th, td { border-bottom:1px solid #2a2a2a; padding:10px; text-align:left; font-size:14px; vertical-align:top; }
   tbody tr:hover { background:#1a1a1a; }
+
   .col-fav { width:40px; text-align:center; }
   .col-sku { width:160px; font-family: ui-monospace,Consolas,monospace; }
   .col-desc { min-width:260px; }
   .price { font-weight:700; display:block; }
   .price.min { color:#ff4d4f; }       /* vermelho: mais barato */
   .price.max { color:#00d084; }       /* verde: mais caro */
-  .muted { display:none; }            /* data oculta (só no title/hover) */
+  .muted { display:none; }            /* data oculta; só via tooltip title */
   .end-marker { text-align:center; padding:10px; color:#9aa0a6; }
 
   .counts { margin-top:10px; font-size:12px; color:#9aa0a6; display:flex; gap:12px; flex-wrap:wrap; }
+
+  /* Painel colapsado: esconde o conteúdo rolável e contadores */
+  .panel.collapsed .wrap { display:none; }
+  .panel.collapsed .counts { display:none; }
+
+  /* Botão de lixo no Favoritos */
+  .trash-btn { background:none; border:1px solid #2a2a2a; color:#ddd; padding:6px; border-radius:8px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; }
+  .trash-btn:hover { background:#1b1b1b; border-color:#444; }
+  .trash-icon { width:16px; height:16px; display:block; }
 </style>
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="./config.js"></script>
@@ -54,6 +68,7 @@
   </div>
 </header>
 
+<!-- Filtros/Status -->
 <div class="panel">
   <div class="filters">
     <input id="eanFilter" placeholder="Filtrar por EAN/GTIN…" />
@@ -64,83 +79,82 @@
   <div id="err" class="err"></div>
 </div>
 
-<div class="grid">
-  <!-- GERAL -->
-  <section class="panel">
-    <h2>Geral</h2>
-    <div id="generalWrap" class="wrap">
-      <table id="produtosTable">
-        <thead>
-          <tr>
-            <th class="col-fav">★</th>
-            <th class="col-sku">EAN</th>
-            <th class="col-desc">Descrição</th>
-            <th>LeroyMerlin</th>
-            <th>QueroQuero</th>
-            <th>Cassol</th>
-            <th>RedeMac</th>
-            <th>MestreTinho</th>
-            <th>Tumelero</th>
-            <th>Supremeinox</th>
-            <th>Ghaus</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-      <div id="endMarker" class="end-marker"></div>
-    </div>
-    <div class="counts">
-      <span id="countShown"></span>
-      <span id="countTotal"></span>
-      <span id="countFavs"></span>
-    </div>
-  </section>
-
-  <!-- FAVORITOS -->
-  <section class="panel">
+<!-- Favoritos (Topo) -->
+<section id="favPanel" class="panel">
+  <div class="panel-header">
     <h2>Favoritos</h2>
-    <div id="favWrap" class="wrap small">
-      <table id="favTable">
-        <thead>
-          <tr>
-            <th class="col-fav">★</th>
-            <th class="col-sku">EAN</th>
-            <th class="col-desc">Descrição</th>
-            <th>LeroyMerlin</th>
-            <th>QueroQuero</th>
-            <th>Cassol</th>
-            <th>RedeMac</th>
-            <th>MestreTinho</th>
-            <th>Tumelero</th>
-            <th>Supremeinox</th>
-            <th>Ghaus</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </section>
-</div>
+    <button id="toggleFav" class="toggle-btn" aria-expanded="true">Minimizar</button>
+  </div>
+  <div id="favWrap" class="wrap">
+    <table id="favTable">
+      <thead>
+        <tr>
+          <th class="col-fav">Ação</th>
+          <th class="col-sku">EAN</th>
+          <th class="col-desc">Descrição</th>
+          <th>LeroyMerlin</th>
+          <th>QueroQuero</th>
+          <th>Cassol</th>
+          <th>RedeMac</th>
+          <th>MestreTinho</th>
+          <th>Tumelero</th>
+          <th>Supremeinox</th>
+          <th>Ghaus</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- Geral (Abaixo) -->
+<section id="generalPanel" class="panel">
+  <div class="panel-header">
+    <h2>Geral</h2>
+    <button id="toggleGen" class="toggle-btn" aria-expanded="true">Minimizar</button>
+  </div>
+  <div id="generalWrap" class="wrap">
+    <table id="produtosTable">
+      <thead>
+        <tr>
+          <th class="col-fav">★</th>
+          <th class="col-sku">EAN</th>
+          <th class="col-desc">Descrição</th>
+          <th>LeroyMerlin</th>
+          <th>QueroQuero</th>
+          <th>Cassol</th>
+          <th>RedeMac</th>
+          <th>MestreTinho</th>
+          <th>Tumelero</th>
+          <th>Supremeinox</th>
+          <th>Ghaus</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <div id="endMarker" class="end-marker"></div>
+  </div>
+  <div class="counts">
+    <span id="countShown"></span>
+    <span id="countTotal"></span>
+    <span id="countFavs"></span>
+  </div>
+</section>
 
 <script>
 /* ====== Config ====== */
 const CFG = window.CONFIG || {};
 const SUPABASE_URL = CFG.SUPABASE_URL;
 const SUPABASE_ANON_KEY = CFG.SUPABASE_ANON_KEY;
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  alert("Erro de configuração: config.js não carregado.");
-  throw new Error("CONFIG ausente");
-}
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
-});
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) { alert("Erro de configuração: config.js não carregado."); throw new Error("CONFIG ausente"); }
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
 
-/** Percentual de acréscimo só para exibição (pode ajustar) **/
+/** Ajustes UI **/
 const PRICE_MARKUP_PCT = 0.02;
-/** Duração máxima de sessão (UI) **/
 const MAX_SESSION_MS = 2 * 60 * 60 * 1000; // 2h
+const FAV_ROW_H = 44; // px aproximado de cada linha
 
-/* ====== UI ====== */
+/* ====== UI refs ====== */
 const statusEl = document.getElementById('status');
 const errEl = document.getElementById('err');
 const userChip = document.getElementById('userChip');
@@ -150,12 +164,16 @@ const btnReload = document.getElementById('btnReload');
 const eanFilter = document.getElementById('eanFilter');
 const descFilter = document.getElementById('descFilter');
 
+const favPanel = document.getElementById('favPanel');
+const toggleFavBtn = document.getElementById('toggleFav');
+const favWrap = document.getElementById('favWrap');
+const favBody = document.querySelector('#favTable tbody');
+
+const generalPanel = document.getElementById('generalPanel');
+const toggleGenBtn = document.getElementById('toggleGen');
 const generalWrap = document.getElementById('generalWrap');
 const generalBody = document.querySelector('#produtosTable tbody');
 const endMarker = document.getElementById('endMarker');
-
-const favWrap = document.getElementById('favWrap');
-const favBody = document.querySelector('#favTable tbody');
 
 const countShown = document.getElementById('countShown');
 const countTotal = document.getElementById('countTotal');
@@ -165,30 +183,20 @@ function setStatus(t){ statusEl.textContent = t || ''; }
 function showErr(e){ errEl.style.display='block'; errEl.textContent = String(e||'').trim(); }
 function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
 
-/* ====== Sessão: 2 horas ====== */
+/* ====== Sessão: 2h ====== */
 function enforceMaxSession(){
   const key = 'mm_login_start';
   const now = Date.now();
   let start = Number(localStorage.getItem(key));
-  if (!Number.isFinite(start) || start <= 0) {
-    localStorage.setItem(key, String(now));
-    start = now;
-  }
+  if (!Number.isFinite(start) || start <= 0) { localStorage.setItem(key, String(now)); start = now; }
   async function check(){
     const s = Number(localStorage.getItem(key));
     const age = Date.now() - (Number.isFinite(s) ? s : now);
-    if (age > MAX_SESSION_MS) {
-      await sb.auth.signOut();
-      localStorage.removeItem(key);
-      window.location.href = CFG.SITE_URL || 'index.html';
-    }
+    if (age > MAX_SESSION_MS) { await sb.auth.signOut(); localStorage.removeItem(key); window.location.href = CFG.SITE_URL || 'index.html'; }
   }
   setInterval(check, 60 * 1000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
-  sb.auth.onAuthStateChange((event) => {
-    if (event === 'SIGNED_IN') localStorage.setItem(key, String(Date.now()));
-    if (event === 'SIGNED_OUT') localStorage.removeItem(key);
-  });
+  sb.auth.onAuthStateChange((event) => { if (event === 'SIGNED_IN') localStorage.setItem(key, String(Date.now())); if (event === 'SIGNED_OUT') localStorage.removeItem(key); });
 }
 
 /* ====== Sites ====== */
@@ -207,11 +215,14 @@ const siteOrder = Object.values(siteMap);
 /* ====== Estado ====== */
 let produtos = [];         // [{ sku, desc, sites: {NomeSite: {precoRaw, precoNum, data}} }]
 let favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
-
-let filteredGeneral = [];  // produtos (exclui favoritos + filtros)
-let itemsPerLoad = 50;
+let filteredGeneral = [];  // inclui favoritos (não remove do Geral)
+let itemsPerLoad = 60;
 let itemsLoaded = 0;
 let loadingMore = false;
+let suppressGeneralChange = false; // evita loop quando desmarca programaticamente
+
+// Mapa: SKU -> checkbox do Geral (para desmarcar quando remover nos Favoritos)
+const generalChkMap = new Map();
 
 /* ====== Auth ====== */
 async function ensureAuth(){
@@ -225,10 +236,7 @@ async function ensureAuth(){
 const VIEW = "vw_precos_com_desc";
 
 /* ====== Helpers ====== */
-function formatBRL(n){
-  try { return n.toLocaleString('pt-BR', { style:'currency', currency:'BRL' }); }
-  catch { return String(n); }
-}
+function formatBRL(n){ try { return n.toLocaleString('pt-BR', { style:'currency', currency:'BRL' }); } catch { return String(n); } }
 function withMarkup(n){ return Number.isFinite(n) ? n*(1+PRICE_MARKUP_PCT) : null; }
 
 function computeMinMaxForRow(item){
@@ -246,6 +254,26 @@ function computeMinMaxForRow(item){
 
 function favSave(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet])); }
 function isFav(sku){ return favSet.has(String(sku)); }
+
+function updateCounts(){
+  const total = produtos.length;
+  const favs = favSet.size;
+  const shown = itemsLoaded;
+  countShown.textContent = `Exibindo ${shown} de ${filteredGeneral.length} no Geral (filtrados)`;
+  countTotal.textContent = `Total de SKUs: ${total}`;
+  countFavs.textContent = `Favoritos: ${favs}`;
+}
+
+/* ====== Altura dinâmica de Favoritos (até 20 itens) ====== */
+function updateFavHeight(){
+  const favList = produtos.filter(p => isFav(p.sku));
+  const rows = Math.min(favList.length, 20);
+  const thead = document.querySelector('#favTable thead');
+  const headH = thead ? thead.offsetHeight : 40;
+  const padding = 8;
+  const target = rows > 0 ? (headH + rows * FAV_ROW_H + padding) : headH + padding;
+  favWrap.style.height = target + 'px';
+}
 
 /* ====== Dados ====== */
 async function buscarDados() {
@@ -284,17 +312,17 @@ async function buscarDados() {
   produtos = Object.values(agrupado);
   aplicarFiltros(true);
   renderFavs();
+  updateFavHeight();
   updateCounts();
   setStatus(`Carregado: ${produtos.length} SKUs`);
 }
 
-/* ====== Filtros & Listas ====== */
+/* ====== Filtros ====== */
 function aplicarFiltros(reset=false){
   const eanQ = eanFilter.value.trim().toLowerCase();
   const descQ = descFilter.value.trim().toLowerCase();
 
-  const notFav = produtos.filter(p => !isFav(p.sku));
-  filteredGeneral = notFav.filter(p => {
+  filteredGeneral = produtos.filter(p => {
     const okEan = !eanQ || p.sku.toLowerCase().includes(eanQ);
     const okDesc = !descQ || (p.desc || '').toLowerCase().includes(descQ);
     return okEan && okDesc;
@@ -304,13 +332,14 @@ function aplicarFiltros(reset=false){
   updateCounts();
 }
 
+/* ====== Render: Geral (infinite scroll dentro do contêiner) ====== */
 function resetGeneral(){
   generalBody.innerHTML = '';
+  generalChkMap.clear();
   itemsLoaded = 0;
   renderGeneralChunk();
 }
 
-/* ====== Render: Geral (infinite no contêiner) ====== */
 function renderGeneralChunk(){
   const end = Math.min(itemsLoaded + itemsPerLoad, filteredGeneral.length);
   const frag = document.createDocumentFragment();
@@ -319,7 +348,7 @@ function renderGeneralChunk(){
     const item = filteredGeneral[i];
     const tr = document.createElement('tr');
 
-    // Checkbox
+    // Checkbox Favorito (não remove do Geral)
     const tdFav = document.createElement('td');
     tdFav.className = 'col-fav';
     const chk = document.createElement('input');
@@ -327,15 +356,16 @@ function renderGeneralChunk(){
     chk.checked = isFav(item.sku);
     chk.title = 'Marcar como favorito';
     chk.addEventListener('change', () => {
-      if (chk.checked) { favSet.add(item.sku); }
-      else { favSet.delete(item.sku); }
+      if (suppressGeneralChange) return;
+      if (chk.checked) favSet.add(item.sku); else favSet.delete(item.sku);
       favSave();
-      aplicarFiltros(true);  // remove/adiciona na lista geral
-      renderFavs();          // atualiza favoritos
+      renderFavs();
+      updateFavHeight();
       updateCounts();
     });
     tdFav.appendChild(chk);
     tr.appendChild(tdFav);
+    generalChkMap.set(item.sku, chk);
 
     // SKU
     const tdSku = document.createElement('td');
@@ -351,7 +381,6 @@ function renderGeneralChunk(){
 
     // Preços
     const { minSite, maxSite } = computeMinMaxForRow(item);
-
     for (const s of siteOrder) {
       const td = document.createElement('td');
       const d = item.sites[s];
@@ -379,7 +408,6 @@ function renderGeneralChunk(){
   endMarker.textContent = (itemsLoaded >= filteredGeneral.length) ? 'Fim da lista' : '';
 }
 
-/* Scroll dentro do contêiner Geral */
 function onGeneralScroll(){
   if (loadingMore) return;
   const nearBottom = generalWrap.scrollTop + generalWrap.clientHeight >= generalWrap.scrollHeight - 100;
@@ -390,7 +418,7 @@ function onGeneralScroll(){
 }
 generalWrap.addEventListener('scroll', onGeneralScroll);
 
-/* ====== Render: Favoritos ====== */
+/* ====== Render: Favoritos (com lixeira) ====== */
 function renderFavs(){
   favBody.innerHTML = '';
   const favList = produtos.filter(p => isFav(p.sku));
@@ -399,24 +427,32 @@ function renderFavs(){
   for (const item of favList){
     const tr = document.createElement('tr');
 
-    // Checkbox (desmarca tira dos favoritos)
-    const tdFav = document.createElement('td');
-    tdFav.className = 'col-fav';
-    const chk = document.createElement('input');
-    chk.type = 'checkbox';
-    chk.checked = true;
-    chk.title = 'Remover dos favoritos';
-    chk.addEventListener('change', () => {
-      if (!chk.checked) {
-        favSet.delete(item.sku);
-        favSave();
-        renderFavs();
-        aplicarFiltros(true);
-        updateCounts();
+    // Ação: Lixeira para remover dos favoritos
+    const tdAct = document.createElement('td');
+    tdAct.className = 'col-fav';
+    const btn = document.createElement('button');
+    btn.className = 'trash-btn';
+    btn.title = 'Remover dos favoritos';
+    btn.innerHTML = `
+      <svg class="trash-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M9 3h6a1 1 0 0 1 1 1v1h4v2h-1l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 7H4V5h4V4a1 1 0 0 1 1-1zm2 0v1h2V3h-2zM7 7l1 14h8l1-14H7z"></path>
+      </svg>`;
+    btn.addEventListener('click', () => {
+      // remove do set e desmarca no Geral (se a linha estiver renderizada)
+      favSet.delete(item.sku);
+      favSave();
+      const chk = generalChkMap.get(item.sku);
+      if (chk) {
+        suppressGeneralChange = true;
+        chk.checked = false;
+        suppressGeneralChange = false;
       }
+      renderFavs();
+      updateFavHeight();
+      updateCounts();
     });
-    tdFav.appendChild(chk);
-    tr.appendChild(tdFav);
+    tdAct.appendChild(btn);
+    tr.appendChild(tdAct);
 
     // SKU
     const tdSku = document.createElement('td');
@@ -457,18 +493,25 @@ function renderFavs(){
   favBody.appendChild(frag);
 }
 
-/* ====== Contadores ====== */
-function updateCounts(){
-  const total = produtos.length;
-  const favs = favSet.size;
-  const shown = itemsLoaded; // exibidos no Geral
-  countShown.textContent = `Exibindo ${shown} de ${filteredGeneral.length} no Geral (filtrados)`;
-  countTotal.textContent = `Total de SKUs: ${total}`;
-  countFavs.textContent = `Favoritos: ${favs}`;
+/* ====== Colapsar / Expandir painéis ====== */
+function attachToggle(panel, wrap, button){
+  function setState(expanded){
+    panel.classList.toggle('collapsed', !expanded);
+    button.textContent = expanded ? 'Minimizar' : 'Maximizar';
+    button.setAttribute('aria-expanded', String(expanded));
+  }
+  button.addEventListener('click', ()=>{
+    const isExpanded = button.getAttribute('aria-expanded') === 'true';
+    setState(!isExpanded);
+  });
+  // estado inicial: expandido
+  setState(true);
 }
+attachToggle(favPanel, favWrap, toggleFavBtn);
+attachToggle(generalPanel, generalWrap, toggleGenBtn);
 
 /* ====== Botões ====== */
-btnReload.addEventListener('click', buscarDados);
+btnReload.addEventListener('click', async ()=>{ await buscarDados(); });
 btnSair.addEventListener('click', async ()=>{
   await sb.auth.signOut();
   localStorage.removeItem('mm_login_start');
