@@ -9,10 +9,41 @@
   body { margin:0; font-family: Arial, sans-serif; background-color:#121212; color:white; padding:20px; }
   header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; gap:12px; flex-wrap:wrap; }
   h1 { color:#00b140; margin:0; }
-  .userbox { display:flex; gap:12px; align-items:center; }
-  .chip { font-size:12px; background:#1e1e1e; border:1px solid #333; padding:6px 10px; border-radius:999px; }
+
+  .userbox { display:flex; gap:12px; align-items:center; position: relative; }
+  .chip { font-size:12px; background:#1e1e1e; border:1px solid #333; padding:6px 10px; border-radius:999px; cursor:default; }
   .btn { background:#00b140; color:#fff; border:none; padding:8px 14px; border-radius:6px; cursor:pointer; }
   .btn:hover { background:#009b38; }
+
+  /* Dropdown do usuário */
+  .userChipWrap { position: relative; display:inline-block; }
+  .dropdown {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    display: none;
+    min-width: 180px;
+    padding: 6px;
+    background: #0f0f0f;
+    border: 1px solid #2a2a2a;
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.5);
+    z-index: 50;
+  }
+  .userChipWrap:hover .dropdown,
+  .userChipWrap.open .dropdown { display: block; }
+  .dd-item {
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: #eee;
+    text-align: left;
+    padding: 10px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .dd-item:hover { background: #1b1b1b; }
 
   .panel { background:#0f0f0f; border:1px solid #2a2a2a; border-radius:12px; padding:12px; margin-bottom:18px; }
   .panel-header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }
@@ -66,37 +97,6 @@
     background: #3a3a3a;
   }
   body.resizing, body.resizing * { cursor: ns-resize !important; user-select: none; }
-
-  /* === Menu do usuário (dropdown) === */
-  .userbox { position: relative; }
-  .user-menu { position: relative; }
-  .chip-btn { display:flex; align-items:center; gap:6px; cursor:pointer; }
-  .chip-btn:focus { outline: 2px solid #2a2a2a; outline-offset: 2px; }
-  .caret { transition: transform .15s ease; }
-  .chip-btn[aria-expanded="true"] .caret { transform: rotate(180deg); }
-  .menu {
-    position: absolute;
-    top: calc(100% + 6px);
-    right: 0;
-    background: #1e1e1e;
-    border: 1px solid #333;
-    border-radius: 10px;
-    min-width: 180px;
-    padding: 6px;
-    box-shadow: 0 8px 24px rgba(0,0,0,.4);
-    display: none;
-    z-index: 1000;
-  }
-  .menu.open { display: block; }
-  .menu-item {
-    display: block;
-    padding: 10px 12px;
-    border-radius: 8px;
-    color: #fff;
-    text-decoration: none;
-    font-size: 14px;
-  }
-  .menu-item:hover { background: #2a2a2a; }
 </style>
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="./config.js"></script>
@@ -105,15 +105,11 @@
 <header>
   <h1>MaiorMargem — Dashboard</h1>
   <div class="userbox">
-    <div class="user-menu">
-      <button id="userMenuBtn" class="chip chip-btn" aria-haspopup="menu" aria-expanded="false">
-        <span id="userChip">Usuário</span>
-        <svg class="caret" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-          <path d="M7 10l5 5 5-5H7z"></path>
-        </svg>
-      </button>
-      <div id="userMenu" class="menu" role="menu" aria-hidden="true">
-        <a href="meusdados.html" class="menu-item" role="menuitem">Meus dados</a>
+    <div class="userChipWrap">
+      <span id="userChip" class="chip">Usuário</span>
+      <!-- Dropdown -->
+      <div id="userDropdown" class="dropdown" role="menu" aria-hidden="true">
+        <button class="dd-item" id="ddMeusDados">Meus dados</button>
       </div>
     </div>
     <button id="btnSair" class="btn">Sair</button>
@@ -127,44 +123,41 @@
     <input id="descFilter" placeholder="Filtrar por descrição…" />
     <button id="btnReload" class="btn">Recarregar</button>
   </div>
-  <div id="status" class="status"></div>
+  <div class="status"><span id="status"></span></div>
   <div id="err" class="err"></div>
 </div>
 
-<!-- Favoritos -->
+<!-- Favoritos (Topo) -->
 <section id="favPanel" class="panel">
   <div class="panel-header">
     <h2>Favoritos</h2>
     <button id="toggleFav" class="toggle-btn" aria-expanded="true">Minimizar</button>
   </div>
-  <div id="favWrap" class="wrap">
+  <div id="favWrap" class="wrap"><!-- altura definida por JS (auto ou usuário) -->
     <table id="favTable">
       <thead>
         <tr>
-          <th class="col-fav">Fav</th>
-          <th class="col-sku">EAN/GTIN</th>
+          <th class="col-fav">Ação</th>
+          <th class="col-sku">EAN</th>
           <th class="col-desc">Descrição</th>
-          <th>Cassol</th>
-          <th>Ghaus</th>
-          <th>Leroy</th>
-          <th>MestreTinho</th>
+          <th>LeroyMerlin</th>
           <th>QueroQuero</th>
+          <th>Cassol</th>
           <th>RedeMac</th>
-          <th>Supremeinox</th>
+          <th>MestreTinho</th>
           <th>Tumelero</th>
+          <th>Supremeinox</th>
+          <th>Ghaus</th>
         </tr>
       </thead>
       <tbody></tbody>
     </table>
   </div>
-  <!-- Barra de redimensionar (drag) -->
-  <div id="favResizer" class="resizer" title="Arraste para redimensionar"></div>
-  <div class="counts">
-    <div><strong>Favoritos:</strong> <span id="countFavs">0</span></div>
-  </div>
+  <!-- Barra para redimensionar Favoritos -->
+  <div id="favResizer" class="resizer" title="Arraste para redimensionar. Duplo clique: voltar ao auto."></div>
 </section>
 
-<!-- Geral -->
+<!-- Geral (Abaixo) -->
 <section id="generalPanel" class="panel">
   <div class="panel-header">
     <h2>Geral</h2>
@@ -174,26 +167,27 @@
     <table id="produtosTable">
       <thead>
         <tr>
-          <th class="col-fav">Fav</th>
-          <th class="col-sku">EAN/GTIN</th>
+          <th class="col-fav">★</th>
+          <th class="col-sku">EAN</th>
           <th class="col-desc">Descrição</th>
-          <th>Cassol</th>
-          <th>Ghaus</th>
-          <th>Leroy</th>
-          <th>MestreTinho</th>
+          <th>LeroyMerlin</th>
           <th>QueroQuero</th>
+          <th>Cassol</th>
           <th>RedeMac</th>
-          <th>Supremeinox</th>
+          <th>MestreTinho</th>
           <th>Tumelero</th>
+          <th>Supremeinox</th>
+          <th>Ghaus</th>
         </tr>
       </thead>
       <tbody></tbody>
     </table>
-    <div id="endMarker" class="end-marker">— Fim —</div>
+    <div id="endMarker" class="end-marker"></div>
   </div>
   <div class="counts">
-    <div><strong>Exibindo:</strong> <span id="countShown">0</span></div>
-    <div><strong>Total:</strong> <span id="countTotal">0</span></div>
+    <span id="countShown"></span>
+    <span id="countTotal"></span>
+    <span id="countFavs"></span>
   </div>
 </section>
 
@@ -202,7 +196,7 @@
 const CFG = window.CONFIG || {};
 const SUPABASE_URL = CFG.SUPABASE_URL;
 const SUPABASE_ANON_KEY = CFG.SUPABASE_ANON_KEY;
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) { alert("Erro de config...config.js não carregado."); throw new Error("CONFIG ausente"); }
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) { alert("Erro de configuração: config.js não carregado."); throw new Error("CONFIG ausente"); }
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
 
 /** Ajustes UI **/
@@ -215,6 +209,8 @@ const FAV_MIN_PX = 120;
 const statusEl = document.getElementById('status');
 const errEl = document.getElementById('err');
 const userChip = document.getElementById('userChip');
+const userChipWrap = document.querySelector('.userChipWrap');
+const ddMeusDados = document.getElementById('ddMeusDados');
 const btnSair = document.getElementById('btnSair');
 const btnReload = document.getElementById('btnReload');
 
@@ -241,31 +237,6 @@ function setStatus(t){ statusEl.textContent = t || ''; }
 function showErr(e){ errEl.style.display='block'; errEl.textContent = String(e||'').trim(); }
 function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
 
-/* ====== Menu do Usuário (dropdown) ====== */
-const userMenuBtn = document.getElementById('userMenuBtn');
-const userMenu    = document.getElementById('userMenu');
-
-function toggleUserMenu(force) {
-  const wantOpen = (typeof force === 'boolean') ? force : !userMenu.classList.contains('open');
-  userMenu.classList.toggle('open', wantOpen);
-  userMenuBtn.setAttribute('aria-expanded', String(wantOpen));
-  userMenu.setAttribute('aria-hidden', String(!wantOpen));
-}
-if (userMenuBtn && userMenu) {
-  userMenuBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    toggleUserMenu();
-  });
-  document.addEventListener('click', (e) => {
-    if (!userMenu.contains(e.target) && e.target !== userMenuBtn) {
-      toggleUserMenu(false);
-    }
-  });
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') toggleUserMenu(false);
-  });
-}
-
 /* ====== Sessão: 2h ====== */
 function enforceMaxSession(){
   const key = 'mm_login_start';
@@ -278,179 +249,212 @@ function enforceMaxSession(){
     if (age > MAX_SESSION_MS) { await sb.auth.signOut(); localStorage.removeItem(key); window.location.href = CFG.SITE_URL || 'index.html'; }
   }
   setInterval(check, 60 * 1000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+  sb.auth.onAuthStateChange((event) => { if (event === 'SIGNED_IN') localStorage.setItem(key, String(Date.now())); if (event === 'SIGNED_OUT') localStorage.removeItem(key); });
 }
+
+/* ====== Dropdown ações ====== */
+// Meus dados
+ddMeusDados.addEventListener('click', () => { window.location.href = 'meusdados.html'; });
+// Suporte a toque/click para abrir/fechar
+userChip.addEventListener('click', (e) => { e.stopPropagation(); userChipWrap.classList.toggle('open'); });
+// Fechar ao clicar fora / Esc
+document.addEventListener('click', (e) => { if (!userChipWrap.contains(e.target)) userChipWrap.classList.remove('open'); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') userChipWrap.classList.remove('open'); });
+
+/* ====== Sites ====== */
+const siteMap = {
+  "PrecoLeroyMerlin": "LeroyMerlin",
+  "PrecoQueroQuero": "QueroQuero",
+  "PrecoCassol": "Cassol",
+  "PrecoRedeMac": "RedeMac",
+  "PrecoMestreTinho": "MestreTinho",
+  "PrecoTumelero": "Tumelero",
+  "PrecoSupremeinox": "Supremeinox",
+  "PrecoGhaus": "Ghaus"
+};
+const siteOrder = Object.values(siteMap);
+
+/* ====== Estado ====== */
+let produtos = [];         // [{ sku, desc, sites: {NomeSite: {precoRaw, precoNum, data}} }]
+let favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
+let filteredGeneral = [];  // inclui favoritos (não remove do Geral)
+let itemsPerLoad = 60;
+let itemsLoaded = 0;
+let loadingMore = false;
+let suppressGeneralChange = false; // evita loop quando desmarca programaticamente
+const generalChkMap = new Map();   // SKU -> checkbox do Geral
+
+/* ====== View ====== */
+const VIEW = "vw_precos_com_desc";
 
 /* ====== Helpers ====== */
-function formatBRL(num){ try{ return num.toLocaleString('pt-BR', { style:'currency', currency:'BRL' }); }catch{ return String(num); } }
-function sanitizeNumber(str){
-  if (typeof str === 'number') return str;
-  if (!str) return NaN;
-  const only = String(str).replace(/[^\d,.-]/g,'').replace(/\.(?=\d{3}(?:\D|$))/g,'');
-  const norm = only.replace(',', '.');
-  const n = Number(norm);
-  return Number.isFinite(n) ? n : NaN;
-}
-function withMarkup(price){ return Math.round((price * (1 + PRICE_MARKUP_PCT)) * 100) / 100; }
+function formatBRL(n){ try { return n.toLocaleString('pt-BR', { style:'currency', currency:'BRL' }); } catch { return String(n); } }
+function withMarkup(n){ return Number.isFinite(n) ? n*(1+PRICE_MARKUP_PCT) : null; }
 
-/* ====== Mock: ordem dos sites (use a mesma do seu backend) ====== */
-const siteOrder = ["Cassol","Ghaus","Leroy","MestreTinho","QueroQuero","RedeMac","Supremeinox","Tumelero"];
-
-/* ====== Dados ====== */
-let allRows = [];            // [{sku, desc, sites: {Cassol:{precoNum, precoRaw, url, data}, ...}}]
-let favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
-let generalChkMap = new Map(); // sku -> checkbox (na tabela geral)
-
-/* ====== Fetch do Supabase ====== */
-async function buscarDados(){
-  hideErr(); setStatus('Carregando...');
-  try {
-    // Exemplo: ajuste para sua estrutura/tabela real
-    const { data, error } = await sb
-      .from('vw_precos_com_desc') // ou sua view/tabela agregada
-      .select('*')
-      .limit(5000);       // ajuste conforme necessário
-
-    if (error) throw error;
-    const rows = Array.isArray(data) ? data : [];
-    allRows = mapRows(rows);
-    renderAll();
-    setStatus(`Carregado: ${rows.length} linhas`);
-  } catch(err) {
-    showErr(err.message || err); setStatus('');
-  }
-}
-
-/* ====== Transformação ====== */
-function mapRows(rows){
-  // Este mapeamento deve refletir o formato da sua view/tabela
-  // Aqui fica um exemplo genérico; adapte as chaves conforme seu schema
-  const map = new Map();
-  for (const r of rows){
-    const sku = r.ean || r.sku || r.EAN || r.GTIN || '';
-    if (!sku) continue;
-    const desc = r.descricao || r.desc || r.Descricao || '';
-    const site = r.site || r.Site || '';
-    const url  = r.url  || r.Url  || '';
-    const precoRaw = r.preco || r.Preco || r.preco_raw || r.precoRaw || '';
-    const precoNum = sanitizeNumber(r.preco_num || r.precoNum || r.preco || r.Preco);
-
-    const key = sku;
-    if (!map.has(key)){
-      map.set(key, { sku, desc, sites: {} });
-    }
-    const obj = map.get(key);
-    obj.sites[site] = {
-      precoNum: Number.isFinite(precoNum) ? precoNum : NaN,
-      precoRaw, url,
-      data: r.data || r.updated_at || r.atualizado_em || null
-    };
-  }
-  return Array.from(map.values());
-}
-
-/* ====== Render ====== */
 function computeMinMaxForRow(item){
-  let minV = Infinity, maxV = -Infinity, minSite=null, maxSite=null;
-  for (const s of siteOrder){
+  let min = { site:null, val: Infinity };
+  let max = { site:null, val: -Infinity };
+  for (const s of siteOrder) {
     const d = item.sites[s];
     if (!d || !Number.isFinite(d.precoNum)) continue;
-    if (d.precoNum < minV){ minV = d.precoNum; minSite = s; }
-    if (d.precoNum > maxV){ maxV = d.precoNum; maxSite = s; }
+    const n = d.precoNum;
+    if (n < min.val) { min = { site:s, val:n }; }
+    if (n > max.val) { max = { site:s, val:n }; }
   }
-  return { minSite, maxSite, minV, maxV };
+  return { minSite: min.site, maxSite: max.site };
 }
 
-function renderAll(){
-  renderFavs();
-  renderGeneral();
-  aplicarFiltros(); // atualiza contadores
+function favSave(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet])); }
+function isFav(sku){ return favSet.has(String(sku)); }
+
+/* ====== Altura de Favoritos ====== */
+function measureRowHeight(){
+  const row = document.querySelector('#favTable tbody tr');
+  if (!row) return 44;
+  const h = Math.round(row.getBoundingClientRect().height);
+  return Math.max(36, h || 44);
+}
+function measureHeadHeight(){
+  const head = document.querySelector('#favTable thead');
+  if (!head) return 40;
+  const h = Math.round(head.getBoundingClientRect().height);
+  return Math.max(32, h || 40);
+}
+let favHeightUser = Number(localStorage.getItem('mm_fav_height')) || null;
+
+function applyFavHeight(px){
+  if (!px || !Number.isFinite(px)) return;
+  const maxPx = Math.round(window.innerHeight * 0.85);
+  const clamped = Math.max(FAV_MIN_PX, Math.min(px, maxPx));
+  favWrap.style.height = clamped + 'px';
+}
+function updateFavHeight(){
+  if (favHeightUser) { applyFavHeight(favHeightUser); return; }
+  const rowsLen = favBody.children.length;
+  const rows = Math.min(rowsLen, FAV_AUTO_ROWS_MAX);
+  const rowH = measureRowHeight();
+  const headH = measureHeadHeight();
+  const pad = 8;
+  const target = headH + rows * rowH + pad;
+  applyFavHeight(target);
 }
 
-function renderFavs(){
-  favBody.innerHTML = '';
-  const frag = document.createDocumentFragment();
-  let count = 0;
+/* ====== Redimensionar Favoritos (drag) ====== */
+(function initResizer(){
+  let startY = 0, startH = 0;
+  function onMove(ev){
+    const dy = ev.clientY - startY;
+    favHeightUser = startH + dy;
+    localStorage.setItem('mm_fav_height', String(favHeightUser));
+    applyFavHeight(favHeightUser);
+  }
+  function stop(){
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', stop);
+    document.body.classList.remove('resizing');
+  }
+  favResizer.addEventListener('mousedown', (ev)=>{
+    startY = ev.clientY;
+    startH = favWrap.offsetHeight;
+    document.body.classList.add('resizing');
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', stop);
+  });
+  // Duplo clique: volta para automático
+  favResizer.addEventListener('dblclick', ()=>{
+    favHeightUser = null;
+    localStorage.removeItem('mm_fav_height');
+    updateFavHeight();
+  });
+})();
 
-  for (const item of allRows){
-    if (!favSet.has(item.sku)) continue;
-    count++;
-    const tr = document.createElement('tr');
+/* ====== Dados ====== */
+async function buscarDados() {
+  setStatus('Carregando dados…');
+  hideErr();
 
-    // Fav (checkbox)
-    const tdFav = document.createElement('td');
-    tdFav.className = 'col-fav';
-    const btnRemove = document.createElement('button');
-    btnRemove.className = 'btn';
-    btnRemove.textContent = '🗑';
-    btnRemove.title = 'Remover dos favoritos';
-    btnRemove.addEventListener('click', ()=>{
-      favSet.delete(item.sku);
-      localStorage.setItem('mm_favs', JSON.stringify(Array.from(favSet)));
-      renderAll();
-    });
-    tdFav.appendChild(btnRemove);
-    tr.appendChild(tdFav);
+  const { data, error } = await sb
+    .from(VIEW)
+    .select('ean, site, preco, data, descricao, preco_num')
+    .order('data', { ascending: false })
+    .limit(5000);
 
-    // SKU
-    const tdSku = document.createElement('td');
-    tdSku.className = 'col-sku';
-    tdSku.textContent = item.sku;
-    tr.appendChild(tdSku);
+  if (error) { showErr('select view: ' + error.message); setStatus('Falha ao carregar.'); return; }
 
-    // Descrição
-    const tdDesc = document.createElement('td');
-    tdDesc.className = 'col-desc';
-    tdDesc.innerHTML = (item.desc || '').replace(/</g,'&lt;');
-    tr.appendChild(tdDesc);
+  const agrupado = {};
+  for (const row of data) {
+    const ean = String(row.ean ?? '');
+    const site = String(row.site ?? '');
+    const precoRaw = row.preco;
+    const precoNum = row.preco_num;
+    const dt = row.data;
+    const desc = row.descricao || '';
 
-    // Preços
-    const { minSite, maxSite } = computeMinMaxForRow(item);
-    for (const s of siteOrder) {
-      const td = document.createElement('td');
-      const d = item.sites[s];
-      if (d) {
-        const dataStr = d.data ? new Date(d.data).toLocaleString('pt-BR') : '';
-        if (Number.isFinite(d.precoNum)) {
-          const marked = withMarkup(d.precoNum);
-          const cls = (s === minSite) ? 'min' : (s === maxSite ? 'max' : '');
-          td.innerHTML = `<span class="price ${cls}" title="Atualizado em ${dataStr}">${formatBRL(marked)}</span>`;
-        } else {
-          const raw = (d.precoRaw ?? '').toString().replace(/</g,'&lt;');
-          td.innerHTML = raw ? `<span title="Atualizado em ${dataStr}">${raw}</span>` : `<span class="muted">—</span>`;
-        }
-      } else {
-        td.innerHTML = `<span class="muted">—</span>`;
+    if (!agrupado[ean]) agrupado[ean] = { sku: ean, desc: desc, sites: {} };
+    if (!agrupado[ean].desc && desc) agrupado[ean].desc = desc;
+
+    const htmlSiteName = siteMap[site]; // mapeia "PrecoX" -> "X"
+    if (htmlSiteName) {
+      const prev = agrupado[ean].sites[htmlSiteName];
+      if (!prev || new Date(dt) > new Date(prev.data)) {
+        agrupado[ean].sites[htmlSiteName] = { precoRaw, precoNum, data: dt };
       }
-      tr.appendChild(td);
     }
-
-    frag.appendChild(tr);
   }
 
-  favBody.appendChild(frag);
-  countFavs.textContent = String(count);
+  produtos = Object.values(agrupado);
+  aplicarFiltros(true);
+  renderFavs();
   updateFavHeight();
+  updateCounts();
+  setStatus(`Carregado: ${produtos.length} SKUs`);
 }
 
-function renderGeneral(){
+/* ====== Filtros ====== */
+function aplicarFiltros(reset=false){
+  const eanQ = eanFilter.value.trim().toLowerCase();
+  const descQ = descFilter.value.trim().toLowerCase();
+
+  filteredGeneral = produtos.filter(p => {
+    const okEan = !eanQ || p.sku.toLowerCase().includes(eanQ);
+    const okDesc = !descQ || (p.desc || '').toLowerCase().includes(descQ);
+    return okEan && okDesc;
+  });
+
+  if (reset) resetGeneral(); else { generalBody.innerHTML=''; resetGeneral(); }
+  updateCounts();
+}
+
+/* ====== Render: Geral (infinite no contêiner) ====== */
+function resetGeneral(){
   generalBody.innerHTML = '';
   generalChkMap.clear();
+  itemsLoaded = 0;
+  renderGeneralChunk();
+}
+function renderGeneralChunk(){
+  const end = Math.min(itemsLoaded + itemsPerLoad, filteredGeneral.length);
   const frag = document.createDocumentFragment();
 
-  for (const item of allRows){
+  for (let i = itemsLoaded; i < end; i++){
+    const item = filteredGeneral[i];
     const tr = document.createElement('tr');
 
-    // Fav (checkbox)
+    // Checkbox Favorito (não remove do Geral)
     const tdFav = document.createElement('td');
     tdFav.className = 'col-fav';
     const chk = document.createElement('input');
     chk.type = 'checkbox';
-    chk.checked = favSet.has(item.sku);
+    chk.checked = isFav(item.sku);
     chk.title = 'Marcar como favorito';
-    chk.addEventListener('change', ()=>{
+    chk.addEventListener('change', () => {
+      if (suppressGeneralChange) return;
       if (chk.checked) favSet.add(item.sku); else favSet.delete(item.sku);
-      localStorage.setItem('mm_favs', JSON.stringify(Array.from(favSet)));
-      renderAll();
+      favSave();
+      renderFavs();
+      updateFavHeight();
+      updateCounts();
     });
     tdFav.appendChild(chk);
     tr.appendChild(tdFav);
@@ -481,7 +485,7 @@ function renderGeneral(){
           td.innerHTML = `<span class="price ${cls}" title="Atualizado em ${dataStr}">${formatBRL(marked)}</span>`;
         } else {
           const raw = (d.precoRaw ?? '').toString().replace(/</g,'&lt;');
-          td.innerHTML = raw ? `<span title="Atualizado em ${dataStr}">${raw}</span>` : `<span class="muted">—</span>`;
+          td.innerHTML = `<span class="price" title="${dataStr ? 'Atualizado em ' + dataStr : ''}">${raw}</span>`;
         }
       } else {
         td.innerHTML = `<span class="muted">—</span>`;
@@ -493,80 +497,92 @@ function renderGeneral(){
   }
 
   generalBody.appendChild(frag);
-  aplicarFiltros();
-  endMarker.style.display = 'block';
+  itemsLoaded = end;
+  endMarker.textContent = (itemsLoaded >= filteredGeneral.length) ? 'Fim da lista' : '';
 }
-
-/* ====== Filtros ====== */
-function aplicarFiltros(updateCountsOnly){
-  const ean = (eanFilter.value || '').trim().toLowerCase();
-  const desc = (descFilter.value || '').trim().toLowerCase();
-
-  let shown = 0;
-  for (const tr of generalBody.children){
-    const sku = (tr.children[1]?.textContent || '').toLowerCase();
-    const dsc = (tr.children[2]?.textContent || '').toLowerCase();
-    const ok = (!ean || sku.includes(ean)) && (!desc || dsc.includes(desc));
-    tr.style.display = ok ? '' : 'none';
-    if (ok) shown++;
+function onGeneralScroll(){
+  if (loadingMore) return;
+  const nearBottom = generalWrap.scrollTop + generalWrap.clientHeight >= generalWrap.scrollHeight - 100;
+  if (nearBottom && itemsLoaded < filteredGeneral.length){
+    loadingMore = true;
+    setTimeout(()=>{ renderGeneralChunk(); loadingMore = false; }, 50);
   }
-  countShown.textContent = String(shown);
-  countTotal.textContent = String(generalBody.children.length);
 }
+generalWrap.addEventListener('scroll', onGeneralScroll);
 
-/* ====== Redimensionar Favoritos (drag) ====== */
-(function initResizer(){
-  let startY = 0, startH = 0;
-  function onMove(ev){
-    const dy = ev.clientY - startY;
-    favHeightUser = startH + dy;
-    localStorage.setItem('mm_fav_height', String(favHeightUser));
-    applyFavHeight(favHeightUser);
+/* ====== Render: Favoritos (com lixeira) ====== */
+function renderFavs(){
+  favBody.innerHTML = '';
+  const favList = produtos.filter(p => isFav(p.sku));
+  const frag = document.createDocumentFragment();
+
+  for (const item of favList){
+    const tr = document.createElement('tr');
+
+    // Ação: Lixeira para remover dos favoritos
+    const tdAct = document.createElement('td');
+    tdAct.className = 'col-fav';
+    const btn = document.createElement('button');
+    btn.className = 'trash-btn';
+    btn.title = 'Remover dos favoritos';
+    btn.innerHTML = `
+      <svg class="trash-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" width="16" height="16">
+        <path d="M9 3h6a1 1 0 0 1 1 1v1h4v2h-1l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 7H4V5h4V4a1 1 0 0 1 1-1zm2 0v1h2V3h-2zM7 7l1 14h8l1-14H7z"></path>
+      </svg>`;
+    btn.addEventListener('click', () => {
+      // remove do set e desmarca no Geral (se a linha estiver renderizada)
+      favSet.delete(item.sku);
+      favSave();
+      const chk = generalChkMap.get(item.sku);
+      if (chk) {
+        suppressGeneralChange = true;
+        chk.checked = false;
+        suppressGeneralChange = false;
+      }
+      renderFavs();
+      updateFavHeight();
+      updateCounts();
+    });
+    tdAct.appendChild(btn);
+    tr.appendChild(tdAct);
+
+    // SKU
+    const tdSku = document.createElement('td');
+    tdSku.className = 'col-sku';
+    tdSku.textContent = item.sku;
+    tr.appendChild(tdSku);
+
+    // Descrição
+    const tdDesc = document.createElement('td');
+    tdDesc.className = 'col-desc';
+    tdDesc.innerHTML = (item.desc || '').replace(/</g,'&lt;');
+    tr.appendChild(tdDesc);
+
+    // Preços
+    const { minSite, maxSite } = computeMinMaxForRow(item);
+    for (const s of siteOrder) {
+      const td = document.createElement('td');
+      const d = item.sites[s];
+      if (d) {
+        const dataStr = d.data ? new Date(d.data).toLocaleString('pt-BR') : '';
+        if (Number.isFinite(d.precoNum)) {
+          const marked = withMarkup(d.precoNum);
+          const cls = (s === minSite) ? 'min' : (s === maxSite ? 'max' : '');
+          td.innerHTML = `<span class="price ${cls}" title="Atualizado em ${dataStr}">${formatBRL(marked)}</span>`;
+        } else {
+          const raw = (d.precoRaw ?? '').toString().replace(/</g,'&lt;');
+          td.innerHTML = `<span class="price" title="${dataStr ? 'Atualizado em ' + dataStr : ''}">${raw}</span>`;
+        }
+      } else {
+        td.innerHTML = `<span class="muted">—</span>`;
+      }
+      tr.appendChild(td);
+    }
+
+    frag.appendChild(tr);
   }
-  function stop(){
-    document.body.classList.remove('resizing');
-    window.removeEventListener('mousemove', onMove);
-    window.removeEventListener('mouseup', stop);
-  }
-  favResizer.addEventListener('mousedown', (ev)=>{
-    document.body.classList.add('resizing');
-    startY = ev.clientY;
-    startH = favWrap.getBoundingClientRect().height;
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', stop);
-  });
-})();
 
-let favHeightUser = Number(localStorage.getItem('mm_fav_height')) || null;
-
-function applyFavHeight(px){
-  if (!px || !Number.isFinite(px)) return;
-  const maxPx = Math.round(window.innerHeight * 0.85);
-  const clamped = Math.max(FAV_MIN_PX, Math.min(px, maxPx));
-  favWrap.style.height = clamped + 'px';
-}
-function updateFavHeight(){
-  if (favHeightUser) { applyFavHeight(favHeightUser); return; }
-  const rowsLen = favBody.children.length;
-  const rows = Math.min(rowsLen, FAV_AUTO_ROWS_MAX);
-  const rowH = measureRowHeight();
-  const headH = measureHeadHeight();
-  const pad = 8;
-  const target = headH + rows * rowH + pad;
-  applyFavHeight(target);
-}
-
-function measureRowHeight(){
-  const probe = document.createElement('tr');
-  probe.innerHTML = '<td class="col-fav"></td><td class="col-sku">0000000000000</td><td class="col-desc">X</td>' + '<td></td>'.repeat(siteOrder.length);
-  favBody.appendChild(probe);
-  const h = Math.max(36, probe.getBoundingClientRect().height);
-  favBody.removeChild(probe);
-  return h;
-}
-function measureHeadHeight(){
-  const thead = document.querySelector('#favTable thead');
-  return Math.max(36, thead.getBoundingClientRect().height);
+  favBody.appendChild(frag);
 }
 
 /* ====== Colapsar / Expandir painéis ====== */
@@ -588,11 +604,22 @@ attachToggle(generalPanel, toggleGenBtn);
 /* ====== Botões ====== */
 btnReload.addEventListener('click', async ()=>{ await buscarDados(); });
 btnSair.addEventListener('click', async ()=>{
-  try { await sb.auth.signOut(); } finally { localStorage.removeItem('mm_login_start'); window.location.href = CFG.SITE_URL || 'index.html'; }
+  await sb.auth.signOut();
+  localStorage.removeItem('mm_login_start');
+  window.location.href = CFG.SITE_URL || 'index.html';
 });
-
 eanFilter.addEventListener('input', ()=>aplicarFiltros(true));
 descFilter.addEventListener('input', ()=>aplicarFiltros(true));
+
+/* ====== Contadores ====== */
+function updateCounts(){
+  const total = produtos.length;
+  const favs = favSet.size;
+  const shown = itemsLoaded;
+  countShown.textContent = `Exibindo ${shown} de ${filteredGeneral.length} no Geral (filtrados)`;
+  countTotal.textContent = `Total de SKUs: ${total}`;
+  countFavs.textContent = `Favoritos: ${favs}`;
+}
 
 /* ====== Init ====== */
 (async function init(){
