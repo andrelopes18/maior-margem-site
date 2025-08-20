@@ -28,8 +28,6 @@
   .wrap { overflow:auto; border:1px solid #2a2a2a; border-radius:10px; }
   /* Geral: altura fixa com scroll interno */
   #generalWrap { height: 55vh; }
-  /* Favoritos: altura dinâmica; JS ajusta #favWrap.style.height até 20 itens; aqui só um fallback mínimo */
-  #favWrap { max-height: 60vh; }
 
   table { width:100%; border-collapse: collapse; }
   thead th { position:sticky; top:0; background:#0f0f0f; z-index:1; }
@@ -47,14 +45,27 @@
 
   .counts { margin-top:10px; font-size:12px; color:#9aa0a6; display:flex; gap:12px; flex-wrap:wrap; }
 
-  /* Painel colapsado: esconde o conteúdo rolável e contadores */
+  /* Painel colapsado: esconde conteúdo rolável e contadores */
   .panel.collapsed .wrap { display:none; }
   .panel.collapsed .counts { display:none; }
+  .panel.collapsed .resizer { display:none; }
 
-  /* Botão de lixo no Favoritos */
-  .trash-btn { background:none; border:1px solid #2a2a2a; color:#ddd; padding:6px; border-radius:8px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; }
-  .trash-btn:hover { background:#1b1b1b; border-color:#444; }
-  .trash-icon { width:16px; height:16px; display:block; }
+  /* Barra de redimensionar (abaixo dos favoritos) */
+  .resizer {
+    height: 10px;
+    margin-top: 6px;
+    border: 1px solid #2a2a2a;
+    border-radius: 8px;
+    cursor: ns-resize;
+    background: linear-gradient(180deg, #1c1c1c, #111);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .resizer:after {
+    content: "";
+    width: 40px; height: 3px; border-radius: 3px;
+    background: #3a3a3a;
+  }
+  body.resizing, body.resizing * { cursor: ns-resize !important; user-select: none; }
 </style>
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="./config.js"></script>
@@ -85,7 +96,7 @@
     <h2>Favoritos</h2>
     <button id="toggleFav" class="toggle-btn" aria-expanded="true">Minimizar</button>
   </div>
-  <div id="favWrap" class="wrap">
+  <div id="favWrap" class="wrap"><!-- altura definida por JS (auto ou usuário) -->
     <table id="favTable">
       <thead>
         <tr>
@@ -105,6 +116,8 @@
       <tbody></tbody>
     </table>
   </div>
+  <!-- Barra para redimensionar Favoritos -->
+  <div id="favResizer" class="resizer" title="Arraste para redimensionar. Duplo clique: voltar ao auto."></div>
 </section>
 
 <!-- Geral (Abaixo) -->
@@ -152,7 +165,8 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { pers
 /** Ajustes UI **/
 const PRICE_MARKUP_PCT = 0.02;
 const MAX_SESSION_MS = 2 * 60 * 60 * 1000; // 2h
-const FAV_ROW_H = 44; // px aproximado de cada linha
+const FAV_AUTO_ROWS_MAX = 20;
+const FAV_MIN_PX = 120;
 
 /* ====== UI refs ====== */
 const statusEl = document.getElementById('status');
@@ -168,6 +182,7 @@ const favPanel = document.getElementById('favPanel');
 const toggleFavBtn = document.getElementById('toggleFav');
 const favWrap = document.getElementById('favWrap');
 const favBody = document.querySelector('#favTable tbody');
+const favResizer = document.getElementById('favResizer');
 
 const generalPanel = document.getElementById('generalPanel');
 const toggleGenBtn = document.getElementById('toggleGen');
@@ -224,14 +239,6 @@ let suppressGeneralChange = false; // evita loop quando desmarca programaticamen
 // Mapa: SKU -> checkbox do Geral (para desmarcar quando remover nos Favoritos)
 const generalChkMap = new Map();
 
-/* ====== Auth ====== */
-async function ensureAuth(){
-  const { data: { session } } = await sb.auth.getSession();
-  if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return null; }
-  userChip.textContent = session.user?.email || 'Logado';
-  return session;
-}
-
 /* ====== View ====== */
 const VIEW = "vw_precos_com_desc";
 
@@ -255,25 +262,66 @@ function computeMinMaxForRow(item){
 function favSave(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet])); }
 function isFav(sku){ return favSet.has(String(sku)); }
 
-function updateCounts(){
-  const total = produtos.length;
-  const favs = favSet.size;
-  const shown = itemsLoaded;
-  countShown.textContent = `Exibindo ${shown} de ${filteredGeneral.length} no Geral (filtrados)`;
-  countTotal.textContent = `Total de SKUs: ${total}`;
-  countFavs.textContent = `Favoritos: ${favs}`;
+/* ====== Altura de Favoritos ====== */
+function measureRowHeight(){
+  const row = document.querySelector('#favTable tbody tr');
+  if (!row) return 44;
+  const h = Math.round(row.getBoundingClientRect().height);
+  return Math.max(36, h || 44);
+}
+function measureHeadHeight(){
+  const head = document.querySelector('#favTable thead');
+  if (!head) return 40;
+  const h = Math.round(head.getBoundingClientRect().height);
+  return Math.max(32, h || 40);
+}
+let favHeightUser = Number(localStorage.getItem('mm_fav_height')) || null;
+
+function applyFavHeight(px){
+  if (!px || !Number.isFinite(px)) return;
+  const maxPx = Math.round(window.innerHeight * 0.85);
+  const clamped = Math.max(FAV_MIN_PX, Math.min(px, maxPx));
+  favWrap.style.height = clamped + 'px';
+}
+function updateFavHeight(){
+  if (favHeightUser) { applyFavHeight(favHeightUser); return; }
+  const rowsLen = favBody.children.length;
+  const rows = Math.min(rowsLen, FAV_AUTO_ROWS_MAX);
+  const rowH = measureRowHeight();
+  const headH = measureHeadHeight();
+  const pad = 8;
+  const target = headH + rows * rowH + pad;
+  applyFavHeight(target);
 }
 
-/* ====== Altura dinâmica de Favoritos (até 20 itens) ====== */
-function updateFavHeight(){
-  const favList = produtos.filter(p => isFav(p.sku));
-  const rows = Math.min(favList.length, 20);
-  const thead = document.querySelector('#favTable thead');
-  const headH = thead ? thead.offsetHeight : 40;
-  const padding = 8;
-  const target = rows > 0 ? (headH + rows * FAV_ROW_H + padding) : headH + padding;
-  favWrap.style.height = target + 'px';
-}
+/* ====== Redimensionar Favoritos (drag) ====== */
+(function initResizer(){
+  let startY = 0, startH = 0;
+  function onMove(ev){
+    const dy = ev.clientY - startY;
+    favHeightUser = startH + dy;
+    localStorage.setItem('mm_fav_height', String(favHeightUser));
+    applyFavHeight(favHeightUser);
+  }
+  function stop(){
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', stop);
+    document.body.classList.remove('resizing');
+  }
+  favResizer.addEventListener('mousedown', (ev)=>{
+    startY = ev.clientY;
+    startH = favWrap.offsetHeight;
+    document.body.classList.add('resizing');
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', stop);
+  });
+  // Duplo clique: volta para automático
+  favResizer.addEventListener('dblclick', ()=>{
+    favHeightUser = null;
+    localStorage.removeItem('mm_fav_height');
+    updateFavHeight();
+  });
+})();
 
 /* ====== Dados ====== */
 async function buscarDados() {
@@ -300,12 +348,16 @@ async function buscarDados() {
     if (!agrupado[ean]) agrupado[ean] = { sku: ean, desc: desc, sites: {} };
     if (!agrupado[ean].desc && desc) agrupado[ean].desc = desc;
 
-    const htmlSiteName = siteMap[site];
-    if (htmlSiteName) {
-      const prev = agrupado[ean].sites[htmlSiteName];
-      if (!prev || new Date(dt) > new Date(prev.data)) {
-        agrupado[ean].sites[htmlSiteName] = { precoRaw, precoNum, data: dt };
-      }
+    const htmlSiteName = siteOrder[site] ? siteOrder[site] : site;
+    const mappedSite = {
+      "PrecoLeroyMerlin":"LeroyMerlin","PrecoQueroQuero":"QueroQuero","PrecoCassol":"Cassol",
+      "PrecoRedeMac":"RedeMac","PrecoMestreTinho":"MestreTinho","PrecoTumelero":"Tumelero",
+      "PrecoSupremeinox":"Supremeinox","PrecoGhaus":"Ghaus"
+    }[site] || site;
+
+    const prev = agrupado[ean].sites[mappedSite];
+    if (!prev || new Date(dt) > new Date(prev?.data)) {
+      agrupado[ean].sites[mappedSite] = { precoRaw, precoNum, data: dt };
     }
   }
 
@@ -332,7 +384,11 @@ function aplicarFiltros(reset=false){
   updateCounts();
 }
 
-/* ====== Render: Geral (infinite scroll dentro do contêiner) ====== */
+/* ====== Render: Geral (infinite no contêiner) ====== */
+let itemsPerLoad = 60;
+let itemsLoaded = 0;
+let loadingMore = false;
+
 function resetGeneral(){
   generalBody.innerHTML = '';
   generalChkMap.clear();
@@ -494,7 +550,7 @@ function renderFavs(){
 }
 
 /* ====== Colapsar / Expandir painéis ====== */
-function attachToggle(panel, wrap, button){
+function attachToggle(panel, button){
   function setState(expanded){
     panel.classList.toggle('collapsed', !expanded);
     button.textContent = expanded ? 'Minimizar' : 'Maximizar';
@@ -504,11 +560,10 @@ function attachToggle(panel, wrap, button){
     const isExpanded = button.getAttribute('aria-expanded') === 'true';
     setState(!isExpanded);
   });
-  // estado inicial: expandido
   setState(true);
 }
-attachToggle(favPanel, favWrap, toggleFavBtn);
-attachToggle(generalPanel, generalWrap, toggleGenBtn);
+attachToggle(favPanel, toggleFavBtn);
+attachToggle(generalPanel, toggleGenBtn);
 
 /* ====== Botões ====== */
 btnReload.addEventListener('click', async ()=>{ await buscarDados(); });
@@ -522,8 +577,9 @@ descFilter.addEventListener('input', ()=>aplicarFiltros(true));
 
 /* ====== Init ====== */
 (async function init(){
-  const session = await ensureAuth();
-  if (!session) return;
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return; }
+  userChip.textContent = session.user?.email || 'Logado';
   enforceMaxSession();
   await buscarDados();
 })();
