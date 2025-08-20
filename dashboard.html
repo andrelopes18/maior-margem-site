@@ -26,7 +26,7 @@
   .price { font-weight:700; display:block; }
   .price.min { color:#ff4d4f; }       /* vermelho: mais barato */
   .price.max { color:#00d084; }       /* verde: mais caro */
-  .muted { color:#9aa0a6; font-size:12px; display:block; margin-top:2px; }
+  .muted { display:none; }            /* data não aparece, só no tooltip */
   .end-marker { text-align:center; padding:18px; color:#9aa0a6; }
 </style>
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
@@ -83,10 +83,12 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
 });
 
-/** Percentual de acréscimo apenas para exibição (ex.: 2% = 0.02) **/
+/** Percentual de acréscimo só para exibição (pode ajustar) **/
 const PRICE_MARKUP_PCT = 0.02;
+/** Duração máxima de sessão (UI) **/
+const MAX_SESSION_MS = 2 * 60 * 60 * 1000; // 2h
 
-/* ====== UI els ====== */
+/* ====== UI ====== */
 const statusEl = document.getElementById('status');
 const errEl = document.getElementById('err');
 const userChip = document.getElementById('userChip');
@@ -100,6 +102,36 @@ const descFilter = document.getElementById("descFilter");
 function setStatus(t){ statusEl.textContent = t || ''; }
 function showErr(e){ errEl.style.display='block'; errEl.textContent = String(e||'').trim(); }
 function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
+
+/* ====== Sessão: limitar a 2 horas ====== */
+function enforceMaxSession(){
+  const key = 'mm_login_start';
+  const now = Date.now();
+  let start = Number(localStorage.getItem(key));
+  if (!Number.isFinite(start) || start <= 0) {
+    localStorage.setItem(key, String(now));
+    start = now;
+  }
+  async function check(){
+    const s = Number(localStorage.getItem(key));
+    const age = Date.now() - (Number.isFinite(s) ? s : now);
+    if (age > MAX_SESSION_MS) {
+      await sb.auth.signOut();
+      localStorage.removeItem(key);
+      window.location.href = CFG.SITE_URL || 'index.html';
+    }
+  }
+  // checa a cada 1 min e quando a aba volta ao foco
+  setInterval(check, 60 * 1000);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) check();
+  });
+  // reseta marcador no login/logout
+  sb.auth.onAuthStateChange((event) => {
+    if (event === 'SIGNED_IN') localStorage.setItem(key, String(Date.now()));
+    if (event === 'SIGNED_OUT') localStorage.removeItem(key);
+  });
+}
 
 /* ====== MAPA DE COLUNAS -> NOMES DE SITE ====== */
 const siteMap = {
@@ -132,32 +164,7 @@ async function ensureAuth(){
   return session;
 }
 
-/* ====== VIEW no Postgres ====== */
-/*
-Crie/atualize a view para já calcular um campo numérico confiável (sem parsing no browser):
-
-create or replace view public.vw_precos_com_desc as
-select
-  p.ean,
-  p.site,
-  p.preco,
-  p.data,
-  cp.descricao,
-  -- Tenta converter 'preco' texto em numeric (remove R$, pontos de milhar e troca vírgula por ponto)
-  nullif(
-    replace(
-      replace(
-        regexp_replace(p.preco, '[^0-9,.-]', '', 'g')  -- deixa só dígitos, vírgula, ponto e sinal
-      , '.', ''),  -- remove separadores de milhar
-      ',', '.'     -- vírgula -> ponto decimal
-    )
-  ,'')::numeric as preco_num
-from public."Precos" p
-left join public.cadastro_produtos cp
-  on p.ean = cp.ean1
-  or p.ean = cp.ean2
-  or p.ean = cp.ean3;
-*/
+/* ====== View no Postgres (inclui preco_num) ====== */
 const VIEW = "vw_precos_com_desc";
 
 /* ====== Helpers ====== */
@@ -192,7 +199,7 @@ async function buscarDados() {
     const ean = String(row.ean ?? '');
     const site = String(row.site ?? '');
     const precoRaw = row.preco;
-    const precoNum = row.preco_num;   // já vem do banco como número confiável
+    const precoNum = row.preco_num;   // número confiável vindo da view
     const dt = row.data;
     const desc = row.descricao || '';
 
@@ -251,19 +258,16 @@ function renderChunk(){
       const td = document.createElement('td');
       const d = item.sites[s];
       if (d) {
-        let contentPrice;
+        const dataStr = d.data ? new Date(d.data).toLocaleString('pt-BR') : '';
         if (Number.isFinite(d.precoNum)) {
           const marked = withMarkup(d.precoNum);
-          contentPrice = formatBRL(marked);
+          const cls = (s === minSite) ? 'min' : (s === maxSite ? 'max' : '');
+          td.innerHTML = `<span class="price ${cls}" title="Atualizado em ${dataStr}">${formatBRL(marked)}</span>`;
         } else {
-          // sem número confiável: mostra string original sem markup nem destaque
-          td.innerHTML = `<span class="price">${d.precoRaw ?? ''}</span><span class="muted">${d.data ? new Date(d.data).toLocaleDateString('pt-BR') : ''}</span>`;
-          tr.appendChild(td);
-          continue;
+          // Sem número confiável: mostra texto original e tooltip de data
+          const raw = (d.precoRaw ?? '').toString().replace(/</g,'&lt;');
+          td.innerHTML = `<span class="price" title="${dataStr ? 'Atualizado em ' + dataStr : ''}">${raw}</span>`;
         }
-        const dataStr = d.data ? new Date(d.data).toLocaleDateString('pt-BR') : '';
-        const cls = (s === minSite) ? 'min' : (s === maxSite ? 'max' : '');
-        td.innerHTML = `<span class="price ${cls}">${contentPrice}</span><span class="muted">${dataStr}</span>`;
       } else {
         td.innerHTML = `<span class="muted">—</span>`;
       }
@@ -316,6 +320,7 @@ descFilter.addEventListener('input', ()=>aplicarFiltros(true));
 btnReload.addEventListener('click', buscarDados);
 btnSair.addEventListener('click', async ()=>{
   await sb.auth.signOut();
+  localStorage.removeItem('mm_login_start');
   window.location.href = CFG.SITE_URL || 'index.html';
 });
 
@@ -323,6 +328,7 @@ btnSair.addEventListener('click', async ()=>{
 (async function init(){
   const session = await ensureAuth();
   if (!session) return;
+  enforceMaxSession();
   await buscarDados();
 })();
 </script>
