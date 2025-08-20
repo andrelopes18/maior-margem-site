@@ -306,7 +306,7 @@ async function buscarDados(){
   try {
     // Exemplo: ajuste para sua estrutura/tabela real
     const { data, error } = await sb
-      .from('PrecosView') // ou sua view/tabela agregada
+      .from('vw_precos_com_desc') // ou sua view/tabela agregada
       .select('*')
       .limit(5000);       // ajuste conforme necessário
 
