@@ -13,21 +13,34 @@
   .chip { font-size:12px; background:#1e1e1e; border:1px solid #333; padding:6px 10px; border-radius:999px; }
   .btn { background:#00b140; color:#fff; border:none; padding:8px 14px; border-radius:6px; cursor:pointer; }
   .btn:hover { background:#009b38; }
+
+  .grid { display:grid; grid-template-columns: 1fr; gap:20px; }
+  @media(min-width:1100px){ .grid { grid-template-columns: 2fr 1fr; } }
+
+  .panel { background:#0f0f0f; border:1px solid #2a2a2a; border-radius:12px; padding:12px; }
+  .panel h2 { margin:0 0 10px; font-size:18px; color:#d5ffd5; }
   .filters { display:grid; grid-template-columns: 1fr 1fr auto; gap:12px; margin:16px 0; }
   .filters input { padding:10px 12px; border-radius:6px; border:1px solid #333; background-color:#1e1e1e; color:white; }
   .status { margin:10px 0; color:#aaa; font-size:12px; }
   .err { display:none; color:#ff5d5d; margin:8px 0; font-size:13px; }
+
+  .wrap { height:60vh; overflow:auto; border:1px solid #2a2a2a; border-radius:10px; }
+  .wrap.small { height:30vh; }
+
   table { width:100%; border-collapse: collapse; }
   thead th { position:sticky; top:0; background:#0f0f0f; z-index:1; }
   th, td { border-bottom:1px solid #2a2a2a; padding:10px; text-align:left; font-size:14px; }
   tbody tr:hover { background:#1a1a1a; }
+  .col-fav { width:40px; text-align:center; }
   .col-sku { width:160px; font-family: ui-monospace,Consolas,monospace; }
-  .col-desc { min-width:280px; }
+  .col-desc { min-width:260px; }
   .price { font-weight:700; display:block; }
   .price.min { color:#ff4d4f; }       /* vermelho: mais barato */
   .price.max { color:#00d084; }       /* verde: mais caro */
-  .muted { display:none; }            /* data não aparece, só no tooltip */
-  .end-marker { text-align:center; padding:18px; color:#9aa0a6; }
+  .muted { display:none; }            /* data oculta (só no title/hover) */
+  .end-marker { text-align:center; padding:10px; color:#9aa0a6; }
+
+  .counts { margin-top:10px; font-size:12px; color:#9aa0a6; display:flex; gap:12px; flex-wrap:wrap; }
 </style>
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="./config.js"></script>
@@ -41,33 +54,72 @@
   </div>
 </header>
 
-<div class="filters">
-  <input id="eanFilter" placeholder="Filtrar por EAN/GTIN…" />
-  <input id="descFilter" placeholder="Filtrar por descrição…" />
-  <button id="btnReload" class="btn">Recarregar</button>
+<div class="panel">
+  <div class="filters">
+    <input id="eanFilter" placeholder="Filtrar por EAN/GTIN…" />
+    <input id="descFilter" placeholder="Filtrar por descrição…" />
+    <button id="btnReload" class="btn">Recarregar</button>
+  </div>
+  <div class="status"><span id="status"></span></div>
+  <div id="err" class="err"></div>
 </div>
-<div class="status"><span id="status"></span></div>
-<div id="err" class="err"></div>
 
-<div class="tablewrap">
-  <table id="produtosTable">
-    <thead>
-      <tr>
-        <th class="col-sku">EAN</th>
-        <th class="col-desc">Descrição</th>
-        <th>LeroyMerlin</th>
-        <th>QueroQuero</th>
-        <th>Cassol</th>
-        <th>RedeMac</th>
-        <th>MestreTinho</th>
-        <th>Tumelero</th>
-        <th>Supremeinox</th>
-        <th>Ghaus</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
-  <div id="endMarker" class="end-marker"></div>
+<div class="grid">
+  <!-- GERAL -->
+  <section class="panel">
+    <h2>Geral</h2>
+    <div id="generalWrap" class="wrap">
+      <table id="produtosTable">
+        <thead>
+          <tr>
+            <th class="col-fav">★</th>
+            <th class="col-sku">EAN</th>
+            <th class="col-desc">Descrição</th>
+            <th>LeroyMerlin</th>
+            <th>QueroQuero</th>
+            <th>Cassol</th>
+            <th>RedeMac</th>
+            <th>MestreTinho</th>
+            <th>Tumelero</th>
+            <th>Supremeinox</th>
+            <th>Ghaus</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div id="endMarker" class="end-marker"></div>
+    </div>
+    <div class="counts">
+      <span id="countShown"></span>
+      <span id="countTotal"></span>
+      <span id="countFavs"></span>
+    </div>
+  </section>
+
+  <!-- FAVORITOS -->
+  <section class="panel">
+    <h2>Favoritos</h2>
+    <div id="favWrap" class="wrap small">
+      <table id="favTable">
+        <thead>
+          <tr>
+            <th class="col-fav">★</th>
+            <th class="col-sku">EAN</th>
+            <th class="col-desc">Descrição</th>
+            <th>LeroyMerlin</th>
+            <th>QueroQuero</th>
+            <th>Cassol</th>
+            <th>RedeMac</th>
+            <th>MestreTinho</th>
+            <th>Tumelero</th>
+            <th>Supremeinox</th>
+            <th>Ghaus</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
 </div>
 
 <script>
@@ -94,16 +146,26 @@ const errEl = document.getElementById('err');
 const userChip = document.getElementById('userChip');
 const btnSair = document.getElementById('btnSair');
 const btnReload = document.getElementById('btnReload');
-const tableBody = document.querySelector("#produtosTable tbody");
+
+const eanFilter = document.getElementById('eanFilter');
+const descFilter = document.getElementById('descFilter');
+
+const generalWrap = document.getElementById('generalWrap');
+const generalBody = document.querySelector('#produtosTable tbody');
 const endMarker = document.getElementById('endMarker');
-const eanFilter = document.getElementById("eanFilter");
-const descFilter = document.getElementById("descFilter");
+
+const favWrap = document.getElementById('favWrap');
+const favBody = document.querySelector('#favTable tbody');
+
+const countShown = document.getElementById('countShown');
+const countTotal = document.getElementById('countTotal');
+const countFavs  = document.getElementById('countFavs');
 
 function setStatus(t){ statusEl.textContent = t || ''; }
 function showErr(e){ errEl.style.display='block'; errEl.textContent = String(e||'').trim(); }
 function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
 
-/* ====== Sessão: limitar a 2 horas ====== */
+/* ====== Sessão: 2 horas ====== */
 function enforceMaxSession(){
   const key = 'mm_login_start';
   const now = Date.now();
@@ -121,19 +183,15 @@ function enforceMaxSession(){
       window.location.href = CFG.SITE_URL || 'index.html';
     }
   }
-  // checa a cada 1 min e quando a aba volta ao foco
   setInterval(check, 60 * 1000);
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) check();
-  });
-  // reseta marcador no login/logout
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
   sb.auth.onAuthStateChange((event) => {
     if (event === 'SIGNED_IN') localStorage.setItem(key, String(Date.now()));
     if (event === 'SIGNED_OUT') localStorage.removeItem(key);
   });
 }
 
-/* ====== MAPA DE COLUNAS -> NOMES DE SITE ====== */
+/* ====== Sites ====== */
 const siteMap = {
   "PrecoLeroyMerlin": "LeroyMerlin",
   "PrecoQueroQuero": "QueroQuero",
@@ -146,25 +204,24 @@ const siteMap = {
 };
 const siteOrder = Object.values(siteMap);
 
-/* ====== ESTADO ====== */
+/* ====== Estado ====== */
 let produtos = [];         // [{ sku, desc, sites: {NomeSite: {precoRaw, precoNum, data}} }]
-let produtosFiltrados = [];
-let itemsPerLoad = 40;
+let favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
+
+let filteredGeneral = [];  // produtos (exclui favoritos + filtros)
+let itemsPerLoad = 50;
 let itemsLoaded = 0;
 let loadingMore = false;
 
-/* ====== Autenticação (exigir login) ====== */
+/* ====== Auth ====== */
 async function ensureAuth(){
   const { data: { session } } = await sb.auth.getSession();
-  if (!session) {
-    window.location.href = CFG.SITE_URL || 'index.html';
-    return null;
-  }
+  if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return null; }
   userChip.textContent = session.user?.email || 'Logado';
   return session;
 }
 
-/* ====== View no Postgres (inclui preco_num) ====== */
+/* ====== View ====== */
 const VIEW = "vw_precos_com_desc";
 
 /* ====== Helpers ====== */
@@ -172,10 +229,23 @@ function formatBRL(n){
   try { return n.toLocaleString('pt-BR', { style:'currency', currency:'BRL' }); }
   catch { return String(n); }
 }
-function withMarkup(n){
-  if (!Number.isFinite(n)) return null;
-  return n * (1 + PRICE_MARKUP_PCT);
+function withMarkup(n){ return Number.isFinite(n) ? n*(1+PRICE_MARKUP_PCT) : null; }
+
+function computeMinMaxForRow(item){
+  let min = { site:null, val: Infinity };
+  let max = { site:null, val: -Infinity };
+  for (const s of siteOrder) {
+    const d = item.sites[s];
+    if (!d || !Number.isFinite(d.precoNum)) continue;
+    const n = d.precoNum;
+    if (n < min.val) { min = { site:s, val:n }; }
+    if (n > max.val) { max = { site:s, val:n }; }
+  }
+  return { minSite: min.site, maxSite: max.site };
 }
+
+function favSave(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet])); }
+function isFav(sku){ return favSet.has(String(sku)); }
 
 /* ====== Dados ====== */
 async function buscarDados() {
@@ -188,18 +258,14 @@ async function buscarDados() {
     .order('data', { ascending: false })
     .limit(5000);
 
-  if (error) {
-    showErr('select view: ' + error.message);
-    setStatus('Falha ao carregar.');
-    return;
-  }
+  if (error) { showErr('select view: ' + error.message); setStatus('Falha ao carregar.'); return; }
 
   const agrupado = {};
   for (const row of data) {
     const ean = String(row.ean ?? '');
     const site = String(row.site ?? '');
     const precoRaw = row.preco;
-    const precoNum = row.preco_num;   // número confiável vindo da view
+    const precoNum = row.preco_num;
     const dt = row.data;
     const desc = row.descricao || '';
 
@@ -217,41 +283,73 @@ async function buscarDados() {
 
   produtos = Object.values(agrupado);
   aplicarFiltros(true);
+  renderFavs();
+  updateCounts();
   setStatus(`Carregado: ${produtos.length} SKUs`);
 }
 
-/* ====== Render com paginação infinita ====== */
-function computeMinMaxForRow(item){
-  let min = { site:null, val: Infinity };
-  let max = { site:null, val: -Infinity };
-  for (const s of siteOrder) {
-    const d = item.sites[s];
-    if (!d || !Number.isFinite(d.precoNum)) continue;
-    const n = d.precoNum;
-    if (n < min.val) { min = { site:s, val:n }; }
-    if (n > max.val) { max = { site:s, val:n }; }
-  }
-  return { minSite: min.site, maxSite: max.site };
+/* ====== Filtros & Listas ====== */
+function aplicarFiltros(reset=false){
+  const eanQ = eanFilter.value.trim().toLowerCase();
+  const descQ = descFilter.value.trim().toLowerCase();
+
+  const notFav = produtos.filter(p => !isFav(p.sku));
+  filteredGeneral = notFav.filter(p => {
+    const okEan = !eanQ || p.sku.toLowerCase().includes(eanQ);
+    const okDesc = !descQ || (p.desc || '').toLowerCase().includes(descQ);
+    return okEan && okDesc;
+  });
+
+  if (reset) resetGeneral(); else { generalBody.innerHTML=''; resetGeneral(); }
+  updateCounts();
 }
 
-function renderChunk(){
-  const end = Math.min(itemsLoaded + itemsPerLoad, produtosFiltrados.length);
+function resetGeneral(){
+  generalBody.innerHTML = '';
+  itemsLoaded = 0;
+  renderGeneralChunk();
+}
+
+/* ====== Render: Geral (infinite no contêiner) ====== */
+function renderGeneralChunk(){
+  const end = Math.min(itemsLoaded + itemsPerLoad, filteredGeneral.length);
   const frag = document.createDocumentFragment();
 
   for (let i = itemsLoaded; i < end; i++){
-    const item = produtosFiltrados[i];
+    const item = filteredGeneral[i];
     const tr = document.createElement('tr');
 
+    // Checkbox
+    const tdFav = document.createElement('td');
+    tdFav.className = 'col-fav';
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.checked = isFav(item.sku);
+    chk.title = 'Marcar como favorito';
+    chk.addEventListener('change', () => {
+      if (chk.checked) { favSet.add(item.sku); }
+      else { favSet.delete(item.sku); }
+      favSave();
+      aplicarFiltros(true);  // remove/adiciona na lista geral
+      renderFavs();          // atualiza favoritos
+      updateCounts();
+    });
+    tdFav.appendChild(chk);
+    tr.appendChild(tdFav);
+
+    // SKU
     const tdSku = document.createElement('td');
     tdSku.className = 'col-sku';
     tdSku.textContent = item.sku;
     tr.appendChild(tdSku);
 
+    // Descrição
     const tdDesc = document.createElement('td');
     tdDesc.className = 'col-desc';
     tdDesc.innerHTML = (item.desc || '').replace(/</g,'&lt;');
     tr.appendChild(tdDesc);
 
+    // Preços
     const { minSite, maxSite } = computeMinMaxForRow(item);
 
     for (const s of siteOrder) {
@@ -264,7 +362,6 @@ function renderChunk(){
           const cls = (s === minSite) ? 'min' : (s === maxSite ? 'max' : '');
           td.innerHTML = `<span class="price ${cls}" title="Atualizado em ${dataStr}">${formatBRL(marked)}</span>`;
         } else {
-          // Sem número confiável: mostra texto original e tooltip de data
           const raw = (d.precoRaw ?? '').toString().replace(/</g,'&lt;');
           td.innerHTML = `<span class="price" title="${dataStr ? 'Atualizado em ' + dataStr : ''}">${raw}</span>`;
         }
@@ -277,44 +374,98 @@ function renderChunk(){
     frag.appendChild(tr);
   }
 
-  tableBody.appendChild(frag);
+  generalBody.appendChild(frag);
   itemsLoaded = end;
-  endMarker.textContent = (itemsLoaded >= produtosFiltrados.length) ? 'Fim da lista' : '';
+  endMarker.textContent = (itemsLoaded >= filteredGeneral.length) ? 'Fim da lista' : '';
 }
 
-function resetRender(){
-  tableBody.innerHTML = '';
-  itemsLoaded = 0;
-  renderChunk();
-}
-
-function onScroll(){
+/* Scroll dentro do contêiner Geral */
+function onGeneralScroll(){
   if (loadingMore) return;
-  const nearBottom = window.innerHeight + window.scrollY >= document.body.offsetHeight - 200;
-  if (nearBottom && itemsLoaded < produtosFiltrados.length){
+  const nearBottom = generalWrap.scrollTop + generalWrap.clientHeight >= generalWrap.scrollHeight - 100;
+  if (nearBottom && itemsLoaded < filteredGeneral.length){
     loadingMore = true;
-    setTimeout(()=>{
-      renderChunk();
-      loadingMore = false;
-    }, 50);
+    setTimeout(()=>{ renderGeneralChunk(); loadingMore = false; }, 50);
   }
 }
-window.addEventListener('scroll', onScroll);
+generalWrap.addEventListener('scroll', onGeneralScroll);
 
-/* ====== Filtros ====== */
-function aplicarFiltros(reset=false){
-  const eanQ = eanFilter.value.trim().toLowerCase();
-  const descQ = descFilter.value.trim().toLowerCase();
-  produtosFiltrados = produtos.filter(p => {
-    const okEan = !eanQ || p.sku.toLowerCase().includes(eanQ);
-    const okDesc = !descQ || (p.desc || '').toLowerCase().includes(descQ);
-    return okEan && okDesc;
-  });
-  if (reset) resetRender(); else { tableBody.innerHTML=''; resetRender(); }
+/* ====== Render: Favoritos ====== */
+function renderFavs(){
+  favBody.innerHTML = '';
+  const favList = produtos.filter(p => isFav(p.sku));
+  const frag = document.createDocumentFragment();
+
+  for (const item of favList){
+    const tr = document.createElement('tr');
+
+    // Checkbox (desmarca tira dos favoritos)
+    const tdFav = document.createElement('td');
+    tdFav.className = 'col-fav';
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.checked = true;
+    chk.title = 'Remover dos favoritos';
+    chk.addEventListener('change', () => {
+      if (!chk.checked) {
+        favSet.delete(item.sku);
+        favSave();
+        renderFavs();
+        aplicarFiltros(true);
+        updateCounts();
+      }
+    });
+    tdFav.appendChild(chk);
+    tr.appendChild(tdFav);
+
+    // SKU
+    const tdSku = document.createElement('td');
+    tdSku.className = 'col-sku';
+    tdSku.textContent = item.sku;
+    tr.appendChild(tdSku);
+
+    // Descrição
+    const tdDesc = document.createElement('td');
+    tdDesc.className = 'col-desc';
+    tdDesc.innerHTML = (item.desc || '').replace(/</g,'&lt;');
+    tr.appendChild(tdDesc);
+
+    // Preços
+    const { minSite, maxSite } = computeMinMaxForRow(item);
+    for (const s of siteOrder) {
+      const td = document.createElement('td');
+      const d = item.sites[s];
+      if (d) {
+        const dataStr = d.data ? new Date(d.data).toLocaleString('pt-BR') : '';
+        if (Number.isFinite(d.precoNum)) {
+          const marked = withMarkup(d.precoNum);
+          const cls = (s === minSite) ? 'min' : (s === maxSite ? 'max' : '');
+          td.innerHTML = `<span class="price ${cls}" title="Atualizado em ${dataStr}">${formatBRL(marked)}</span>`;
+        } else {
+          const raw = (d.precoRaw ?? '').toString().replace(/</g,'&lt;');
+          td.innerHTML = `<span class="price" title="${dataStr ? 'Atualizado em ' + dataStr : ''}">${raw}</span>`;
+        }
+      } else {
+        td.innerHTML = `<span class="muted">—</span>`;
+      }
+      tr.appendChild(td);
+    }
+
+    frag.appendChild(tr);
+  }
+
+  favBody.appendChild(frag);
 }
 
-eanFilter.addEventListener('input', ()=>aplicarFiltros(true));
-descFilter.addEventListener('input', ()=>aplicarFiltros(true));
+/* ====== Contadores ====== */
+function updateCounts(){
+  const total = produtos.length;
+  const favs = favSet.size;
+  const shown = itemsLoaded; // exibidos no Geral
+  countShown.textContent = `Exibindo ${shown} de ${filteredGeneral.length} no Geral (filtrados)`;
+  countTotal.textContent = `Total de SKUs: ${total}`;
+  countFavs.textContent = `Favoritos: ${favs}`;
+}
 
 /* ====== Botões ====== */
 btnReload.addEventListener('click', buscarDados);
@@ -323,6 +474,8 @@ btnSair.addEventListener('click', async ()=>{
   localStorage.removeItem('mm_login_start');
   window.location.href = CFG.SITE_URL || 'index.html';
 });
+eanFilter.addEventListener('input', ()=>aplicarFiltros(true));
+descFilter.addEventListener('input', ()=>aplicarFiltros(true));
 
 /* ====== Init ====== */
 (async function init(){
