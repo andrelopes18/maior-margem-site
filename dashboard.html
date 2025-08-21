@@ -111,6 +111,7 @@
       <!-- Dropdown -->
       <div id="userDropdown" class="dropdown" role="menu" aria-hidden="true">
         <button class="dd-item" id="ddMeusDados">Meus dados</button>
+        <button class="dd-item" id="ddPlanos">Planos</button> <!-- NOVO -->
       </div>
     </div>
     <button id="btnSair" class="btn">Sair</button>
@@ -211,6 +212,7 @@ const errEl = document.getElementById('err');
 const userChip = document.getElementById('userChip');
 const userChipWrap = document.querySelector('.userChipWrap');
 const ddMeusDados = document.getElementById('ddMeusDados');
+const ddPlanos = document.getElementById('ddPlanos'); // NOVO
 const btnSair = document.getElementById('btnSair');
 const btnReload = document.getElementById('btnReload');
 
@@ -255,6 +257,7 @@ function enforceMaxSession(){
 
 /* ====== Dropdown ações ====== */
 ddMeusDados.addEventListener('click', () => { window.location.href = 'meusdados.html'; });
+ddPlanos.addEventListener('click', () => { window.location.href = 'planos.html'; }); // NOVO
 userChip.addEventListener('click', (e) => { e.stopPropagation(); userChipWrap.classList.toggle('open'); });
 document.addEventListener('click', (e) => { if (!userChipWrap.contains(e.target)) userChipWrap.classList.remove('open'); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') userChipWrap.classList.remove('open'); });
@@ -381,7 +384,6 @@ async function buscarDados() {
   const agrupado = {};
   for (const row of data) {
     const ean = String(row.ean ?? '');
-    theSite = String(row.site ?? '');
     const site = String(row.site ?? '');
     const precoRaw = row.preco;
     const precoNum = row.preco_num;

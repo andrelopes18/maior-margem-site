@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Planos de Assinatura</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body{background:#121212;color:#fff;font-family:Arial,sans-serif;margin:0}
+  header{display:flex;align-items:center;justify-content:space-between;padding:20px}
+  h1{margin:0;color:#00b140}
+  a{color:#00b140}
+  .btn{display:inline-flex;align-items:center;gap:8px;background:#00b140;color:#fff;border:none;padding:10px 14px;border-radius:8px;text-decoration:none;cursor:pointer}
+  .btn:hover{background:#009b38}
+  .btn.outline{background:transparent;border:1px solid #2a2a2a;color:#ddd}
+  .btn.outline:hover{background:#1b1b1b}
+  .container{max-width:1100px;margin:0 auto;padding:0 20px 24px}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+  @media (max-width: 1000px){ .grid{grid-template-columns:repeat(2,1fr)} }
+  @media (max-width: 560px){ .grid{grid-template-columns:1fr} }
+  .card{background:#0f0f0f;border:1px solid #2a2a2a;border-radius:12px;padding:16px;display:flex;flex-direction:column}
+  .price{font-size:28px;font-weight:800;margin:8px 0}
+  .per{color:#9aa0a6;font-size:12px;margin-left:6px}
+  .feat{color:#bdbdbd;font-size:14px;margin:6px 0 2px}
+  .spacer{flex:1}
+  .banner{border:1px solid #2a2a2a;border-radius:10px;padding:10px 12px;margin:12px 0;background:#111;display:none}
+  .banner.warn{border-color:#5c3f00;background:#1b1300;color:#ffc966;display:block}
+  .banner.ok{border-color:#214d21;background:#0e1a0e;color:#b7fbb7;display:block}
+  .banner.err{border-color:#5c1e1e;background:#190d0d;color:#ff9a9a;display:block}
+  .user{font-size:12px;color:#9aa0a6}
+</style>
+<script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="./config.js"></script>
+</head>
+<body>
+<header class="container">
+  <h1>Planos</h1>
+  <div style="display:flex;gap:10px;align-items:center">
+    <span id="userInfo" class="user">Carregando…</span>
+    <a href="dashboard.html" class="btn outline">← Voltar</a>
+  </div>
+</header>
+
+<main class="container">
+  <div id="banner" class="banner"></div>
+  <div id="plansGrid" class="grid"></div>
+</main>
+
+<script>
+const CFG = window.CONFIG || {};
+const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+});
+
+const userInfo = document.getElementById('userInfo');
+const banner = document.getElementById('banner');
+const grid = document.getElementById('plansGrid');
+
+function moneyBR(cents){ return (cents/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
+
+function showBanner(msg, type='ok'){ banner.textContent = msg; banner.className = 'banner ' + type; }
+
+async function ensureSession(){
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return null; }
+  userInfo.textContent = session.user?.email || 'Logado';
+  return session;
+}
+
+async function loadPlans(){
+  // precisa permitir SELECT autenticado em billing_plans (ver SQL no passo 4)
+  const { data, error } = await sb.from('billing_plans')
+    .select('id,name,price_cents,interval_unit,interval_length,billing_cycles')
+    .eq('active', true)
+    .order('price_cents', { ascending: true });
+  if (error) { showBanner('Erro ao carregar planos.', 'err'); throw error; }
+  return data || [];
+}
+
+function renderPlans(plans){
+  grid.innerHTML = '';
+  for (const p of plans){
+    const card = document.createElement('div');
+    card.className = 'card';
+    const price = moneyBR(p.price_cents);
+    card.innerHTML = `
+      <h3 style="margin:0 0 6px">${p.name}</h3>
+      <div class="price">${price}<span class="per">/mês</span></div>
+      <div class="feat">Cobrança recorrente mensal</div>
+      <div class="feat">Renova automaticamente</div>
+      <div class="spacer"></div>
+      <button class="btn">Assinar</button>
+    `;
+    card.querySelector('.btn').addEventListener('click', () => startCheckout(p.id));
+    grid.appendChild(card);
+  }
+}
+
+async function startCheckout(planId){
+  showBanner('Criando checkout…', 'ok');
+  const { data: { session } } = await sb.auth.getSession();
+  try {
+    const resp = await fetch('/functions/v1/create-checkout', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session?.access_token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ plan_id: planId })
+    });
+    const json = await resp.json();
+    if (!resp.ok || !json.pay_url) throw new Error(json.error || 'Falha ao criar checkout');
+    window.location.href = json.pay_url; // redireciona para o PagBank
+  } catch (e) {
+    console.error(e);
+    showBanner('Não foi possível iniciar o pagamento. Tente novamente.', 'err');
+  }
+}
+
+(async function init(){
+  const session = await ensureSession(); if (!session) return;
+  try {
+    const plans = await loadPlans();
+    renderPlans(plans);
+  } catch {}
+})();
+</script>
+</body>
+</html>
