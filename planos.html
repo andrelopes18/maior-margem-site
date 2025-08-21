@@ -9,17 +9,20 @@
   * { box-sizing: border-box; }
   body{background:#121212;color:#fff;font-family:Arial,sans-serif;margin:0}
   a{color:#00b140;text-decoration:none}
-  header{display:flex;align-items:center;justify-content:space-between;padding:20px}
+  header{display:flex;align-items:center;justify-content:space-between;padding:20px;gap:12px;flex-wrap:wrap}
   h1{margin:0;color:#00b140}
   .user{font-size:12px;color:#9aa0a6}
+  .chip{font-size:12px;background:#1e1e1e;border:1px solid #333;padding:6px 10px;border-radius:999px}
+  .chip.plan{color:#bfffc1;border-color:#2f5a2f;background:#132313}
   .btn{display:inline-flex;align-items:center;gap:8px;background:#00b140;color:#fff;border:none;padding:10px 14px;border-radius:8px;text-decoration:none;cursor:pointer}
   .btn:hover{background:#009b38}
   .btn.ghost{background:transparent;border:1px solid #2a2a2a;color:#ddd}
   .btn.ghost:hover{background:#1b1b1b}
+  .btn.warn{background:#7a2e2e}
+  .btn.warn:hover{background:#652424}
 
   .container{max-width:1100px;margin:0 auto;padding:0 20px 32px}
 
-  /* pricing */
   .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:10px}
   @media (max-width: 1000px){ .grid{grid-template-columns:repeat(2,1fr)} }
   @media (max-width: 560px){ .grid{grid-template-columns:1fr} }
@@ -35,7 +38,7 @@
   .feat{display:flex;gap:8px;align-items:flex-start;margin:6px 0;color:#cfcfcf}
   .feat:before{content:"✓";opacity:.9}
   .spacer{flex:1}
-  .actions{display:flex;gap:8px;align-items:center}
+  .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .small{font-size:12px;color:#9aa0a6}
 
   .banner{border:1px solid #2a2a2a;border-radius:10px;padding:10px 12px;margin:12px 0;background:#111;display:none}
@@ -51,7 +54,8 @@
 <body>
 <header class="container">
   <h1>Planos</h1>
-  <div style="display:flex;gap:10px;align-items:center">
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <span id="planChip" class="chip plan" title="Plano atual">Plano: —</span>
     <span id="userInfo" class="user">Carregando…</span>
     <a href="dashboard.html" class="btn ghost">← Voltar</a>
   </div>
@@ -66,51 +70,62 @@
     <div class="small">
       Os valores são mensais e a cobrança é recorrente. Você pode cancelar quando quiser.
     </div>
-    <div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button id="btnCancelar" class="btn warn">Cancelar assinatura (voltar ao Básico)</button>
       <a href="meusdados.html" class="btn ghost">Meus dados</a>
     </div>
   </div>
 </main>
 
 <script>
-/* ====== Supabase client ====== */
 const CFG = window.CONFIG || {};
 const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
 });
 
-/* ====== Helpers ====== */
 const userInfo = document.getElementById('userInfo');
+const planChip = document.getElementById('planChip');
 const banner = document.getElementById('banner');
 const grid = document.getElementById('plansGrid');
+const btnCancelar = document.getElementById('btnCancelar');
 
 function moneyBR(cents){ return (cents/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
 function showBanner(msg, type='ok'){ banner.textContent = msg; banner.className = 'banner ' + type; }
 function clearBanner(){ banner.className = 'banner'; banner.style.display='none'; banner.textContent=''; }
 
-/* Monta automaticamente a base das Edge Functions a partir do SUPABASE_URL */
 function getFunctionsBaseFromSupabaseUrl(urlStr){
   try{
     const u = new URL(urlStr);
-    const host = u.host; // ex: abcd1234.supabase.co
-    const projectRef = host.split('.supabase.co')[0];
+    const projectRef = u.host.split('.supabase.co')[0];
     return `https://${projectRef}.functions.supabase.co`;
-  }catch{
-    return '/functions/v1'; // fallback (mesmo domínio)
-  }
+  }catch{ return '/functions/v1'; }
 }
 const FUNCTIONS_BASE = getFunctionsBaseFromSupabaseUrl(CFG.SUPABASE_URL);
 const CREATE_CHECKOUT_ENDPOINT = `${FUNCTIONS_BASE}/create-checkout`;
+const CANCEL_SUBSCRIPTION_ENDPOINT = `${FUNCTIONS_BASE}/cancel-subscription`;
 
-/* ====== Sessão ====== */
+let currentPlan = 'basico';
+let sessionCache = null;
+
 async function ensureSession(){
   const { data: { session } } = await sb.auth.getSession();
   if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return null; }
+  sessionCache = session;
   userInfo.textContent = session.user?.email || 'Logado';
+
+  try{
+    const { data, error } = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
+    if (error) throw error;
+    currentPlan = (data?.plan || 'basico').toString();
+  }catch(e){
+    console.error(e);
+    currentPlan = 'basico';
+  }
+  const pretty = currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1);
+  planChip.textContent = `Plano: ${pretty}`;
   return session;
 }
 
-/* ====== Carregar planos do banco ====== */
 async function loadPlans(){
   const { data, error } = await sb.from('billing_plans')
     .select('id,name,price_cents,interval_unit,interval_length,billing_cycles,active')
@@ -120,38 +135,29 @@ async function loadPlans(){
   return data || [];
 }
 
-/* (Opcional) features por plano — ajuste conforme seu produto */
 function featuresFor(name){
   const n = (name||'').toLowerCase();
-  if (n.includes('trial')) return [
-    'Acesso limitado',
-    'Sem custo no primeiro ciclo'
-  ];
-  if (n.includes('básico') || n.includes('basico')) return [
-    'Recorrência mensal',
-    'Suporte por e-mail',
-    'Acesso ao dashboard'
-  ];
-  if (n.includes('intermedi')) return [
-    'Tudo do Básico',
-    'Relatórios adicionais',
-    'Atualizações mais rápidas'
-  ];
-  if (n.includes('premium')) return [
-    'Tudo do Intermediário',
-    'Prioridade máxima',
-    'Recursos avançados'
-  ];
+  if (n.includes('trial')) return ['Acesso limitado','Sem custo no primeiro ciclo'];
+  if (n.includes('básico') || n.includes('basico')) return ['Recorrência mensal','Suporte por e-mail','Acesso ao dashboard'];
+  if (n.includes('intermedi')) return ['Tudo do Básico','Relatórios adicionais','Atualizações mais rápidas'];
+  if (n.includes('premium')) return ['Tudo do Intermediário','Prioridade máxima','Recursos avançados'];
   return ['Cobrança recorrente mensal'];
 }
 
-/* ====== Renderização ====== */
+function normalizePlanKey(name){
+  const n = (name||'').toLowerCase();
+  if (n.includes('trial')) return 'trial';
+  if (n.includes('básico') || n.includes('basico')) return 'basico';
+  if (n.includes('intermedi')) return 'intermediario';
+  if (n.includes('premium')) return 'premium';
+  return n.replace(/\s+/g,'_');
+}
+
 function renderPlans(plans){
   grid.innerHTML = '';
   for (const p of plans){
     const card = document.createElement('div');
     card.className = 'card';
-    // destaque opcional
     const isBest = /premium|intermedi/i.test(p.name);
     if (isBest) {
       const b = document.createElement('div');
@@ -160,33 +166,33 @@ function renderPlans(plans){
       card.appendChild(b);
     }
 
-    const price = moneyBR(p.price_cents);
     const feats = featuresFor(p.name);
+    const planKey = normalizePlanKey(p.name);
+    const isCurrent = planKey === currentPlan;
 
     card.innerHTML += `
-      <div class="plan-name">${p.name}</div>
+      <div class="plan-name">${p.name}${isCurrent ? ' • <span style="color:#bfffc1">seu plano atual</span>' : ''}</div>
       <div class="price">
         <span class="currency">R$</span>
-        <span class="amount">${(p.price_cents/100).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}).replace(/^(\d+)\,(.*)$/,'$1,$2').split(',')[0]}</span>
+        <span class="amount">${(p.price_cents/100).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}).split(',')[0]}</span>
         <span class="period">/mês</span>
       </div>
-      <div class="price-note">${price} por mês</div>
+      <div class="price-note">${moneyBR(p.price_cents)} por mês</div>
       ${feats.map(f => `<div class="feat">${f}</div>`).join('')}
       <div class="spacer"></div>
       <div class="actions">
-        <button class="btn">Assinar</button>
+        <button class="btn" ${isCurrent ? 'disabled title="Plano já ativo"' : ''}>${isCurrent ? 'Ativo' : 'Assinar'}</button>
         <span class="small">renova automaticamente</span>
       </div>
     `;
 
     const btn = card.querySelector('.btn');
-    btn.addEventListener('click', () => startCheckout(p.id, p.name));
+    if (!isCurrent) btn.addEventListener('click', () => startCheckout(p.id, p.name));
 
     grid.appendChild(card);
   }
 }
 
-/* ====== Iniciar checkout (PagBank) ====== */
 async function startCheckout(planId, planName){
   showBanner(`Criando checkout para "${planName}"…`, 'ok');
   const { data: { session } } = await sb.auth.getSession();
@@ -209,7 +215,46 @@ async function startCheckout(planId, planName){
   }
 }
 
-/* ====== Init ====== */
+/* === Cancelar assinatura e voltar ao Básico === */
+btnCancelar.addEventListener('click', async ()=>{
+  const confirmMsg = 'Tem certeza que deseja cancelar a assinatura atual e voltar ao Plano Básico?';
+  if (!confirm(confirmMsg)) return;
+
+  showBanner('Cancelando assinatura…', 'ok');
+  const { data: { session } } = await sb.auth.getSession();
+  try{
+    // 1) chama Edge Function (se existir)
+    const resp = await fetch(CANCEL_SUBSCRIPTION_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session?.access_token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({})
+    });
+    if (!resp.ok){
+      const err = await resp.json().catch(()=>({}));
+      throw new Error(err.error || 'Falha ao cancelar no provedor de cobrança');
+    }
+
+    // 2) atualiza o perfil localmente para 'basico'
+    const up = await sb.from('profiles').update({ plan: 'basico' }).eq('id', session.user.id);
+    if (up.error) throw up.error;
+
+    currentPlan = 'basico';
+    const pretty = 'Basico'.replace('Basico','Básico');
+    planChip.textContent = `Plano: ${pretty}`;
+    showBanner('Assinatura cancelada. Plano atual: Básico.', 'ok');
+
+    // recarrega cards para refletir desabilitado/habilitado
+    const plans = await loadPlans();
+    renderPlans(plans);
+  }catch(e){
+    console.error(e);
+    showBanner('Não foi possível cancelar agora. Verifique se a função "cancel-subscription" está publicada.', 'err');
+  }
+});
+
 (async function init(){
   const session = await ensureSession(); if (!session) return;
   try {

@@ -16,24 +16,24 @@
   .btn.outline{background:transparent;border:1px solid #2a2a2a;color:#ddd}
   .btn.outline:hover{background:#1b1b1b}
 
+  .chip{font-size:12px;background:#1e1e1e;border:1px solid #333;padding:6px 10px;border-radius:999px}
+  .chip.plan{color:#bfffc1;border-color:#2f5a2f;background:#132313}
+
   .container{max-width:880px;margin:0 auto}
   .card{background:#0f0f0f;border:1px solid #2a2a2a;border-radius:12px;padding:18px}
 
-  /* grade com mais respiro vertical */
   .grid{display:grid;grid-template-columns:1fr 1fr;column-gap:16px;row-gap:22px}
-
   .col-1{grid-column: span 1}
   .col-2{grid-column: span 2}
   @media (max-width: 720px){ .grid{grid-template-columns:1fr} .col-2{grid-column:span 1} }
 
   label{display:block;margin:4px 0 8px;color:#9aa0a6}
 
-  /* campos: e-mail mais escuro (bloqueado), demais um pouco mais claros */
   input,select{
     width:100%;padding:12px 14px;border-radius:8px;border:1px solid #3a3a3a;
     background:#242424;color:#fff;font-size:15px;line-height:1.2
   }
-  input[disabled]{
+  input[disabled], select[disabled]{
     background:#171717;border-color:#2a2a2a;color:#b5b5b5;cursor:not-allowed;
   }
 
@@ -51,7 +51,8 @@
 <body>
 <header class="container">
   <h1>Meus dados</h1>
-  <div class="actions" style="display:flex;gap:10px;flex-wrap:wrap">
+  <div class="actions" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+    <span id="planChip" class="chip plan" title="Plano atual">Plano: —</span>
     <a class="btn outline" href="dashboard.html">← Voltar ao dashboard</a>
     <button id="btnSair" class="btn">Sair</button>
   </div>
@@ -83,7 +84,6 @@
         <div id="docHelp" class="help">Digite apenas números; a formatação aparece sozinha.</div>
       </div>
 
-      <!-- Razão Social (só aparece para CNPJ) -->
       <div id="razaoWrap" class="col-1" style="display:none">
         <label for="razaoSocial">Razão social</label>
         <input id="razaoSocial" type="text" placeholder="Razão social (para CNPJ)">
@@ -97,12 +97,13 @@
 
       <div class="col-1">
         <label for="plano">Plano escolhido</label>
-        <select id="plano">
+        <select id="plano" disabled>
           <option value="trial">Trial</option>
           <option value="basico">Básico</option>
           <option value="intermediario">Intermediário</option>
           <option value="premium">Premium</option>
         </select>
+        <div class="help">O plano é alterado ao adquirir/alterar a assinatura nos <a href="planos.html">Planos</a>.</div>
       </div>
 
       <div class="col-2">
@@ -113,7 +114,6 @@
 </main>
 
 <script>
-/* ========= Config & Supabase ========= */
 const CFG = window.CONFIG || {};
 const SUPABASE_URL = CFG.SUPABASE_URL;
 const SUPABASE_ANON_KEY = CFG.SUPABASE_ANON_KEY;
@@ -125,7 +125,6 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
 });
 
-/* ========= Refs ========= */
 const emailEl = document.getElementById('email');
 const nomeEl = document.getElementById('nome');
 const sobrenomeEl = document.getElementById('sobrenome');
@@ -141,8 +140,8 @@ const btnSair = document.getElementById('btnSair');
 const bannerEl = document.getElementById('banner');
 const telHelp = document.getElementById('telHelp');
 const docHelp = document.getElementById('docHelp');
+const planChip = document.getElementById('planChip');
 
-/* ========= Helpers UI ========= */
 function showBanner(text, type = 'ok') {
   bannerEl.textContent = text;
   bannerEl.className = 'banner ' + (type === 'warn' ? 'warn' : (type === 'err' ? 'err' : 'ok'));
@@ -151,8 +150,6 @@ function showBanner(text, type = 'ok') {
 }
 function digitsOnly(s){ return (s||'').replace(/\D+/g, ''); }
 
-/* ========= Máscaras e validações ========= */
-// CPF
 function formatCPF(d) {
   d = d.slice(0,11);
   if (d.length <= 3) return d;
@@ -173,7 +170,6 @@ function validateCPF(d) {
   return dv2 === parseInt(d.charAt(10));
 }
 
-// CNPJ
 function formatCNPJ(d) {
   d = d.slice(0,14);
   if (d.length <= 2) return d;
@@ -197,7 +193,6 @@ function validateCNPJ(d) {
   return dv2 === parseInt(d[13]);
 }
 
-// Telefone BR (10 ou 11 dígitos)
 function formatPhone(d) {
   d = d.slice(0,11);
   if (d.length <= 2) return `(${d}`;
@@ -207,7 +202,6 @@ function formatPhone(d) {
 }
 function validatePhone(d){ return d.length === 10 || d.length === 11; }
 
-/* CPF/CNPJ + máscara + mostrar/ocultar Razão Social */
 function updateDocUI() {
   let d = digitsOnly(cpfCnpjEl.value);
   const isCNPJ = d.length > 11;
@@ -228,7 +222,6 @@ function updateDocUI() {
 }
 cpfCnpjEl.addEventListener('input', updateDocUI);
 
-/* Máscara telefone */
 telefoneEl.addEventListener('input', () => {
   const d = digitsOnly(telefoneEl.value);
   telefoneEl.value = formatPhone(d);
@@ -237,7 +230,6 @@ telefoneEl.addEventListener('input', () => {
   telHelp.className = 'help' + (ok ? '' : ' error');
 });
 
-/* ========= Auth + carregamento ========= */
 let sessionUser = null;
 (async function init(){
   const { data: { session } } = await sb.auth.getSession();
@@ -245,50 +237,47 @@ let sessionUser = null;
   sessionUser = session.user;
   emailEl.value = session.user.email || '';
 
-  try {
-    const { data, error } = await sb
-      .from('profiles')
-      .select('first_name,last_name,cpf_cnpj,phone,plan,razao_social,cpf_cnpj_type')
-      .eq('id', sessionUser.id)
-      .maybeSingle();
-    if (error) throw error;
+  // Carrega plano para exibir no chip e no select (bloqueado)
+  try{
+    const { data: prof, error: e1 } = await sb.from('profiles').select('first_name,last_name,cpf_cnpj,phone,plan,razao_social,cpf_cnpj_type').eq('id', sessionUser.id).maybeSingle();
+    if (e1) throw e1;
 
-    if (data) {
-      nomeEl.value = data.first_name || '';
-      sobrenomeEl.value = data.last_name || '';
-      if (data.cpf_cnpj) {
-        cpfCnpjEl.value = (data.cpf_cnpj_type === 'cnpj')
-          ? formatCNPJ(data.cpf_cnpj) : formatCPF(data.cpf_cnpj);
+    if (prof){
+      nomeEl.value = prof.first_name || '';
+      sobrenomeEl.value = prof.last_name || '';
+      if (prof.cpf_cnpj) {
+        cpfCnpjEl.value = (prof.cpf_cnpj_type === 'cnpj') ? prof.cpf_cnpj : prof.cpf_cnpj;
+        cpfCnpjEl.value = (prof.cpf_cnpj_type === 'cnpj') ? formatCNPJ(prof.cpf_cnpj) : formatCPF(prof.cpf_cnpj);
         updateDocUI();
       }
-      if (data.razao_social) {
-        razaoSocialEl.value = data.razao_social;
+      if (prof.razao_social) {
+        razaoSocialEl.value = prof.razao_social;
         razaoWrap.style.display = 'block';
       }
-      if (data.phone) telefoneEl.value = formatPhone(data.phone);
-      if (data.plan)  planoEl.value = data.plan;
-    } else {
-      // Se não existe registro, apenas mostra o formulário vazio
+      if (prof.phone) telefoneEl.value = formatPhone(prof.phone);
+
+      const plan = (prof.plan || 'basico').toString();
+      planoEl.value = plan;
+      const pretty = plan.charAt(0).toUpperCase() + plan.slice(1);
+      const prettyBR = pretty.replace('Basico','Básico').replace('Intermediario','Intermediário');
+      planChip.textContent = `Plano: ${prettyBR}`;
     }
-  } catch (e) {
+  }catch(e){
     console.error(e);
     showBanner('Erro ao carregar dados (tabela "profiles" ausente?).', 'err');
   }
 })();
 
-/* ========= Sair ========= */
 btnSair.addEventListener('click', async ()=>{
   await sb.auth.signOut();
   window.location.href = CFG.SITE_URL || 'index.html';
 });
 
-/* ========= Salvar (sempre na base) ========= */
 btnSalvar.addEventListener('click', async ()=>{
   const first_name = nomeEl.value.trim();
   const last_name  = sobrenomeEl.value.trim();
   const docDigits  = digitsOnly(cpfCnpjEl.value);
   const phoneDigits= digitsOnly(telefoneEl.value);
-  const plan       = planoEl.value;
 
   if (!first_name){ showBanner('Informe o Nome.', 'warn'); nomeEl.focus(); return; }
   if (!last_name){ showBanner('Informe o Sobrenome.', 'warn'); sobrenomeEl.focus(); return; }
@@ -319,14 +308,12 @@ btnSalvar.addEventListener('click', async ()=>{
     cpf_cnpj: docDigits,
     cpf_cnpj_type: docType,
     razao_social,
-    phone: phoneDigits,
-    plan
+    phone: phoneDigits
+    // plan NÃO é alterado aqui; somente via compra/cancelamento
   };
 
   try {
-    const { error } = await sb
-      .from('profiles')
-      .upsert(payload, { onConflict: 'id' });
+    const { error } = await sb.from('profiles').upsert(payload, { onConflict: 'id' });
     if (error) throw error;
     showBanner('Dados salvos com sucesso!', 'ok');
   } catch (e) {
