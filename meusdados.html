@@ -7,28 +7,341 @@
 <style>
   :root { color-scheme: dark; }
   body{background:#121212;color:#fff;font-family:Arial,sans-serif;padding:24px;margin:0}
+  header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px;flex-wrap:wrap}
+  h1{color:#00b140;margin:0}
   a{color:#00b140}
-  .box{max-width:720px;margin:0 auto}
-  .btn{display:inline-block;background:#00b140;color:#fff;border:none;padding:10px 14px;border-radius:8px;text-decoration:none}
+  .btn{display:inline-flex;align-items:center;gap:8px;background:#00b140;color:#fff;border:none;padding:10px 14px;border-radius:8px;text-decoration:none;cursor:pointer}
   .btn:hover{background:#009b38}
-  label{display:block;margin:12px 0 6px;color:#9aa0a6}
-  input{width:100%;padding:10px 12px;border-radius:8px;border:1px solid #333;background:#1e1e1e;color:#fff}
+  .btn.outline{background:transparent;border:1px solid #2a2a2a;color:#ddd}
+  .btn.outline:hover{background:#1b1b1b}
+  .container{max-width:880px;margin:0 auto}
+  .card{background:#0f0f0f;border:1px solid #2a2a2a;border-radius:12px;padding:16px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .col-1{grid-column: span 1}
+  .col-2{grid-column: span 2}
+  @media (max-width: 720px){ .grid,.row{grid-template-columns:1fr} .col-2{grid-column:span 1} }
+  label{display:block;margin:6px 0 6px;color:#9aa0a6}
+  input,select{width:100%;padding:12px;border-radius:8px;border:1px solid #333;background:#1e1e1e;color:#fff;font-size:15px}
+  input[disabled]{opacity:.8;background:#1a1a1a}
+  .help{font-size:12px;color:#9aa0a6;margin-top:6px}
+  .help.error{color:#ff6666}
+  .badge{display:inline-block;font-size:12px;border:1px solid #2a2a2a;border-radius:999px;padding:4px 8px;background:#1a1a1a;color:#ccc;margin-left:8px}
+  .badge.good{color:#b7fbb7;border-color:#214d21;background:#152015}
+  .banner{border:1px solid #2a2a2a;border-radius:10px;padding:10px 12px;margin-bottom:14px;background:#111}
+  .banner.warn{border-color:#5c3f00;background:#1b1300;color:#ffc966}
+  .banner.ok{border-color:#214d21;background:#0e1a0e;color:#b7fbb7}
+  .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
 </style>
+<script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="./config.js"></script>
 </head>
 <body>
-  <div class="box">
-    <h1>Meus dados</h1>
-    <p>Coloque aqui o formulário/perfil do usuário.</p>
+<header class="container">
+  <h1>Meus dados</h1>
+  <div class="actions">
+    <a class="btn outline" href="dashboard.html">← Voltar ao dashboard</a>
+    <button id="btnSair" class="btn">Sair</button>
+  </div>
+</header>
 
-    <label>E-mail</label>
-    <input type="email" placeholder="usuario@exemplo.com" disabled>
+<main class="container">
+  <div id="banner" class="banner" style="display:none"></div>
 
-    <label>Nome</label>
-    <input type="text" placeholder="Seu nome completo">
+  <div class="card">
+    <div class="grid">
+      <div class="col-2">
+        <label for="email">Email <span class="badge">somente leitura</span></label>
+        <input id="email" type="email" placeholder="usuario@exemplo.com" disabled>
+        <div class="help">Trazido automaticamente do usuário autenticado.</div>
+      </div>
 
-    <div style="margin-top:16px;">
-      <a href="dashboard.html" class="btn">← Voltar ao dashboard</a>
+      <div class="col-1">
+        <label for="nome">Nome</label>
+        <input id="nome" type="text" placeholder="Seu nome" autocomplete="given-name">
+      </div>
+
+      <div class="col-1">
+        <label for="sobrenome">Sobrenome</label>
+        <input id="sobrenome" type="text" placeholder="Seu sobrenome" autocomplete="family-name">
+      </div>
+
+      <div class="col-1">
+        <label for="cpfCnpj">CPF ou CNPJ
+          <span id="docBadge" class="badge">—</span>
+        </label>
+        <input id="cpfCnpj" type="text" inputmode="numeric" placeholder="CPF ou CNPJ">
+        <div id="docHelp" class="help">Digite apenas números; a formatação aparece sozinha.</div>
+      </div>
+
+      <div class="col-1">
+        <label for="telefone">Telefone</label>
+        <input id="telefone" type="tel" inputmode="tel" placeholder="(11) 91234-5678">
+        <div id="telHelp" class="help">Formato BR (com DDD). Ex.: (11) 91234-5678</div>
+      </div>
+
+      <div class="col-1">
+        <label for="plano">Plano escolhido</label>
+        <select id="plano">
+          <option value="trial">Trial</option>
+          <option value="basico">Básico</option>
+          <option value="intermediario">Intermediário</option>
+          <option value="premium">Premium</option>
+        </select>
+      </div>
+
+      <div class="col-2 actions">
+        <button id="btnSalvar" class="btn">💾 Salvar</button>
+        <button id="btnLimpar" class="btn outline" type="button">Limpar local (fallback)</button>
+      </div>
     </div>
   </div>
+</main>
+
+<script>
+/* ========= Config & Supabase ========= */
+const CFG = window.CONFIG || {};
+const SUPABASE_URL = CFG.SUPABASE_URL;
+const SUPABASE_ANON_KEY = CFG.SUPABASE_ANON_KEY;
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  alert("Erro de configuração: config.js não carregado.");
+  throw new Error("CONFIG ausente");
+}
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+});
+
+/* ========= Refs ========= */
+const emailEl = document.getElementById('email');
+const nomeEl = document.getElementById('nome');
+const sobrenomeEl = document.getElementById('sobrenome');
+const cpfCnpjEl = document.getElementById('cpfCnpj');
+const telefoneEl = document.getElementById('telefone');
+const planoEl = document.getElementById('plano');
+
+const btnSalvar = document.getElementById('btnSalvar');
+const btnLimpar = document.getElementById('btnLimpar');
+const btnSair = document.getElementById('btnSair');
+
+const bannerEl = document.getElementById('banner');
+const docBadge = document.getElementById('docBadge');
+const docHelp = document.getElementById('docHelp');
+const telHelp = document.getElementById('telHelp');
+
+/* ========= Helpers UI ========= */
+function showBanner(text, type = 'ok') {
+  bannerEl.textContent = text;
+  bannerEl.className = 'banner ' + (type === 'warn' ? 'warn' : 'ok');
+  bannerEl.style.display = 'block';
+  setTimeout(() => { bannerEl.style.display = 'none'; }, 4000);
+}
+function digitsOnly(s){ return (s||'').replace(/\D+/g, ''); }
+
+/* ========= Máscaras e validações ========= */
+// CPF
+function formatCPF(d) {
+  d = d.slice(0,11);
+  if (d.length <= 3) return d;
+  if (d.length <= 6) return d.replace(/(\d{3})(\d+)/, "$1.$2");
+  if (d.length <= 9) return d.replace(/(\d{3})(\d{3})(\d+)/, "$1.$2.$3");
+  return d.replace(/(\d{3})(\d{3})(\d{3})(\d{0,2}).*/, "$1.$2.$3-$4");
+}
+function validateCPF(d) {
+  if (!d || d.length !== 11) return false;
+  if (/^(\d)\1{10}$/.test(d)) return false;
+  let sum = 0;
+  for (let i=0;i<9;i++) sum += parseInt(d.charAt(i))*(10-i);
+  let r = sum % 11; let dv1 = (r<2)?0:(11-r);
+  if (dv1 !== parseInt(d.charAt(9))) return false;
+  sum = 0;
+  for (let i=0;i<10;i++) sum += parseInt(d.charAt(i))*(11-i);
+  r = sum % 11; let dv2 = (r<2)?0:(11-r);
+  return dv2 === parseInt(d.charAt(10));
+}
+
+// CNPJ
+function formatCNPJ(d) {
+  d = d.slice(0,14);
+  if (d.length <= 2) return d;
+  if (d.length <= 5) return d.replace(/(\d{2})(\d+)/, "$1.$2");
+  if (d.length <= 8) return d.replace(/(\d{2})(\d{3})(\d+)/, "$1.$2.$3");
+  if (d.length <= 12) return d.replace(/(\d{2})(\d{3})(\d{3})(\d+)/, "$1.$2.$3/$4");
+  return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2}).*/, "$1.$2.$3/$4-$5");
+}
+function validateCNPJ(d) {
+  if (!d || d.length !== 14) return false;
+  if (/^(\d)\1{13}$/.test(d)) return false;
+  const w1 = [5,4,3,2,9,8,7,6,5,4,3,2];
+  const w2 = [6,5,4,3,2,9,8,7,6,5,4,3,2];
+  let sum = 0;
+  for (let i=0;i<12;i++) sum += parseInt(d[i]) * w1[i];
+  let r = sum % 11; let dv1 = (r<2)?0:(11-r);
+  if (dv1 !== parseInt(d[12])) return false;
+  sum = 0;
+  for (let i=0;i<13;i++) sum += parseInt(d[i]) * w2[i];
+  r = sum % 11; let dv2 = (r<2)?0:(11-r);
+  return dv2 === parseInt(d[13]);
+}
+
+// Telefone BR (10 ou 11 dígitos)
+function formatPhone(d) {
+  d = d.slice(0,11);
+  if (d.length <= 2) return `(${d}`;
+  if (d.length <= 6) return `(${d.slice(0,2)}) ${d.slice(2)}`;
+  if (d.length <= 10) return `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`;
+  return `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`;
+}
+function validatePhone(d){ return d.length === 10 || d.length === 11; }
+
+/* Auto detect CPF/CNPJ + máscara */
+cpfCnpjEl.addEventListener('input', () => {
+  let d = digitsOnly(cpfCnpjEl.value);
+  let tipo = d.length > 11 ? 'CNPJ' : 'CPF';
+  if (tipo === 'CPF') {
+    cpfCnpjEl.value = formatCPF(d);
+    const ok = validateCPF(d);
+    docBadge.textContent = ok ? 'CPF válido' : 'CPF…';
+    docBadge.className = 'badge ' + (ok ? 'good' : '');
+    docHelp.textContent = ok ? 'Documento válido.' : 'Digite 11 dígitos para CPF válido.';
+    docHelp.className = 'help' + (ok ? '' : ' error');
+  } else {
+    cpfCnpjEl.value = formatCNPJ(d);
+    const ok = validateCNPJ(d);
+    docBadge.textContent = ok ? 'CNPJ válido' : 'CNPJ…';
+    docBadge.className = 'badge ' + (ok ? 'good' : '');
+    docHelp.textContent = ok ? 'Documento válido.' : 'Digite 14 dígitos para CNPJ válido.';
+    docHelp.className = 'help' + (ok ? '' : ' error');
+  }
+});
+
+/* Máscara telefone */
+telefoneEl.addEventListener('input', () => {
+  const d = digitsOnly(telefoneEl.value);
+  telefoneEl.value = formatPhone(d);
+  const ok = d.length === 0 || validatePhone(d);
+  telHelp.textContent = ok ? 'Formato BR (com DDD).' : 'Telefone inválido. Use 10 ou 11 dígitos.';
+  telHelp.className = 'help' + (ok ? '' : ' error');
+});
+
+/* ========= Auth + carregamento ========= */
+let sessionUser = null;
+(async function init(){
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return; }
+  sessionUser = session.user;
+  emailEl.value = session.user.email || '';
+
+  // Tenta ler do Supabase; se falhar, tenta localStorage
+  const loaded = await loadFromSupabase();
+  if (!loaded) loadFromLocal();
+})();
+
+/* ========= Sair ========= */
+btnSair.addEventListener('click', async ()=>{
+  await sb.auth.signOut();
+  window.location.href = CFG.SITE_URL || 'index.html';
+});
+
+/* ========= Persistência ========= */
+const LS_KEY = 'meus_dados_fallback';
+
+function fillForm(data){
+  if (!data) return;
+  nomeEl.value = data.first_name || '';
+  sobrenomeEl.value = data.last_name || '';
+  if (data.cpf_cnpj) {
+    const d = digitsOnly(data.cpf_cnpj);
+    cpfCnpjEl.value = (d.length > 11) ? formatCNPJ(d) : formatCPF(d);
+  }
+  if (data.phone) {
+    const d = digitsOnly(data.phone);
+    telefoneEl.value = formatPhone(d);
+  }
+  if (data.plan) planoEl.value = data.plan;
+}
+
+async function loadFromSupabase(){
+  try {
+    const { data, error } = await sb
+      .from('profiles')
+      .select('first_name,last_name,cpf_cnpj,phone,plan')
+      .eq('id', sessionUser.id)
+      .maybeSingle();
+    if (error) throw error;
+    if (data) fillForm(data);
+    return true;
+  } catch (e) {
+    console.warn('Supabase load falhou, usando localStorage. Detalhe:', e?.message || e);
+    showBanner('Sem estrutura de perfis no banco. Usando armazenamento local.', 'warn');
+    return false;
+  }
+}
+function loadFromLocal(){
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) fillForm(JSON.parse(raw));
+  } catch {}
+}
+function saveToLocal(payload){
+  localStorage.setItem(LS_KEY, JSON.stringify(payload));
+}
+
+/* ========= Salvar ========= */
+btnSalvar.addEventListener('click', async ()=>{
+  // Coleta & valida
+  const first_name = nomeEl.value.trim();
+  const last_name = sobrenomeEl.value.trim();
+  const docDigits = digitsOnly(cpfCnpjEl.value);
+  const phoneDigits = digitsOnly(telefoneEl.value);
+  const plan = planoEl.value;
+
+  if (!first_name){ showBanner('Informe o Nome.', 'warn'); nomeEl.focus(); return; }
+  if (!last_name){ showBanner('Informe o Sobrenome.', 'warn'); sobrenomeEl.focus(); return; }
+
+  let docType = null, docOK = false;
+  if (docDigits.length > 0 && docDigits.length <= 11) {
+    docType = 'cpf'; docOK = validateCPF(docDigits);
+  } else if (docDigits.length >= 12) {
+    docType = 'cnpj'; docOK = validateCNPJ(docDigits);
+  }
+  if (!docOK){ showBanner('CPF/CNPJ inválido.', 'warn'); cpfCnpjEl.focus(); return; }
+
+  if (phoneDigits && !validatePhone(phoneDigits)){
+    showBanner('Telefone inválido (use 10 ou 11 dígitos).', 'warn'); telefoneEl.focus(); return;
+  }
+
+  const payload = {
+    id: sessionUser.id,
+    email: sessionUser.email,
+    first_name,
+    last_name,
+    cpf_cnpj: docDigits,
+    cpf_cnpj_type: docType,
+    phone: phoneDigits,
+    plan
+  };
+
+  // Tenta salvar no Supabase; se falhar, guarda local
+  try {
+    const { data, error } = await sb
+      .from('profiles')
+      .upsert(payload, { onConflict: 'id' })
+      .select()
+      .single();
+    if (error) throw error;
+    showBanner('Dados salvos com sucesso!', 'ok');
+  } catch (e) {
+    console.warn('Supabase upsert falhou; salvando localmente. Detalhe:', e?.message || e);
+    saveToLocal(payload);
+    showBanner('Sem tabela "profiles". Dados salvos localmente neste dispositivo.', 'warn');
+  }
+});
+
+/* Limpar fallback local */
+btnLimpar.addEventListener('click', ()=>{
+  localStorage.removeItem(LS_KEY);
+  showBanner('Armazenamento local limpo.', 'ok');
+});
+</script>
 </body>
 </html>
