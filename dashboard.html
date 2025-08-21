@@ -12,6 +12,7 @@
 
   .userbox { display:flex; gap:12px; align-items:center; position: relative; }
   .chip { font-size:12px; background:#1e1e1e; border:1px solid #333; padding:6px 10px; border-radius:999px; cursor:default; }
+  .chip.plan { color:#bfffc1; border-color:#2f5a2f; background:#132313; }
   .btn { background:#00b140; color:#fff; border:none; padding:8px 14px; border-radius:6px; cursor:pointer; }
   .btn:hover { background:#009b38; }
 
@@ -57,7 +58,6 @@
   .err { display:none; color:#ff5d5d; margin:8px 0; font-size:13px; }
 
   .wrap { overflow:auto; border:1px solid #2a2a2a; border-radius:10px; }
-  /* Geral: altura fixa com scroll interno */
   #generalWrap { height: 55vh; }
 
   table { width:100%; border-collapse: collapse; }
@@ -70,33 +70,23 @@
   .col-desc { min-width:260px; }
   .price { font-weight:700; display:block; font-size:16px; }
   @media (min-width: 1200px) { .price { font-size:18px; } }
-  .price.min { color:#ff4d4f; }       /* vermelho: mais barato */
-  .price.max { color:#00d084; }       /* verde: mais caro */
-  .muted { display:none; }            /* data oculta; só via tooltip title */
+  .price.min { color:#ff4d4f; }
+  .price.max { color:#00d084; }
+  .muted { display:none; }
   .end-marker { text-align:center; padding:10px; color:#9aa0a6; }
 
   .counts { margin-top:10px; font-size:12px; color:#9aa0a6; display:flex; gap:12px; flex-wrap:wrap; }
 
-  /* Painel colapsado: esconde conteúdo rolável e contadores */
   .panel.collapsed .wrap { display:none; }
   .panel.collapsed .counts { display:none; }
   .panel.collapsed .resizer { display:none; }
 
-  /* Barra de redimensionar (abaixo dos favoritos) */
   .resizer {
-    height: 10px;
-    margin-top: 6px;
-    border: 1px solid #2a2a2a;
-    border-radius: 8px;
-    cursor: ns-resize;
-    background: linear-gradient(180deg, #1c1c1c, #111);
+    height: 10px; margin-top: 6px; border: 1px solid #2a2a2a; border-radius: 8px;
+    cursor: ns-resize; background: linear-gradient(180deg, #1c1c1c, #111);
     display:flex; align-items:center; justify-content:center;
   }
-  .resizer:after {
-    content: "";
-    width: 40px; height: 3px; border-radius: 3px;
-    background: #3a3a3a;
-  }
+  .resizer:after { content: ""; width: 40px; height: 3px; border-radius: 3px; background: #3a3a3a; }
   body.resizing, body.resizing * { cursor: ns-resize !important; user-select: none; }
 </style>
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
@@ -106,19 +96,18 @@
 <header>
   <h1>MaiorMargem — Dashboard</h1>
   <div class="userbox">
+    <span id="planChip" class="chip plan" title="Plano atual">Plano: —</span>
     <div class="userChipWrap">
       <span id="userChip" class="chip">Usuário</span>
-      <!-- Dropdown -->
       <div id="userDropdown" class="dropdown" role="menu" aria-hidden="true">
         <button class="dd-item" id="ddMeusDados">Meus dados</button>
-        <button class="dd-item" id="ddPlanos">Planos</button> <!-- NOVO -->
+        <button class="dd-item" id="ddPlanos">Planos</button>
       </div>
     </div>
     <button id="btnSair" class="btn">Sair</button>
   </div>
 </header>
 
-<!-- Filtros/Status -->
 <div class="panel">
   <div class="filters">
     <input id="eanFilter" placeholder="Filtrar por EAN/GTIN…" />
@@ -129,13 +118,12 @@
   <div id="err" class="err"></div>
 </div>
 
-<!-- Favoritos (Topo) -->
 <section id="favPanel" class="panel">
   <div class="panel-header">
     <h2>Favoritos</h2>
     <button id="toggleFav" class="toggle-btn" aria-expanded="true">Minimizar</button>
   </div>
-  <div id="favWrap" class="wrap"><!-- altura definida por JS (auto ou usuário) -->
+  <div id="favWrap" class="wrap">
     <table id="favTable">
       <thead>
         <tr>
@@ -155,11 +143,9 @@
       <tbody></tbody>
     </table>
   </div>
-  <!-- Barra para redimensionar Favoritos -->
   <div id="favResizer" class="resizer" title="Arraste para redimensionar. Duplo clique: voltar ao auto."></div>
 </section>
 
-<!-- Geral (Abaixo) -->
 <section id="generalPanel" class="panel">
   <div class="panel-header">
     <h2>Geral</h2>
@@ -194,25 +180,21 @@
 </section>
 
 <script>
-/* ====== Config ====== */
 const CFG = window.CONFIG || {};
 const SUPABASE_URL = CFG.SUPABASE_URL;
 const SUPABASE_ANON_KEY = CFG.SUPABASE_ANON_KEY;
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) { alert("Erro de configuração: config.js não carregado."); throw new Error("CONFIG ausente"); }
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
 
-/** Ajustes UI **/
-const MAX_SESSION_MS = 2 * 60 * 60 * 1000; // 2h
-const FAV_AUTO_ROWS_MAX = 20;
-const FAV_MIN_PX = 120;
+const MAX_SESSION_MS = 2 * 60 * 60 * 1000;
 
-/* ====== UI refs ====== */
 const statusEl = document.getElementById('status');
 const errEl = document.getElementById('err');
 const userChip = document.getElementById('userChip');
+const planChip = document.getElementById('planChip');
 const userChipWrap = document.querySelector('.userChipWrap');
 const ddMeusDados = document.getElementById('ddMeusDados');
-const ddPlanos = document.getElementById('ddPlanos'); // NOVO
+const ddPlanos = document.getElementById('ddPlanos');
 const btnSair = document.getElementById('btnSair');
 const btnReload = document.getElementById('btnReload');
 
@@ -239,7 +221,6 @@ function setStatus(t){ statusEl.textContent = t || ''; }
 function showErr(e){ errEl.style.display='block'; errEl.textContent = String(e||'').trim(); }
 function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
 
-/* ====== Sessão: 2h ====== */
 function enforceMaxSession(){
   const key = 'mm_login_start';
   const now = Date.now();
@@ -255,14 +236,12 @@ function enforceMaxSession(){
   sb.auth.onAuthStateChange((event) => { if (event === 'SIGNED_IN') localStorage.setItem(key, String(Date.now())); if (event === 'SIGNED_OUT') localStorage.removeItem(key); });
 }
 
-/* ====== Dropdown ações ====== */
 ddMeusDados.addEventListener('click', () => { window.location.href = 'meusdados.html'; });
-ddPlanos.addEventListener('click', () => { window.location.href = 'planos.html'; }); // NOVO
+ddPlanos.addEventListener('click', () => { window.location.href = 'planos.html'; });
 userChip.addEventListener('click', (e) => { e.stopPropagation(); userChipWrap.classList.toggle('open'); });
 document.addEventListener('click', (e) => { if (!userChipWrap.contains(e.target)) userChipWrap.classList.remove('open'); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') userChipWrap.classList.remove('open'); });
 
-/* ====== Sites ====== */
 const siteMap = {
   "PrecoLeroyMerlin": "LeroyMerlin",
   "PrecoQueroQuero": "QueroQuero",
@@ -275,22 +254,18 @@ const siteMap = {
 };
 const siteOrder = Object.values(siteMap);
 
-/* ====== Estado ====== */
-let produtos = [];         // [{ sku, desc, sites: {NomeSite: {precoRaw, precoNum, data}} }]
+let produtos = [];
 let favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
-let filteredGeneral = [];  // inclui favoritos (não remove do Geral)
+let filteredGeneral = [];
 let itemsPerLoad = 60;
 let itemsLoaded = 0;
 let loadingMore = false;
-let suppressGeneralChange = false; // evita loop quando desmarca programaticamente
-const generalChkMap = new Map();   // SKU -> checkbox do Geral
+let suppressGeneralChange = false;
+const generalChkMap = new Map();
 
-/* ====== View ====== */
 const VIEW = "vw_precos_com_desc";
 
-/* ====== Helpers ====== */
 function formatBRL(n){ try { return n.toLocaleString('pt-BR', { style:'currency', currency:'BRL' }); } catch { return String(n); } }
-
 function computeMinMaxForRow(item){
   let min = { site:null, val: Infinity };
   let max = { site:null, val: -Infinity };
@@ -303,11 +278,9 @@ function computeMinMaxForRow(item){
   }
   return { minSite: min.site, maxSite: max.site };
 }
-
 function favSave(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet])); }
 function isFav(sku){ return favSet.has(String(sku)); }
 
-/* ====== Altura de Favoritos ====== */
 function measureRowHeight(){
   const row = document.querySelector('#favTable tbody tr');
   if (!row) return 44;
@@ -325,13 +298,13 @@ let favHeightUser = Number(localStorage.getItem('mm_fav_height')) || null;
 function applyFavHeight(px){
   if (!px || !Number.isFinite(px)) return;
   const maxPx = Math.round(window.innerHeight * 0.85);
-  const clamped = Math.max(FAV_MIN_PX, Math.min(px, maxPx));
+  const clamped = Math.max(120, Math.min(px, maxPx));
   favWrap.style.height = clamped + 'px';
 }
 function updateFavHeight(){
   if (favHeightUser) { applyFavHeight(favHeightUser); return; }
   const rowsLen = favBody.children.length;
-  const rows = Math.min(rowsLen, FAV_AUTO_ROWS_MAX);
+  const rows = Math.min(rowsLen, 20);
   const rowH = measureRowHeight();
   const headH = measureHeadHeight();
   const pad = 8;
@@ -339,7 +312,6 @@ function updateFavHeight(){
   applyFavHeight(target);
 }
 
-/* ====== Redimensionar Favoritos (drag) ====== */
 (function initResizer(){
   let startY = 0, startH = 0;
   function onMove(ev){
@@ -360,7 +332,6 @@ function updateFavHeight(){
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', stop);
   });
-  // Duplo clique: volta para automático
   favResizer.addEventListener('dblclick', ()=>{
     favHeightUser = null;
     localStorage.removeItem('mm_fav_height');
@@ -368,7 +339,6 @@ function updateFavHeight(){
   });
 })();
 
-/* ====== Dados ====== */
 async function buscarDados() {
   setStatus('Carregando dados…');
   hideErr();
@@ -393,7 +363,7 @@ async function buscarDados() {
     if (!agrupado[ean]) agrupado[ean] = { sku: ean, desc: desc, sites: {} };
     if (!agrupado[ean].desc && desc) agrupado[ean].desc = desc;
 
-    const htmlSiteName = siteMap[site]; // mapeia "PrecoX" -> "X"
+    const htmlSiteName = siteMap[site];
     if (htmlSiteName) {
       const prev = agrupado[ean].sites[htmlSiteName];
       if (!prev || new Date(dt) > new Date(prev.data)) {
@@ -410,7 +380,6 @@ async function buscarDados() {
   setStatus(`Carregado: ${produtos.length} SKUs`);
 }
 
-/* ====== Filtros ====== */
 function aplicarFiltros(reset=false){
   const eanQ = eanFilter.value.trim().toLowerCase();
   const descQ = descFilter.value.trim().toLowerCase();
@@ -425,7 +394,6 @@ function aplicarFiltros(reset=false){
   updateCounts();
 }
 
-/* ====== Render: Geral (infinite no contêiner) ====== */
 function resetGeneral(){
   generalBody.innerHTML = '';
   generalChkMap.clear();
@@ -440,7 +408,6 @@ function renderGeneralChunk(){
     const item = filteredGeneral[i];
     const tr = document.createElement('tr');
 
-    // Checkbox Favorito (não remove do Geral)
     const tdFav = document.createElement('td');
     tdFav.className = 'col-fav';
     const chk = document.createElement('input');
@@ -459,19 +426,16 @@ function renderGeneralChunk(){
     tr.appendChild(tdFav);
     generalChkMap.set(item.sku, chk);
 
-    // SKU
     const tdSku = document.createElement('td');
     tdSku.className = 'col-sku';
     tdSku.textContent = item.sku;
     tr.appendChild(tdSku);
 
-    // Descrição
     const tdDesc = document.createElement('td');
     tdDesc.className = 'col-desc';
     tdDesc.innerHTML = (item.desc || '').replace(/</g,'&lt;');
     tr.appendChild(tdDesc);
 
-    // Preços
     const { minSite, maxSite } = computeMinMaxForRow(item);
     for (const s of siteOrder) {
       const td = document.createElement('td');
@@ -479,7 +443,7 @@ function renderGeneralChunk(){
       if (d) {
         const dataStr = d.data ? new Date(d.data).toLocaleString('pt-BR') : '';
         if (Number.isFinite(d.precoNum)) {
-          const display = formatBRL(d.precoNum); // sem acréscimo
+          const display = formatBRL(d.precoNum);
           const cls = (s === minSite) ? 'min' : (s === maxSite ? 'max' : '');
           td.innerHTML = `<span class="price ${cls}" title="Atualizado em ${dataStr}">${display}</span>`;
         } else {
@@ -509,7 +473,6 @@ function onGeneralScroll(){
 }
 generalWrap.addEventListener('scroll', onGeneralScroll);
 
-/* ====== Render: Favoritos (com lixeira) ====== */
 function renderFavs(){
   favBody.innerHTML = '';
   const favList = produtos.filter(p => isFav(p.sku));
@@ -518,7 +481,6 @@ function renderFavs(){
   for (const item of favList){
     const tr = document.createElement('tr');
 
-    // Ação: Lixeira para remover dos favoritos
     const tdAct = document.createElement('td');
     tdAct.className = 'col-fav';
     const btn = document.createElement('button');
@@ -529,7 +491,6 @@ function renderFavs(){
         <path d="M9 3h6a1 1 0 0 1 1 1v1h4v2h-1l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 7H4V5h4V4a1 1 0 0 1 1-1zm2 0v1h2V3h-2zM7 7l1 14h8l1-14H7z"></path>
       </svg>`;
     btn.addEventListener('click', () => {
-      // remove do set e desmarca no Geral (se a linha estiver renderizada)
       favSet.delete(item.sku);
       favSave();
       const chk = generalChkMap.get(item.sku);
@@ -545,19 +506,16 @@ function renderFavs(){
     tdAct.appendChild(btn);
     tr.appendChild(tdAct);
 
-    // SKU
     const tdSku = document.createElement('td');
     tdSku.className = 'col-sku';
     tdSku.textContent = item.sku;
     tr.appendChild(tdSku);
 
-    // Descrição
     const tdDesc = document.createElement('td');
     tdDesc.className = 'col-desc';
     tdDesc.innerHTML = (item.desc || '').replace(/</g,'&lt;');
     tr.appendChild(tdDesc);
 
-    // Preços
     const { minSite, maxSite } = computeMinMaxForRow(item);
     for (const s of siteOrder) {
       const td = document.createElement('td');
@@ -565,7 +523,7 @@ function renderFavs(){
       if (d) {
         const dataStr = d.data ? new Date(d.data).toLocaleString('pt-BR') : '';
         if (Number.isFinite(d.precoNum)) {
-          const display = formatBRL(d.precoNum); // sem acréscimo
+          const display = formatBRL(d.precoNum);
           const cls = (s === minSite) ? 'min' : (s === maxSite ? 'max' : '');
           td.innerHTML = `<span class="price ${cls}" title="Atualizado em ${dataStr}">${display}</span>`;
         } else {
@@ -584,7 +542,6 @@ function renderFavs(){
   favBody.appendChild(frag);
 }
 
-/* ====== Colapsar / Expandir painéis ====== */
 function attachToggle(panel, button){
   function setState(expanded){
     panel.classList.toggle('collapsed', !expanded);
@@ -600,7 +557,6 @@ function attachToggle(panel, button){
 attachToggle(favPanel, toggleFavBtn);
 attachToggle(generalPanel, toggleGenBtn);
 
-/* ====== Botões ====== */
 btnReload.addEventListener('click', async ()=>{ await buscarDados(); });
 btnSair.addEventListener('click', async ()=>{
   await sb.auth.signOut();
@@ -610,7 +566,6 @@ btnSair.addEventListener('click', async ()=>{
 eanFilter.addEventListener('input', ()=>aplicarFiltros(true));
 descFilter.addEventListener('input', ()=>aplicarFiltros(true));
 
-/* ====== Contadores ====== */
 function updateCounts(){
   const total = produtos.length;
   const favs = favSet.size;
@@ -620,11 +575,42 @@ function updateCounts(){
   countFavs.textContent = `Favoritos: ${favs}`;
 }
 
+/* === util: obter base de Edge Functions a partir do SUPABASE_URL === */
+function getFunctionsBaseFromSupabaseUrl(urlStr){
+  try{
+    const u = new URL(urlStr);
+    const projectRef = u.host.split('.supabase.co')[0];
+    return `https://${projectRef}.functions.supabase.co`;
+  }catch{ return '/functions/v1'; }
+}
+
+/* === carregar sessão e plano === */
+async function loadHeaderInfo(){
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return null; }
+  userChip.textContent = session.user?.email || 'Logado';
+
+  // lê o plano do profiles
+  try{
+    const { data, error } = await sb
+      .from('profiles')
+      .select('plan')
+      .eq('id', session.user.id)
+      .maybeSingle();
+    if (error) throw error;
+    const planRaw = (data?.plan || 'basico').toString();
+    const pretty = planRaw.charAt(0).toUpperCase() + planRaw.slice(1);
+    planChip.textContent = `Plano: ${pretty}`;
+  }catch(e){
+    console.error(e);
+    planChip.textContent = 'Plano: —';
+  }
+  return session;
+}
+
 /* ====== Init ====== */
 (async function init(){
-  const { data: { session } } = await sb.auth.getSession();
-  if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return; }
-  userChip.textContent = session.user?.email || 'Logado';
+  const session = await loadHeaderInfo(); if (!session) return;
   enforceMaxSession();
   await buscarDados();
 })();
