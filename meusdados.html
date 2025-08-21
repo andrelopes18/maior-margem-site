@@ -6,6 +6,7 @@
 <title>Meus dados</title>
 <style>
   :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
   body{background:#121212;color:#fff;font-family:Arial,sans-serif;padding:24px;margin:0}
   header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px;flex-wrap:wrap}
   h1{color:#00b140;margin:0}
@@ -14,24 +15,35 @@
   .btn:hover{background:#009b38}
   .btn.outline{background:transparent;border:1px solid #2a2a2a;color:#ddd}
   .btn.outline:hover{background:#1b1b1b}
+
   .container{max-width:880px;margin:0 auto}
-  .card{background:#0f0f0f;border:1px solid #2a2a2a;border-radius:12px;padding:16px}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-  .row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .card{background:#0f0f0f;border:1px solid #2a2a2a;border-radius:12px;padding:18px}
+
+  /* grade com mais respiro vertical */
+  .grid{display:grid;grid-template-columns:1fr 1fr;column-gap:16px;row-gap:22px}
+
   .col-1{grid-column: span 1}
   .col-2{grid-column: span 2}
-  @media (max-width: 720px){ .grid,.row{grid-template-columns:1fr} .col-2{grid-column:span 1} }
-  label{display:block;margin:6px 0 6px;color:#9aa0a6}
-  input,select{width:100%;padding:12px;border-radius:8px;border:1px solid #333;background:#1e1e1e;color:#fff;font-size:15px}
-  input[disabled]{opacity:.8;background:#1a1a1a}
+  @media (max-width: 720px){ .grid{grid-template-columns:1fr} .col-2{grid-column:span 1} }
+
+  label{display:block;margin:4px 0 8px;color:#9aa0a6}
+
+  /* campos: e-mail mais escuro (bloqueado), demais um pouco mais claros */
+  input,select{
+    width:100%;padding:12px 14px;border-radius:8px;border:1px solid #3a3a3a;
+    background:#242424;color:#fff;font-size:15px;line-height:1.2
+  }
+  input[disabled]{
+    background:#171717;border-color:#2a2a2a;color:#b5b5b5;cursor:not-allowed;
+  }
+
   .help{font-size:12px;color:#9aa0a6;margin-top:6px}
   .help.error{color:#ff6666}
-  .badge{display:inline-block;font-size:12px;border:1px solid #2a2a2a;border-radius:999px;padding:4px 8px;background:#1a1a1a;color:#ccc;margin-left:8px}
-  .badge.good{color:#b7fbb7;border-color:#214d21;background:#152015}
+
   .banner{border:1px solid #2a2a2a;border-radius:10px;padding:10px 12px;margin-bottom:14px;background:#111}
   .banner.warn{border-color:#5c3f00;background:#1b1300;color:#ffc966}
   .banner.ok{border-color:#214d21;background:#0e1a0e;color:#b7fbb7}
-  .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+  .banner.err{border-color:#5c1e1e;background:#190d0d;color:#ff9a9a}
 </style>
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="./config.js"></script>
@@ -39,7 +51,7 @@
 <body>
 <header class="container">
   <h1>Meus dados</h1>
-  <div class="actions">
+  <div class="actions" style="display:flex;gap:10px;flex-wrap:wrap">
     <a class="btn outline" href="dashboard.html">← Voltar ao dashboard</a>
     <button id="btnSair" class="btn">Sair</button>
   </div>
@@ -51,9 +63,8 @@
   <div class="card">
     <div class="grid">
       <div class="col-2">
-        <label for="email">Email <span class="badge">somente leitura</span></label>
+        <label for="email">Email</label>
         <input id="email" type="email" placeholder="usuario@exemplo.com" disabled>
-        <div class="help">Trazido automaticamente do usuário autenticado.</div>
       </div>
 
       <div class="col-1">
@@ -67,11 +78,15 @@
       </div>
 
       <div class="col-1">
-        <label for="cpfCnpj">CPF ou CNPJ
-          <span id="docBadge" class="badge">—</span>
-        </label>
+        <label for="cpfCnpj">CPF ou CNPJ</label>
         <input id="cpfCnpj" type="text" inputmode="numeric" placeholder="CPF ou CNPJ">
         <div id="docHelp" class="help">Digite apenas números; a formatação aparece sozinha.</div>
+      </div>
+
+      <!-- Razão Social (só aparece para CNPJ) -->
+      <div id="razaoWrap" class="col-1" style="display:none">
+        <label for="razaoSocial">Razão social</label>
+        <input id="razaoSocial" type="text" placeholder="Razão social (para CNPJ)">
       </div>
 
       <div class="col-1">
@@ -90,9 +105,8 @@
         </select>
       </div>
 
-      <div class="col-2 actions">
+      <div class="col-2">
         <button id="btnSalvar" class="btn">💾 Salvar</button>
-        <button id="btnLimpar" class="btn outline" type="button">Limpar local (fallback)</button>
       </div>
     </div>
   </div>
@@ -118,22 +132,22 @@ const sobrenomeEl = document.getElementById('sobrenome');
 const cpfCnpjEl = document.getElementById('cpfCnpj');
 const telefoneEl = document.getElementById('telefone');
 const planoEl = document.getElementById('plano');
+const razaoWrap = document.getElementById('razaoWrap');
+const razaoSocialEl = document.getElementById('razaoSocial');
 
 const btnSalvar = document.getElementById('btnSalvar');
-const btnLimpar = document.getElementById('btnLimpar');
 const btnSair = document.getElementById('btnSair');
 
 const bannerEl = document.getElementById('banner');
-const docBadge = document.getElementById('docBadge');
-const docHelp = document.getElementById('docHelp');
 const telHelp = document.getElementById('telHelp');
+const docHelp = document.getElementById('docHelp');
 
 /* ========= Helpers UI ========= */
 function showBanner(text, type = 'ok') {
   bannerEl.textContent = text;
-  bannerEl.className = 'banner ' + (type === 'warn' ? 'warn' : 'ok');
+  bannerEl.className = 'banner ' + (type === 'warn' ? 'warn' : (type === 'err' ? 'err' : 'ok'));
   bannerEl.style.display = 'block';
-  setTimeout(() => { bannerEl.style.display = 'none'; }, 4000);
+  setTimeout(() => { bannerEl.style.display = 'none'; }, 4200);
 }
 function digitsOnly(s){ return (s||'').replace(/\D+/g, ''); }
 
@@ -193,26 +207,26 @@ function formatPhone(d) {
 }
 function validatePhone(d){ return d.length === 10 || d.length === 11; }
 
-/* Auto detect CPF/CNPJ + máscara */
-cpfCnpjEl.addEventListener('input', () => {
+/* CPF/CNPJ + máscara + mostrar/ocultar Razão Social */
+function updateDocUI() {
   let d = digitsOnly(cpfCnpjEl.value);
-  let tipo = d.length > 11 ? 'CNPJ' : 'CPF';
-  if (tipo === 'CPF') {
-    cpfCnpjEl.value = formatCPF(d);
-    const ok = validateCPF(d);
-    docBadge.textContent = ok ? 'CPF válido' : 'CPF…';
-    docBadge.className = 'badge ' + (ok ? 'good' : '');
-    docHelp.textContent = ok ? 'Documento válido.' : 'Digite 11 dígitos para CPF válido.';
-    docHelp.className = 'help' + (ok ? '' : ' error');
-  } else {
+  const isCNPJ = d.length > 11;
+  if (isCNPJ) {
     cpfCnpjEl.value = formatCNPJ(d);
     const ok = validateCNPJ(d);
-    docBadge.textContent = ok ? 'CNPJ válido' : 'CNPJ…';
-    docBadge.className = 'badge ' + (ok ? 'good' : '');
-    docHelp.textContent = ok ? 'Documento válido.' : 'Digite 14 dígitos para CNPJ válido.';
+    docHelp.textContent = ok ? 'CNPJ válido.' : 'Digite 14 dígitos para um CNPJ válido.';
     docHelp.className = 'help' + (ok ? '' : ' error');
+    razaoWrap.style.display = 'block';
+  } else {
+    cpfCnpjEl.value = formatCPF(d);
+    const ok = validateCPF(d);
+    docHelp.textContent = ok ? 'CPF válido.' : 'Digite 11 dígitos para um CPF válido.';
+    docHelp.className = 'help' + (ok ? '' : ' error');
+    razaoWrap.style.display = 'none';
+    razaoSocialEl.value = '';
   }
-});
+}
+cpfCnpjEl.addEventListener('input', updateDocUI);
 
 /* Máscara telefone */
 telefoneEl.addEventListener('input', () => {
@@ -231,9 +245,35 @@ let sessionUser = null;
   sessionUser = session.user;
   emailEl.value = session.user.email || '';
 
-  // Tenta ler do Supabase; se falhar, tenta localStorage
-  const loaded = await loadFromSupabase();
-  if (!loaded) loadFromLocal();
+  try {
+    const { data, error } = await sb
+      .from('profiles')
+      .select('first_name,last_name,cpf_cnpj,phone,plan,razao_social,cpf_cnpj_type')
+      .eq('id', sessionUser.id)
+      .maybeSingle();
+    if (error) throw error;
+
+    if (data) {
+      nomeEl.value = data.first_name || '';
+      sobrenomeEl.value = data.last_name || '';
+      if (data.cpf_cnpj) {
+        cpfCnpjEl.value = (data.cpf_cnpj_type === 'cnpj')
+          ? formatCNPJ(data.cpf_cnpj) : formatCPF(data.cpf_cnpj);
+        updateDocUI();
+      }
+      if (data.razao_social) {
+        razaoSocialEl.value = data.razao_social;
+        razaoWrap.style.display = 'block';
+      }
+      if (data.phone) telefoneEl.value = formatPhone(data.phone);
+      if (data.plan)  planoEl.value = data.plan;
+    } else {
+      // Se não existe registro, apenas mostra o formulário vazio
+    }
+  } catch (e) {
+    console.error(e);
+    showBanner('Erro ao carregar dados (tabela "profiles" ausente?).', 'err');
+  }
 })();
 
 /* ========= Sair ========= */
@@ -242,58 +282,13 @@ btnSair.addEventListener('click', async ()=>{
   window.location.href = CFG.SITE_URL || 'index.html';
 });
 
-/* ========= Persistência ========= */
-const LS_KEY = 'meus_dados_fallback';
-
-function fillForm(data){
-  if (!data) return;
-  nomeEl.value = data.first_name || '';
-  sobrenomeEl.value = data.last_name || '';
-  if (data.cpf_cnpj) {
-    const d = digitsOnly(data.cpf_cnpj);
-    cpfCnpjEl.value = (d.length > 11) ? formatCNPJ(d) : formatCPF(d);
-  }
-  if (data.phone) {
-    const d = digitsOnly(data.phone);
-    telefoneEl.value = formatPhone(d);
-  }
-  if (data.plan) planoEl.value = data.plan;
-}
-
-async function loadFromSupabase(){
-  try {
-    const { data, error } = await sb
-      .from('profiles')
-      .select('first_name,last_name,cpf_cnpj,phone,plan')
-      .eq('id', sessionUser.id)
-      .maybeSingle();
-    if (error) throw error;
-    if (data) fillForm(data);
-    return true;
-  } catch (e) {
-    console.warn('Supabase load falhou, usando localStorage. Detalhe:', e?.message || e);
-    showBanner('Sem estrutura de perfis no banco. Usando armazenamento local.', 'warn');
-    return false;
-  }
-}
-function loadFromLocal(){
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (raw) fillForm(JSON.parse(raw));
-  } catch {}
-}
-function saveToLocal(payload){
-  localStorage.setItem(LS_KEY, JSON.stringify(payload));
-}
-
-/* ========= Salvar ========= */
+/* ========= Salvar (sempre na base) ========= */
 btnSalvar.addEventListener('click', async ()=>{
-  // Coleta & valida
   const first_name = nomeEl.value.trim();
-  const last_name = sobrenomeEl.value.trim();
-  const docDigits = digitsOnly(cpfCnpjEl.value);
-  const phoneDigits = digitsOnly(telefoneEl.value);
-  const plan = planoEl.value;
+  const last_name  = sobrenomeEl.value.trim();
+  const docDigits  = digitsOnly(cpfCnpjEl.value);
+  const phoneDigits= digitsOnly(telefoneEl.value);
+  const plan       = planoEl.value;
 
   if (!first_name){ showBanner('Informe o Nome.', 'warn'); nomeEl.focus(); return; }
   if (!last_name){ showBanner('Informe o Sobrenome.', 'warn'); sobrenomeEl.focus(); return; }
@@ -306,6 +301,12 @@ btnSalvar.addEventListener('click', async ()=>{
   }
   if (!docOK){ showBanner('CPF/CNPJ inválido.', 'warn'); cpfCnpjEl.focus(); return; }
 
+  let razao_social = null;
+  if (docType === 'cnpj') {
+    razao_social = (razaoSocialEl.value || '').trim();
+    if (!razao_social) { showBanner('Informe a Razão social para CNPJ.', 'warn'); razaoSocialEl.focus(); return; }
+  }
+
   if (phoneDigits && !validatePhone(phoneDigits)){
     showBanner('Telefone inválido (use 10 ou 11 dígitos).', 'warn'); telefoneEl.focus(); return;
   }
@@ -317,30 +318,21 @@ btnSalvar.addEventListener('click', async ()=>{
     last_name,
     cpf_cnpj: docDigits,
     cpf_cnpj_type: docType,
+    razao_social,
     phone: phoneDigits,
     plan
   };
 
-  // Tenta salvar no Supabase; se falhar, guarda local
   try {
-    const { data, error } = await sb
+    const { error } = await sb
       .from('profiles')
-      .upsert(payload, { onConflict: 'id' })
-      .select()
-      .single();
+      .upsert(payload, { onConflict: 'id' });
     if (error) throw error;
     showBanner('Dados salvos com sucesso!', 'ok');
   } catch (e) {
-    console.warn('Supabase upsert falhou; salvando localmente. Detalhe:', e?.message || e);
-    saveToLocal(payload);
-    showBanner('Sem tabela "profiles". Dados salvos localmente neste dispositivo.', 'warn');
+    console.error(e);
+    showBanner('Falha ao salvar na base. Verifique a tabela/privilegios.', 'err');
   }
-});
-
-/* Limpar fallback local */
-btnLimpar.addEventListener('click', ()=>{
-  localStorage.removeItem(LS_KEY);
-  showBanner('Armazenamento local limpo.', 'ok');
 });
 </script>
 </body>
