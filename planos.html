@@ -71,7 +71,7 @@
       Os valores são mensais e a cobrança é recorrente. Você pode cancelar quando quiser.
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button id="btnCancelar" class="btn warn">Cancelar assinatura (voltar ao Básico)</button>
+      <button id="btnCancelar" class="btn warn">Cancelar assinatura (voltar ao Trial - Gratuito)</button>
       <a href="meusdados.html" class="btn ghost">Meus dados</a>
     </div>
   </div>
@@ -217,7 +217,7 @@ async function startCheckout(planId, planName){
 
 /* === Cancelar assinatura e voltar ao Básico === */
 btnCancelar.addEventListener('click', async ()=>{
-  const confirmMsg = 'Tem certeza que deseja cancelar a assinatura atual e voltar ao Plano Básico?';
+  const confirmMsg = 'Tem certeza que deseja cancelar a assinatura atual e voltar ao Plano Trial - Gratuito?';
   if (!confirm(confirmMsg)) return;
 
   showBanner('Cancelando assinatura…', 'ok');
