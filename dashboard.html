@@ -180,14 +180,22 @@
 </section>
 
 <script>
+/* ======== CONFIG / SUPABASE ======== */
 const CFG = window.CONFIG || {};
 const SUPABASE_URL = CFG.SUPABASE_URL;
 const SUPABASE_ANON_KEY = CFG.SUPABASE_ANON_KEY;
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) { alert("Erro de configuração: config.js não carregado."); throw new Error("CONFIG ausente"); }
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
 
+/* ======== CONSTANTES ======== */
 const MAX_SESSION_MS = 2 * 60 * 60 * 1000;
+const VIEW = "vw_precos_com_desc";
 
+/* Paginação no servidor e chunk de renderização */
+const PAGE_SIZE = 200;       // consulta por página no servidor
+const RENDER_CHUNK = 60;     // quantidade por “lote” de render no DOM
+
+/* ======== ELEMENTOS ======== */
 const statusEl = document.getElementById('status');
 const errEl = document.getElementById('err');
 const userChip = document.getElementById('userChip');
@@ -217,10 +225,70 @@ const countShown = document.getElementById('countShown');
 const countTotal = document.getElementById('countTotal');
 const countFavs  = document.getElementById('countFavs');
 
+/* ======== ESTADO ======== */
+const siteMap = {
+  "PrecoLeroyMerlin": "LeroyMerlin",
+  "PrecoQueroQuero": "QueroQuero",
+  "PrecoCassol": "Cassol",
+  "PrecoRedeMac": "RedeMac",
+  "PrecoMestreTinho": "MestreTinho",
+  "PrecoTumelero": "Tumelero",
+  "PrecoSupremeinox": "Supremeinox",
+  "PrecoGhaus": "Ghaus"
+};
+const siteOrder = Object.values(siteMap);
+
+let favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
+
+/* Produtos agregados: Map<ean, { sku, desc, sites{} }> */
+let produtosMap = new Map();
+/* Lista para render ordenada por EAN (ou chegada) */
+let produtosList = [];
+/* Posição de render no DOM */
+let itemsRendered = 0;
+
+/* Paginação servidor */
+let serverOffset = 0;
+let serverExhausted = false;
+let fetching = false;
+
+/* Filtros atuais (servidor) */
+let currentEanQ = '';
+let currentDescQ = '';
+
+/* Controle render */
+let loadingMore = false;
+let suppressGeneralChange = false;
+const generalChkMap = new Map();
+
+/* ======== FUNÇÕES UTIL ======== */
 function setStatus(t){ statusEl.textContent = t || ''; }
 function showErr(e){ errEl.style.display='block'; errEl.textContent = String(e||'').trim(); }
 function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
+function formatBRL(n){ try { return n.toLocaleString('pt-BR', { style:'currency', currency:'BRL' }); } catch { return String(n); } }
+function favSave(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet])); }
+function isFav(sku){ return favSet.has(String(sku)); }
+function computeMinMaxForRow(item){
+  let min = { site:null, val: Infinity };
+  let max = { site:null, val: -Infinity };
+  for (const s of siteOrder) {
+    const d = item.sites[s];
+    if (!d || !Number.isFinite(d.precoNum)) continue;
+    const n = d.precoNum;
+    if (n < min.val) { min = { site:s, val:n }; }
+    if (n > max.val) { max = { site:s, val:n }; }
+  }
+  return { minSite: min.site, maxSite: max.site };
+}
+function debounce(fn, delay=500){
+  let t;
+  return (...args)=>{
+    clearTimeout(t);
+    t = setTimeout(()=>fn(...args), delay);
+  };
+}
 
+/* ======== HEADER / SESSÃO ======== */
 function enforceMaxSession(){
   const key = 'mm_login_start';
   const now = Date.now();
@@ -235,52 +303,13 @@ function enforceMaxSession(){
   document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
   sb.auth.onAuthStateChange((event) => { if (event === 'SIGNED_IN') localStorage.setItem(key, String(Date.now())); if (event === 'SIGNED_OUT') localStorage.removeItem(key); });
 }
-
 ddMeusDados.addEventListener('click', () => { window.location.href = 'meusdados.html'; });
 ddPlanos.addEventListener('click', () => { window.location.href = 'planos.html'; });
 userChip.addEventListener('click', (e) => { e.stopPropagation(); userChipWrap.classList.toggle('open'); });
 document.addEventListener('click', (e) => { if (!userChipWrap.contains(e.target)) userChipWrap.classList.remove('open'); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') userChipWrap.classList.remove('open'); });
 
-const siteMap = {
-  "PrecoLeroyMerlin": "LeroyMerlin",
-  "PrecoQueroQuero": "QueroQuero",
-  "PrecoCassol": "Cassol",
-  "PrecoRedeMac": "RedeMac",
-  "PrecoMestreTinho": "MestreTinho",
-  "PrecoTumelero": "Tumelero",
-  "PrecoSupremeinox": "Supremeinox",
-  "PrecoGhaus": "Ghaus"
-};
-const siteOrder = Object.values(siteMap);
-
-let produtos = [];
-let favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
-let filteredGeneral = [];
-let itemsPerLoad = 60;
-let itemsLoaded = 0;
-let loadingMore = false;
-let suppressGeneralChange = false;
-const generalChkMap = new Map();
-
-const VIEW = "vw_precos_com_desc";
-
-function formatBRL(n){ try { return n.toLocaleString('pt-BR', { style:'currency', currency:'BRL' }); } catch { return String(n); } }
-function computeMinMaxForRow(item){
-  let min = { site:null, val: Infinity };
-  let max = { site:null, val: -Infinity };
-  for (const s of siteOrder) {
-    const d = item.sites[s];
-    if (!d || !Number.isFinite(d.precoNum)) continue;
-    const n = d.precoNum;
-    if (n < min.val) { min = { site:s, val:n }; }
-    if (n > max.val) { max = { site:s, val:n }; }
-  }
-  return { minSite: min.site, maxSite: max.site };
-}
-function favSave(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet])); }
-function isFav(sku){ return favSet.has(String(sku)); }
-
+/* ======== FAV HEIGHT / RESIZER ======== */
 function measureRowHeight(){
   const row = document.querySelector('#favTable tbody tr');
   if (!row) return 44;
@@ -294,7 +323,6 @@ function measureHeadHeight(){
   return Math.max(32, h || 40);
 }
 let favHeightUser = Number(localStorage.getItem('mm_fav_height')) || null;
-
 function applyFavHeight(px){
   if (!px || !Number.isFinite(px)) return;
   const maxPx = Math.round(window.innerHeight * 0.85);
@@ -311,7 +339,6 @@ function updateFavHeight(){
   const target = headH + rows * rowH + pad;
   applyFavHeight(target);
 }
-
 (function initResizer(){
   let startY = 0, startH = 0;
   function onMove(ev){
@@ -339,20 +366,9 @@ function updateFavHeight(){
   });
 })();
 
-async function buscarDados() {
-  setStatus('Carregando dados…');
-  hideErr();
-
-  const { data, error } = await sb
-    .from(VIEW)
-    .select('ean, site, preco, data, descricao, preco_num')
-    .order('data', { ascending: false })
-    .limit(5000);
-
-  if (error) { showErr('select view: ' + error.message); setStatus('Falha ao carregar.'); return; }
-
-  const agrupado = {};
-  for (const row of data) {
+/* ======== AGREGAÇÃO ======== */
+function upsertRowsIntoProdutos(rows){
+  for (const row of rows){
     const ean = String(row.ean ?? '');
     const site = String(row.site ?? '');
     const precoRaw = row.preco;
@@ -360,54 +376,34 @@ async function buscarDados() {
     const dt = row.data;
     const desc = row.descricao || '';
 
-    if (!agrupado[ean]) agrupado[ean] = { sku: ean, desc: desc, sites: {} };
-    if (!agrupado[ean].desc && desc) agrupado[ean].desc = desc;
+    if (!produtosMap.has(ean)) {
+      produtosMap.set(ean, { sku: ean, desc: desc, sites: {} });
+    }
+    const item = produtosMap.get(ean);
+    if (!item.desc && desc) item.desc = desc;
 
     const htmlSiteName = siteMap[site];
     if (htmlSiteName) {
-      const prev = agrupado[ean].sites[htmlSiteName];
+      const prev = item.sites[htmlSiteName];
       if (!prev || new Date(dt) > new Date(prev.data)) {
-        agrupado[ean].sites[htmlSiteName] = { precoRaw, precoNum, data: dt };
+        item.sites[htmlSiteName] = { precoRaw, precoNum, data: dt };
       }
     }
   }
-
-  produtos = Object.values(agrupado);
-  aplicarFiltros(true);
-  renderFavs();
-  updateFavHeight();
-  updateCounts();
-  setStatus(`Carregado: ${produtos.length} SKUs`);
+  // Atualiza lista ordenável (mantém ordem de inserção)
+  produtosList = Array.from(produtosMap.values());
 }
 
-function aplicarFiltros(reset=false){
-  const eanQ = eanFilter.value.trim().toLowerCase();
-  const descQ = descFilter.value.trim().toLowerCase();
-
-  filteredGeneral = produtos.filter(p => {
-    const okEan = !eanQ || p.sku.toLowerCase().includes(eanQ);
-    const okDesc = !descQ || (p.desc || '').toLowerCase().includes(descQ);
-    return okEan && okDesc;
-  });
-
-  if (reset) resetGeneral(); else { generalBody.innerHTML=''; resetGeneral(); }
-  updateCounts();
-}
-
-function resetGeneral(){
-  generalBody.innerHTML = '';
-  generalChkMap.clear();
-  itemsLoaded = 0;
-  renderGeneralChunk();
-}
+/* ======== RENDER ======== */
 function renderGeneralChunk(){
-  const end = Math.min(itemsLoaded + itemsPerLoad, filteredGeneral.length);
+  const end = Math.min(itemsRendered + RENDER_CHUNK, produtosList.length);
   const frag = document.createDocumentFragment();
 
-  for (let i = itemsLoaded; i < end; i++){
-    const item = filteredGeneral[i];
+  for (let i = itemsRendered; i < end; i++){
+    const item = produtosList[i];
     const tr = document.createElement('tr');
 
+    // Fav
     const tdFav = document.createElement('td');
     tdFav.className = 'col-fav';
     const chk = document.createElement('input');
@@ -426,16 +422,19 @@ function renderGeneralChunk(){
     tr.appendChild(tdFav);
     generalChkMap.set(item.sku, chk);
 
+    // EAN
     const tdSku = document.createElement('td');
     tdSku.className = 'col-sku';
     tdSku.textContent = item.sku;
     tr.appendChild(tdSku);
 
+    // Descrição
     const tdDesc = document.createElement('td');
     tdDesc.className = 'col-desc';
     tdDesc.innerHTML = (item.desc || '').replace(/</g,'&lt;');
     tr.appendChild(tdDesc);
 
+    // Preços
     const { minSite, maxSite } = computeMinMaxForRow(item);
     for (const s of siteOrder) {
       const td = document.createElement('td');
@@ -460,22 +459,42 @@ function renderGeneralChunk(){
   }
 
   generalBody.appendChild(frag);
-  itemsLoaded = end;
-  endMarker.textContent = (itemsLoaded >= filteredGeneral.length) ? 'Fim da lista' : '';
+  itemsRendered = end;
+
+  endMarker.textContent = (serverExhausted && itemsRendered >= produtosList.length)
+    ? 'Fim da lista'
+    : '';
+  updateCounts();
+}
+function resetGeneralDom(){
+  generalBody.innerHTML = '';
+  generalChkMap.clear();
+  itemsRendered = 0;
+  endMarker.textContent = '';
 }
 function onGeneralScroll(){
   if (loadingMore) return;
+
   const nearBottom = generalWrap.scrollTop + generalWrap.clientHeight >= generalWrap.scrollHeight - 100;
-  if (nearBottom && itemsLoaded < filteredGeneral.length){
+
+  // Primeiro: render pendências do que já temos na memória
+  if (nearBottom && itemsRendered < produtosList.length){
     loadingMore = true;
-    setTimeout(()=>{ renderGeneralChunk(); loadingMore = false; }, 50);
+    setTimeout(()=>{ renderGeneralChunk(); loadingMore = false; }, 30);
+    return;
+  }
+
+  // Se já renderizou tudo que tem e ainda há servidor a consultar, busca próxima página
+  if (nearBottom && !serverExhausted && !fetching){
+    fetchNextPage();
   }
 }
 generalWrap.addEventListener('scroll', onGeneralScroll);
 
+/* ======== FAVORITOS ======== */
 function renderFavs(){
   favBody.innerHTML = '';
-  const favList = produtos.filter(p => isFav(p.sku));
+  const favList = produtosList.filter(p => isFav(p.sku));
   const frag = document.createDocumentFragment();
 
   for (const item of favList){
@@ -542,6 +561,7 @@ function renderFavs(){
   favBody.appendChild(frag);
 }
 
+/* ======== TOGGLE SEÇÕES ======== */
 function attachToggle(panel, button){
   function setState(expanded){
     panel.classList.toggle('collapsed', !expanded);
@@ -557,34 +577,109 @@ function attachToggle(panel, button){
 attachToggle(favPanel, toggleFavBtn);
 attachToggle(generalPanel, toggleGenBtn);
 
-btnReload.addEventListener('click', async ()=>{ await buscarDados(); });
-btnSair.addEventListener('click', async ()=>{
-  await sb.auth.signOut();
-  localStorage.removeItem('mm_login_start');
-  window.location.href = CFG.SITE_URL || 'index.html';
-});
-eanFilter.addEventListener('input', ()=>aplicarFiltros(true));
-descFilter.addEventListener('input', ()=>aplicarFiltros(true));
-
+/* ======== CONTADORES ======== */
 function updateCounts(){
-  const total = produtos.length;
   const favs = favSet.size;
-  const shown = itemsLoaded;
-  countShown.textContent = `Exibindo ${shown} de ${filteredGeneral.length} no Geral (filtrados)`;
-  countTotal.textContent = `Total de SKUs: ${total}`;
+  countShown.textContent = `Exibindo ${itemsRendered} de ${produtosList.length} no Geral (carregados)`;
+  countTotal.textContent = serverExhausted ? `Total de SKUs carregados: ${produtosList.length}` : `Carregando… (${produtosList.length}+ )`;
   countFavs.textContent = `Favoritos: ${favs}`;
 }
 
-/* === util: obter base de Edge Functions a partir do SUPABASE_URL === */
-function getFunctionsBaseFromSupabaseUrl(urlStr){
-  try{
-    const u = new URL(urlStr);
-    const projectRef = u.host.split('.supabase.co')[0];
-    return `https://${projectRef}.functions.supabase.co`;
-  }catch{ return '/functions/v1'; }
+/* ======== CONSULTA SERVIDOR (PAGINADA) ======== */
+function buildQuery(){
+  let q = sb
+    .from(VIEW)
+    .select('ean, site, preco, data, descricao, preco_num', { count: 'estimated' })
+    .order('data', { ascending: false });
+
+  if (currentEanQ) {
+    // filtro contém/ilike
+    q = q.ilike('ean', `%${currentEanQ}%`);
+  }
+  if (currentDescQ) {
+    q = q.ilike('descricao', `%${currentDescQ}%`);
+  }
+  return q;
 }
 
-/* === carregar sessão e plano === */
+async function fetchNextPage(){
+  if (fetching || serverExhausted) return;
+  fetching = true;
+  hideErr();
+  setStatus(`Carregando dados… (offset ${serverOffset})`);
+
+  try{
+    const from = serverOffset;
+    const to = serverOffset + PAGE_SIZE - 1;
+
+    const { data, error } = await buildQuery().range(from, to);
+    if (error) throw error;
+
+    if (!data || data.length === 0) {
+      serverExhausted = true;
+      setStatus('Todos os dados carregados.');
+      // Só marca fim se também não há nada pendente pra render
+      if (itemsRendered >= produtosList.length) {
+        endMarker.textContent = 'Fim da lista';
+      }
+    } else {
+      upsertRowsIntoProdutos(data);
+
+      // Renderiza próximo chunk (mantém a rolagem fluida)
+      if (itemsRendered < produtosList.length) {
+        renderGeneralChunk();
+      }
+
+      // Avança offset para a próxima página
+      serverOffset += PAGE_SIZE;
+      setStatus(`Carregados: ${produtosList.length} SKUs (parcial)`);
+    }
+  } catch(e){
+    console.error(e);
+    showErr('Falha ao carregar: ' + (e?.message || e));
+    setStatus('Erro ao carregar.');
+  } finally {
+    fetching = false;
+    updateCounts();
+  }
+}
+
+/* ======== RESET DE CONSULTA ======== */
+function resetAndQuery(){
+  // Estado de consulta
+  produtosMap.clear();
+  produtosList = [];
+  serverOffset = 0;
+  serverExhausted = false;
+
+  // DOM
+  resetGeneralDom();
+  renderFavs();
+  updateFavHeight();
+  updateCounts();
+
+  // Dispara primeira página
+  fetchNextPage();
+}
+
+/* ======== EVENTOS UI ======== */
+btnReload.addEventListener('click', () => {
+  // Recarrega mantendo filtros atuais
+  resetAndQuery();
+});
+
+const onFilterInput = debounce(() => {
+  currentEanQ = (eanFilter.value || '').trim();
+  currentDescQ = (descFilter.value || '').trim();
+
+  // Nova consulta na base respeitando filtros (com debounce 500ms)
+  resetAndQuery();
+}, 500);
+
+eanFilter.addEventListener('input', onFilterInput);
+descFilter.addEventListener('input', onFilterInput);
+
+/* ======== HEADER INFO ======== */
 async function loadHeaderInfo(){
   const { data: { session } } = await sb.auth.getSession();
   if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return null; }
@@ -608,11 +703,20 @@ async function loadHeaderInfo(){
   return session;
 }
 
-/* ====== Init ====== */
+/* ======== INIT ======== */
 (async function init(){
   const session = await loadHeaderInfo(); if (!session) return;
   enforceMaxSession();
-  await buscarDados();
+
+  // Inicia com filtros vazios
+  currentEanQ = '';
+  currentDescQ = '';
+
+  // Primeira carga paginada
+  resetAndQuery();
+
+  // Garante que ao rolar no início também puxe páginas
+  generalWrap.dispatchEvent(new Event('scroll'));
 })();
 </script>
 </body>
