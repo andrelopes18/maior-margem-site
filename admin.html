@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+const supabase = window.__supabase || window.supabase?.createClient(window.CONFIG_SUPABASE_URL, window.CONFIG_SUPABASE_ANON_KEY);<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
@@ -7,9 +7,15 @@
   <!-- Tailwind (CDN) - opcional para visual bonito rápido -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Supabase JS v2 -->
-  <!-- Carrega UMD para usar window.supabase (ou trocaremos para ESM logo abaixo) -->
-<!-- <script type="module" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script> -->
+  <!-- Supabase UMD (window.supabase) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+
+<!-- Defina suas variáveis ANTES de tudo -->
+<script>
+  // Substitua pelos valores reais do seu projeto
+  window.CONFIG_SUPABASE_URL = window.CONFIG_SUPABASE_URL || 'https://<SEU-PROJETO>.supabase.co';
+  window.CONFIG_SUPABASE_ANON_KEY = window.CONFIG_SUPABASE_ANON_KEY || '<SUA-ANON-KEY>';
+</script>
   <style>
     /* Evitar FOUC dos cards */
     .skeleton { background: repeating-linear-gradient(90deg, #e5e7eb, #e5e7eb 10px, #f3f4f6 10px, #f3f4f6 20px); animation: shimmer 1.2s linear infinite; }
@@ -17,19 +23,38 @@
   </style>
 </head>
 <body class="bg-slate-100 min-h-screen">
-  <!-- Guarda de autenticação ANTES de renderizar (evita abrir sem login) -->
-  <script type="module">
-    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'
-    const SUPABASE_URL = window?.CONFIG_SUPABASE_URL || "https://<YOUR-PROJECT-REF>.supabase.co";
-    const SUPABASE_ANON_KEY = window?.CONFIG_SUPABASE_ANON_KEY || "<YOUR-ANON-KEY>";
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
-      window.location.replace('index.html')
+  <!-- Guarda de autenticação ANTES de renderizar (sem top-level await) -->
+<script>
+  (async () => {
+    try {
+      const SUPABASE_URL = window.CONFIG_SUPABASE_URL;
+      const SUPABASE_ANON_KEY = window.CONFIG_SUPABASE_ANON_KEY;
+
+      // Validação simples para evitar "Invalid URL"
+      const urlOk = typeof SUPABASE_URL === 'string' && /^https:\/\/.+\.supabase\.co\/?$/.test(SUPABASE_URL);
+      const keyOk = typeof SUPABASE_ANON_KEY === 'string' && SUPABASE_ANON_KEY.length > 20;
+      if (!urlOk || !keyOk) {
+        console.error('CONFIG_SUPABASE_URL/ANON_KEY inválidos.');
+        window.location.replace('index.html');
+        return;
+      }
+
+      const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      const { data: { session }, error } = await supabase.auth.getSession();
+      if (error) console.warn('getSession error', error);
+      if (!session) {
+        window.location.replace('index.html');
+        return;
+      }
+      // expõe a instância para os demais scripts
+      window.__supabase = supabase;
+      window.__currentSession = session;
+    } catch (e) {
+      console.error('Guard de autenticação falhou:', e);
+      window.location.replace('index.html');
     }
-    // injeta no window para o script principal reaproveitar a instância
-    window.__supabase = supabase
-  </script>
+  })();
+</script>
   <header class="bg-slate-900 text-white">
     <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
       <h1 class="text-xl font-semibold">Painel Administrativo</h1>
