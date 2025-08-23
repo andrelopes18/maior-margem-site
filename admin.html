@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Painel Administrativo</title>
+  <!-- Tailwind (CDN) - opcional para visual bonito rápido -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Supabase JS v2 -->
+  <script type="module" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    /* Evitar FOUC dos cards */
+    .skeleton { background: repeating-linear-gradient(90deg, #e5e7eb, #e5e7eb 10px, #f3f4f6 10px, #f3f4f6 20px); animation: shimmer 1.2s linear infinite; }
+    @keyframes shimmer { 0% { background-position: -40px 0 } 100% { background-position: 40px 0 } }
+  </style>
+</head>
+<body class="bg-slate-100 min-h-screen">
+  <header class="bg-slate-900 text-white">
+    <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+      <h1 class="text-xl font-semibold">Painel Administrativo</h1>
+      <div class="flex items-center gap-3">
+        <span id="userEmail" class="text-sm opacity-90"></span>
+        <button id="btnSair" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm">Sair</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-6">
+    <!-- ALERTA: Acesso restrito -->
+    <div id="adminAlert" class="hidden mb-4 p-3 rounded-lg bg-red-100 text-red-800 text-sm"></div>
+
+    <!-- Cards de Métricas -->
+    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="p-5 rounded-2xl bg-white shadow-sm">
+        <div class="text-slate-500 text-sm">Usuários cadastrados (total)</div>
+        <div id="totalUsers" class="mt-1 text-3xl font-semibold">—</div>
+      </div>
+      <div class="p-5 rounded-2xl bg-white shadow-sm">
+        <div class="text-slate-500 text-sm">Usuários cadastrados (mês)</div>
+        <div id="monthUsers" class="mt-1 text-3xl font-semibold">—</div>
+      </div>
+      <div class="p-5 rounded-2xl bg-white shadow-sm">
+        <div class="text-slate-500 text-sm">Produtos cadastrados</div>
+        <div id="totalProducts" class="mt-1 text-3xl font-semibold">—</div>
+      </div>
+      <div class="p-5 rounded-2xl bg-white shadow-sm">
+        <div class="text-slate-500 text-sm">Receita mensal (estimada)</div>
+        <div id="mrr" class="mt-1 text-3xl font-semibold">—</div>
+      </div>
+    </section>
+
+    <!-- Usuários por Plano -->
+    <section class="mt-6 p-5 rounded-2xl bg-white shadow-sm">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-semibold">Usuários por plano</h2>
+        <button id="btnRefresh" class="text-sm px-3 py-1.5 rounded-lg bg-slate-900 text-white hover:bg-slate-800">Atualizar</button>
+      </div>
+      <div id="plansWrap" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3"></div>
+    </section>
+
+    <!-- Tabela de Usuários -->
+    <section class="mt-6 p-5 rounded-2xl bg-white shadow-sm">
+      <div class="flex items-center justify-between gap-3 mb-4">
+        <h2 class="text-lg font-semibold">Todos os usuários</h2>
+        <div class="flex items-center gap-2">
+          <input id="qUser" type="text" placeholder="Buscar por email ou nome..." class="px-3 py-2 rounded-lg border w-64" />
+          <button id="btnBuscar" class="px-3 py-2 rounded-lg bg-slate-900 text-white text-sm">Buscar</button>
+        </div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr class="text-left text-slate-500 border-b">
+              <th class="py-2 pr-4">Nome</th>
+              <th class="py-2 pr-4">Email</th>
+              <th class="py-2 pr-4">Plano</th>
+              <th class="py-2 pr-4">Preço (R$)</th>
+              <th class="py-2 pr-4">Criado em</th>
+              <th class="py-2 pr-4">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="usersTbody"></tbody>
+        </table>
+      </div>
+      <div class="flex items-center justify-between mt-4">
+        <button id="prevPage" class="px-3 py-1.5 rounded-lg bg-slate-200">Anterior</button>
+        <span id="pageInfo" class="text-slate-500 text-sm">Página 1</span>
+        <button id="nextPage" class="px-3 py-1.5 rounded-lg bg-slate-200">Próxima</button>
+      </div>
+    </section>
+  </main>
+
+  <template id="userRowTpl">
+    <tr class="border-b hover:bg-slate-50">
+      <td class="py-2 pr-4 font-medium text-slate-800" data-el="name">—</td>
+      <td class="py-2 pr-4 text-slate-700" data-el="email">—</td>
+      <td class="py-2 pr-4" data-el="plan">—</td>
+      <td class="py-2 pr-4" data-el="price">—</td>
+      <td class="py-2 pr-4 text-slate-500" data-el="created">—</td>
+      <td class="py-2 pr-4" data-el="actions"></td>
+    </tr>
+  </template>
+
+  <script>
+    // ======= CONFIGURE: sua URL e chave anônima do Supabase =======
+    const SUPABASE_URL = window?.CONFIG_SUPABASE_URL || "https://<YOUR-PROJECT-REF>.supabase.co";
+    const SUPABASE_ANON_KEY = window?.CONFIG_SUPABASE_ANON_KEY || "<YOUR-ANON-KEY>";
+
+    // ======= TABELAS/VIEW esperadas =======
+    // profiles: { id(uuid), email, name, plan, plan_price_cents, created_at, is_active (bool), role }
+    // CadastroProdutos: { ... } — usada apenas para contagem.
+    // subscriptions (opcional): { status, price_cents, ... } — se existir, tentamos somar receita a partir dela.
+
+    const { createClient } = window.supabase;
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const state = {
+      page: 1,
+      pageSize: 20,
+      q: "",
+      session: null,
+      user: null,
+      isAdmin: false,
+    };
+
+    const userEmailEl = document.getElementById('userEmail');
+    const adminAlertEl = document.getElementById('adminAlert');
+
+    const elTotalUsers = document.getElementById('totalUsers');
+    const elMonthUsers = document.getElementById('monthUsers');
+    const elTotalProducts = document.getElementById('totalProducts');
+    const elMRR = document.getElementById('mrr');
+
+    const plansWrap = document.getElementById('plansWrap');
+    const usersTbody = document.getElementById('usersTbody');
+    const pageInfo = document.getElementById('pageInfo');
+
+    const btnRefresh = document.getElementById('btnRefresh');
+    const btnBuscar = document.getElementById('btnBuscar');
+    const qUser = document.getElementById('qUser');
+    const prevPage = document.getElementById('prevPage');
+    const nextPage = document.getElementById('nextPage');
+    const btnSair = document.getElementById('btnSair');
+
+    // ======= Boot =======
+    document.addEventListener('DOMContentLoaded', async () => {
+      await ensureSession();
+      await guardAdmin();
+      await loadAll();
+    });
+
+    btnSair.addEventListener('click', async () => {
+      await supabase.auth.signOut();
+      window.location.href = 'index.html';
+    });
+
+    btnRefresh.addEventListener('click', loadAll);
+    btnBuscar.addEventListener('click', () => { state.q = qUser.value.trim(); state.page = 1; loadUsersTable(); });
+    prevPage.addEventListener('click', () => { if (state.page > 1) { state.page--; loadUsersTable(); } });
+    nextPage.addEventListener('click', () => { state.page++; loadUsersTable(); });
+
+    // ======= Sessão & Autorização =======
+    async function ensureSession() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        window.location.href = 'index.html';
+        return;
+      }
+      state.session = session;
+      state.user = session.user;
+      userEmailEl.textContent = state.user.email || '';
+    }
+
+    async function guardAdmin() {
+      // Estratégias de checagem:
+      // 1) user.user_metadata.role === 'admin'
+      // 2) profiles.role === 'admin' (consulta rápida)
+      let isAdmin = false;
+      const roleMeta = state.user?.user_metadata?.role;
+      if (roleMeta === 'admin') isAdmin = true;
+      else {
+        const { data, error } = await supabase.from('profiles').select('role').eq('id', state.user.id).maybeSingle();
+        if (!error && data && data.role === 'admin') isAdmin = true;
+      }
+
+      state.isAdmin = isAdmin;
+      if (!isAdmin) {
+        adminAlertEl.textContent = 'Acesso negado. Esta página é exclusiva para administradores.';
+        adminAlertEl.classList.remove('hidden');
+        // Opcional: redirecionar após 2s
+        setTimeout(() => window.location.href = 'dashboard.html', 1800);
+        throw new Error('not-admin');
+      }
+    }
+
+    async function loadAll() {
+      await Promise.all([
+        loadStats(),
+        loadPlansDistribution(),
+        loadUsersTable(),
+      ]);
+    }
+
+    // ======= Métricas =======
+    async function loadStats() {
+      // Total de usuários
+      const totalUsers = await countRows('profiles');
+      elTotalUsers.textContent = formatNumber(totalUsers);
+
+      // Usuários no mês atual
+      const firstDay = new Date();
+      firstDay.setDate(1); firstDay.setHours(0,0,0,0);
+      const { count: monthCount } = await selectWithCount('profiles', q => q.gte('created_at', firstDay.toISOString()));
+      elMonthUsers.textContent = formatNumber(monthCount || 0);
+
+      // Produtos (CadastroProdutos)
+      const totalProducts = await countRows('CadastroProdutos');
+      elTotalProducts.textContent = formatNumber(totalProducts);
+
+      // Receita mensal recorrente (estimada)
+      const mrr = await computeMRR();
+      elMRR.textContent = mrr != null ? formatCurrencyBRL(mrr / 100) : '—';
+    }
+
+    async function countRows(table) {
+      const { count, error } = await supabase.from(table).select('*', { count: 'exact', head: true });
+      if (error) { console.warn('countRows error', table, error); return 0; }
+      return count || 0;
+    }
+
+    async function selectWithCount(table, build) {
+      let query = supabase.from(table).select('*', { count: 'exact', head: true });
+      if (build) query = build(query);
+      const { count, error } = await query;
+      if (error) { console.warn('selectWithCount error', table, error); return { count: 0, error }; }
+      return { count };
+    }
+
+    async function computeMRR() {
+      // Estratégia 1: usar tabela subscriptions (se existir)
+      try {
+        const { data, error } = await supabase.from('subscriptions').select('status, price_cents');
+        if (!error && Array.isArray(data)) {
+          const active = data.filter(x => (x.status || '').toLowerCase() === 'active');
+          const total = active.reduce((acc, x) => acc + (x.price_cents || 0), 0);
+          return total; // em centavos
+        }
+      } catch (e) { console.warn('subscriptions not available'); }
+
+      // Estratégia 2: somar de profiles (aproximação)
+      const { data: profiles, error: e2 } = await supabase
+        .from('profiles')
+        .select('plan, plan_price_cents, is_active');
+      if (e2) { console.warn('MRR profiles error', e2); return null; }
+      const paid = (profiles || []).filter(p => (p.is_active ?? true) && !['free', 'trial', null, ''].includes((p.plan || '').toLowerCase()));
+      const total = paid.reduce((acc, p) => acc + (p.plan_price_cents || 0), 0);
+      return total; // em centavos
+    }
+
+    // ======= Distribuição por plano =======
+    async function loadPlansDistribution() {
+      plansWrap.innerHTML = '';
+      const { data, error } = await supabase.from('profiles').select('plan');
+      if (error) { plansWrap.textContent = 'Erro ao carregar.'; return; }
+      const map = new Map();
+      (data || []).forEach(p => {
+        const key = (p.plan || 'sem_plano').toString();
+        map.set(key, (map.get(key) || 0) + 1);
+      });
+      for (const [plan, qty] of map.entries()) {
+        const card = document.createElement('div');
+        card.className = 'p-4 rounded-xl border bg-white';
+        card.innerHTML = `<div class="text-slate-500 text-sm">${escapeHtml(plan)}</div>
+                          <div class="text-2xl font-semibold">${formatNumber(qty)}</div>`;
+        plansWrap.appendChild(card);
+      }
+    }
+
+    // ======= Tabela de usuários =======
+    async function loadUsersTable() {
+      usersTbody.innerHTML = '';
+      const from = (state.page - 1) * state.pageSize;
+      const to = from + state.pageSize - 1;
+
+      let query = supabase
+        .from('profiles')
+        .select('id, name, email, plan, plan_price_cents, created_at', { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+      if (state.q) {
+        // Busca simples por ILIKE em name ou email
+        // Sugestão: criar um índice para melhorar performance
+        query = query.ilike('email', `%${state.q}%`).or(`name.ilike.%${state.q}%`);
+      }
+
+      const { data, count, error } = await query;
+      if (error) { console.error(error); return; }
+
+      (data || []).forEach(row => addUserRow(row));
+      const totalPages = Math.max(1, Math.ceil((count || 0) / state.pageSize));
+      pageInfo.textContent = `Página ${state.page} de ${totalPages}`;
+      nextPage.disabled = state.page >= totalPages;
+      prevPage.disabled = state.page <= 1;
+    }
+
+    function addUserRow(row) {
+      const tpl = document.getElementById('userRowTpl');
+      const tr = tpl.content.cloneNode(true);
+      tr.querySelector('[data-el="name"]').textContent = row.name || '—';
+      tr.querySelector('[data-el="email"]').textContent = row.email || '—';
+      tr.querySelector('[data-el="plan"]').textContent = row.plan || '—';
+      tr.querySelector('[data-el="price"]').textContent = (row.plan_price_cents != null) ? (row.plan_price_cents / 100).toFixed(2) : '—';
+      tr.querySelector('[data-el="created"]').textContent = formatDate(row.created_at);
+
+      const actions = tr.querySelector('[data-el="actions"]');
+      const sel = document.createElement('select');
+      sel.className = 'px-2 py-1 rounded border';
+      ['free', 'trial', 'basic', 'pro', 'enterprise', 'admin'].forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p; opt.textContent = p; if ((row.plan || '').toLowerCase() === p) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      const inpPrice = document.createElement('input');
+      inpPrice.type = 'number'; inpPrice.step = '1'; inpPrice.min = '0'; inpPrice.placeholder = 'Preço (centavos)';
+      inpPrice.value = row.plan_price_cents ?? '';
+      inpPrice.className = 'px-2 py-1 rounded border w-36 ml-2';
+      const btnSave = document.createElement('button');
+      btnSave.textContent = 'Salvar';
+      btnSave.className = 'ml-2 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-sm hover:bg-emerald-500';
+      btnSave.addEventListener('click', async () => {
+        await updateUserPlan(row.id, sel.value, inpPrice.value);
+      });
+      actions.appendChild(sel);
+      actions.appendChild(inpPrice);
+      actions.appendChild(btnSave);
+
+      usersTbody.appendChild(tr);
+    }
+
+    async function updateUserPlan(id, plan, priceCents) {
+      if (!confirm('Confirmar alteração de plano deste usuário?')) return;
+      const price = Number(priceCents);
+      const { error } = await supabase.from('profiles').update({ plan, plan_price_cents: isNaN(price) ? null : price }).eq('id', id);
+      if (error) {
+        alert('Erro ao salvar: ' + error.message);
+      } else {
+        alert('Plano atualizado com sucesso.');
+        await Promise.all([loadPlansDistribution(), loadStats(), loadUsersTable()]);
+      }
+    }
+
+    // ======= Utils =======
+    function formatNumber(n) { return new Intl.NumberFormat('pt-BR').format(n || 0); }
+    function formatCurrencyBRL(n) { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n || 0); }
+    function formatDate(iso) { if (!iso) return '—'; const d = new Date(iso); return d.toLocaleDateString('pt-BR', { year: 'numeric', month: '2-digit', day: '2-digit' }); }
+    function escapeHtml(s) { return (s ?? '').toString().replace(/[&<>"]+/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  </script>
+</body>
+</html>
