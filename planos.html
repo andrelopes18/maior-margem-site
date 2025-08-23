@@ -147,7 +147,10 @@ async function ensureSessionAndPlan(){
       .maybeSingle();
     if (error) throw error;
 
-    currentPlan = (data?.plan || 'trial').toString();
+    // 👇 FIX 1: normalizar o plano vindo do banco (antes era sem normalizar) 
+    // (no seu arquivo anterior isto estava como .toString() puro) 
+    currentPlan = normalizePlanKey((data?.plan || 'trial').toString());
+
     subState.cancel_at_period_end = !!data?.cancel_at_period_end;
     subState.current_period_end = data?.current_period_end || null;
   }catch(e){
@@ -162,7 +165,7 @@ async function ensureSessionAndPlan(){
 
   // Status de cancelamento agendado
   renderStatusChip();
-  // Estado do botão cancelar
+  // Estado do botão cancelar (agora funciona mesmo que o banco tenha "Trial"/"trial"/"TRIAL")
   btnCancelar.disabled = subState.cancel_at_period_end || currentPlan === 'trial';
 
   return session;
@@ -311,6 +314,18 @@ btnCancelar.addEventListener('click', async ()=>{
   } catch (err){
     console.error(err);
     showBanner('Erro ao carregar planos. Confira as políticas RLS ou sua conexão.', 'err');
+  }
+})();
+
+/* 👇 FIX 2: auto‑refresh ao voltar do checkout com ?return=ok */
+(function autoRefreshAfterReturn(){
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('return') === 'ok') {
+    ensureSessionAndPlan().then(async () => {
+      const plans = await loadPlans();
+      renderPlans(plans);
+      showBanner('Assinatura atualizada após o pagamento.', 'ok');
+    });
   }
 })();
 </script>
