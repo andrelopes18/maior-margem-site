@@ -42,6 +42,7 @@
 
   <!-- Esconde conteúdo até validar autenticação -->
   <main id="appRoot" class="max-w-7xl mx-auto px-4 py-6 hidden">
+    <div id="bootInfo" class="mb-4 text-sm text-slate-500">Carregando painel...</div>
     <!-- ALERTA: Acesso restrito -->
     <div id="adminAlert" class="hidden mb-4 p-3 rounded-lg bg-red-100 text-red-800 text-sm"></div>
 
@@ -124,7 +125,7 @@
 
     // ======= TABELAS/VIEW esperadas =======
     // profiles: { id(uuid), email, name, plan, plan_price_cents, created_at, is_active (bool), role }
-    // cadastro_produtos: { ... } — usada apenas para contagem.
+    // CadastroProdutos: { ... } — usada apenas para contagem.
     // subscriptions (opcional): { status, price_cents, ... } — se existir, tentamos somar receita a partir dela.
 
     // Usa a instância criada no guard (evita condição de corrida e UMD/ESM mix)
@@ -160,8 +161,10 @@
 
     // ======= Boot =======
     document.addEventListener('DOMContentLoaded', async () => {
-      await ensureSession();
-      await guardAdmin();
+      const okSession = await ensureSession();
+      if (!okSession) return;
+      const okAdmin = await guardAdmin();
+      if (!okAdmin) return;
       // mostra app somente após passar pelos guards
       document.getElementById('appRoot')?.classList.remove('hidden');
       await loadAll();
@@ -182,6 +185,29 @@
 
     // ======= Sessão & Autorização =======
     async function ensureSession() {
+      try {
+        const client = window.__supabase || window.supabase?.createClient?.(SUPABASE_URL, SUPABASE_ANON_KEY)
+        if (!client) {
+          console.error('Supabase client não encontrado')
+          window.location.replace('index.html')
+          return false
+        }
+        const { data: { session }, error } = await client.auth.getSession()
+        if (error) console.warn('getSession error', error)
+        if (!session) {
+          window.location.replace('index.html')
+          return false
+        }
+        state.session = session;
+        state.user = session.user;
+        userEmailEl.textContent = state.user.email || '';
+        return true
+      } catch (e) {
+        console.error('ensureSession falhou', e)
+        window.location.replace('index.html')
+        return false
+      }
+    } {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         window.location.href = 'index.html';
@@ -193,6 +219,32 @@
     }
 
     async function guardAdmin() {
+      try {
+        let isAdmin = false;
+        const roleMeta = state.user?.user_metadata?.role;
+        if (roleMeta === 'admin') isAdmin = true;
+        if (!isAdmin) {
+          const { data, error } = await (window.__supabase)
+            .from('profiles').select('role').eq('id', state.user.id).maybeSingle();
+          if (error) console.warn('profiles.role check error', error)
+          if (!error && data && data.role === 'admin') isAdmin = true;
+        }
+        state.isAdmin = isAdmin;
+        if (!isAdmin) {
+          adminAlertEl.textContent = 'Acesso negado. Esta página é exclusiva para administradores.';
+          adminAlertEl.classList.remove('hidden');
+          setTimeout(() => window.location.replace('dashboard.html'), 1500);
+          return false;
+        }
+        return true;
+      } catch (e) {
+        console.error('guardAdmin falhou', e)
+        adminAlertEl.textContent = 'Erro ao validar permissão. Redirecionando...';
+        adminAlertEl.classList.remove('hidden');
+        setTimeout(() => window.location.replace('dashboard.html'), 1500);
+        return false;
+      }
+    } {
       // Estratégias de checagem:
       // 1) user.user_metadata.role === 'admin'
       // 2) profiles.role === 'admin' (consulta rápida)
@@ -210,7 +262,8 @@
         adminAlertEl.classList.remove('hidden');
         // Opcional: redirecionar após 2s
         setTimeout(() => window.location.href = 'dashboard.html', 1800);
-        throw new Error('not-admin');
+        // não interrompe o restante do script para evitar ficar tudo "em branco"
+        return false;
       }
     }
 
@@ -234,8 +287,8 @@
       const { count: monthCount } = await selectWithCount('profiles', q => q.gte('created_at', firstDay.toISOString()));
       elMonthUsers.textContent = formatNumber(monthCount || 0);
 
-      // Produtos (cadastro_produtos)
-      const totalProducts = await countRows('cadastro_produtos');
+      // Produtos (CadastroProdutos)
+      const totalProducts = await countRows('CadastroProdutos');
       elTotalProducts.textContent = formatNumber(totalProducts);
 
       // Receita mensal recorrente (estimada)
@@ -312,7 +365,7 @@
       if (state.q) {
         // Busca simples por ILIKE em name ou email
         // Sugestão: criar um índice para melhorar performance
-        query = query.ilike('email', `%${state.q}%`).or(`name.ilike.%${state.q}%`);
+        query = query.or(`email.ilike.%${state.q}%,name.ilike.%${state.q}%`);
       }
 
       const { data, count, error } = await query;
