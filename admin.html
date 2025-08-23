@@ -313,7 +313,7 @@
 
       let query = window.__supabase
         .from('profiles')
-        .select('id, name, email, plan, plan_price_cents, created_at', { count: 'exact' })
+        .select('id, first_name, email, plan, plan_price_cents, created_at', { count: 'exact' })
         .order('created_at', { ascending: false })
         .range(from, to);
 
