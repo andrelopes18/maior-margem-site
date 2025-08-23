@@ -46,7 +46,8 @@
   }
   .dd-item:hover { background: #1b1b1b; }
 
-  .panel { background:#262626; border:1px solid #2a2a2a; border-radius:12px; padding:12px; margin-bottom:18px; }
+  /* Painéis mais claros */
+  .panel { background:#202020; border:1px solid #2a2a2a; border-radius:12px; padding:12px; margin-bottom:18px; }
   .panel-header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }
   .panel-header h2 { margin:0; font-size:18px; color:#d5ffd5; }
   .toggle-btn { background:none; border:1px solid #2a2a2a; color:#ddd; padding:6px 10px; border-radius:8px; cursor:pointer; }
@@ -62,7 +63,7 @@
 
   table { width:100%; border-collapse: collapse; }
   thead th { position:sticky; top:0; background:#0f0f0f; z-index:1; }
-  th, td { border-bottom:1px solid #2a2a2a; padding:10px; text-align:left; font-size:12px; vertical-align:top; }
+  th, td { border-bottom:1px solid #2a2a2a; padding:10px; text-align:left; font-size:14px; vertical-align:top; }
   tbody tr:hover { background:#1a1a1a; }
 
   .col-fav { width:40px; text-align:center; }
@@ -188,7 +189,6 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) { alert("Erro de configuração: config
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
 
 /* ======== CONSTANTES ======== */
-const MAX_SESSION_MS = 2 * 60 * 60 * 1000;
 const VIEW = "vw_precos_com_desc";
 
 /* Paginação no servidor e chunk de renderização */
@@ -242,7 +242,7 @@ let favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
 
 /* Produtos agregados: Map<ean, { sku, desc, sites{} }> */
 let produtosMap = new Map();
-/* Lista para render ordenada por EAN (ou chegada) */
+/* Lista para render na ordem de inserção */
 let produtosList = [];
 /* Posição de render no DOM */
 let itemsRendered = 0;
@@ -260,6 +260,67 @@ let currentDescQ = '';
 let loadingMore = false;
 let suppressGeneralChange = false;
 const generalChkMap = new Map();
+
+/* ======== SINGLE-SESSION (sessão única por usuário) ======== */
+const SESSION_HEARTBEAT_MS = 30_000;     // 30s
+const SESSION_LIVE_WINDOW_MS = 90_000;   // 90s
+const SESSION_ID = (crypto?.randomUUID?.() || Math.random().toString(36).slice(2));
+
+async function ensureSingleSession(session) {
+  const userId = session.user.id;
+  const now = new Date();
+
+  // Lê/Cria registro
+  const { data: existing, error: selErr } = await sb
+    .from('active_sessions')
+    .select('user_id, session_id, last_seen')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (existing) {
+    const isLive = new Date(existing.last_seen).getTime() >= (now.getTime() - SESSION_LIVE_WINDOW_MS);
+    const isSame = existing.session_id === SESSION_ID;
+
+    if (isLive && !isSame) {
+      alert('Esta conta já está conectada em outro dispositivo/aba. Feche a outra sessão para continuar.');
+      try { await sb.auth.signOut(); } catch {}
+      window.location.href = CFG.SITE_URL || 'index.html';
+      return false;
+    }
+    const { error: upErr } = await sb
+      .from('active_sessions')
+      .update({ session_id: SESSION_ID, last_seen: new Date().toISOString() })
+      .eq('user_id', userId);
+    if (upErr) console.error('active_sessions update err:', upErr);
+  } else {
+    const { error: insErr } = await sb
+      .from('active_sessions')
+      .insert({ user_id: userId, session_id: SESSION_ID, last_seen: new Date().toISOString() });
+    if (insErr) console.error('active_sessions insert err:', insErr);
+  }
+
+  // Heartbeat
+  setInterval(async () => {
+    await sb.from('active_sessions')
+      .update({ last_seen: new Date().toISOString() })
+      .eq('user_id', userId)
+      .eq('session_id', SESSION_ID);
+  }, SESSION_HEARTBEAT_MS);
+
+  // Limpeza best-effort
+  async function cleanup() {
+    try {
+      await sb.from('active_sessions')
+        .delete()
+        .eq('user_id', userId)
+        .eq('session_id', SESSION_ID);
+    } catch {}
+  }
+  window.addEventListener('beforeunload', cleanup);
+  window.addEventListener('unload', cleanup);
+
+  return true;
+}
 
 /* ======== FUNÇÕES UTIL ======== */
 function setStatus(t){ statusEl.textContent = t || ''; }
@@ -282,27 +343,35 @@ function computeMinMaxForRow(item){
 }
 function debounce(fn, delay=500){
   let t;
-  return (...args)=>{
-    clearTimeout(t);
-    t = setTimeout(()=>fn(...args), delay);
-  };
+  return (...args)=>{ clearTimeout(t); t = setTimeout(()=>fn(...args), delay); };
 }
 
-/* ======== HEADER / SESSÃO ======== */
-function enforceMaxSession(){
-  const key = 'mm_login_start';
-  const now = Date.now();
-  let start = Number(localStorage.getItem(key));
-  if (!Number.isFinite(start) || start <= 0) { localStorage.setItem(key, String(now)); start = now; }
-  async function check(){
-    const s = Number(localStorage.getItem(key));
-    const age = Date.now() - (Number.isFinite(s) ? s : now);
-    if (age > MAX_SESSION_MS) { await sb.auth.signOut(); localStorage.removeItem(key); window.location.href = CFG.SITE_URL || 'index.html'; }
+/* ======== LOGOUT POR VIRADA DE DIA ======== */
+function enforceDayBoundaryLogout() {
+  const key = 'mm_login_date';
+  function getLocalDateStr() {
+    const now = new Date();
+    const fmt = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    const [d, m, y] = fmt.format(now).split('/');
+    return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+  }
+  if (!localStorage.getItem(key)) localStorage.setItem(key, getLocalDateStr());
+
+  async function check() {
+    const current = getLocalDateStr();
+    const stored = localStorage.getItem(key);
+    if (stored && stored !== current) {
+      try { await sb.auth.signOut(); } catch {}
+      localStorage.removeItem('mm_login_date');
+      window.location.href = CFG.SITE_URL || 'index.html';
+    }
   }
   setInterval(check, 60 * 1000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
-  sb.auth.onAuthStateChange((event) => { if (event === 'SIGNED_IN') localStorage.setItem(key, String(Date.now())); if (event === 'SIGNED_OUT') localStorage.removeItem(key); });
+  window.addEventListener('focus', check);
 }
+
+/* ======== HEADER / MENU ======== */
 ddMeusDados.addEventListener('click', () => { window.location.href = 'meusdados.html'; });
 ddPlanos.addEventListener('click', () => { window.location.href = 'planos.html'; });
 userChip.addEventListener('click', (e) => { e.stopPropagation(); userChipWrap.classList.toggle('open'); });
@@ -353,8 +422,7 @@ function updateFavHeight(){
     document.body.classList.remove('resizing');
   }
   favResizer.addEventListener('mousedown', (ev)=>{
-    startY = ev.clientY;
-    startH = favWrap.offsetHeight;
+    startY = ev.clientY; startH = favWrap.offsetHeight;
     document.body.classList.add('resizing');
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', stop);
@@ -390,7 +458,6 @@ function upsertRowsIntoProdutos(rows){
       }
     }
   }
-  // Atualiza lista ordenável (mantém ordem de inserção)
   produtosList = Array.from(produtosMap.values());
 }
 
@@ -460,10 +527,7 @@ function renderGeneralChunk(){
 
   generalBody.appendChild(frag);
   itemsRendered = end;
-
-  endMarker.textContent = (serverExhausted && itemsRendered >= produtosList.length)
-    ? 'Fim da lista'
-    : '';
+  endMarker.textContent = (serverExhausted && itemsRendered >= produtosList.length) ? 'Fim da lista' : '';
   updateCounts();
 }
 function resetGeneralDom(){
@@ -474,17 +538,15 @@ function resetGeneralDom(){
 }
 function onGeneralScroll(){
   if (loadingMore) return;
-
   const nearBottom = generalWrap.scrollTop + generalWrap.clientHeight >= generalWrap.scrollHeight - 100;
 
-  // Primeiro: render pendências do que já temos na memória
+  // Primeiro renderiza o que já temos
   if (nearBottom && itemsRendered < produtosList.length){
     loadingMore = true;
     setTimeout(()=>{ renderGeneralChunk(); loadingMore = false; }, 30);
     return;
   }
-
-  // Se já renderizou tudo que tem e ainda há servidor a consultar, busca próxima página
+  // Depois busca mais páginas
   if (nearBottom && !serverExhausted && !fetching){
     fetchNextPage();
   }
@@ -592,13 +654,8 @@ function buildQuery(){
     .select('ean, site, preco, data, descricao, preco_num', { count: 'estimated' })
     .order('data', { ascending: false });
 
-  if (currentEanQ) {
-    // filtro contém/ilike
-    q = q.ilike('ean', `%${currentEanQ}%`);
-  }
-  if (currentDescQ) {
-    q = q.ilike('descricao', `%${currentDescQ}%`);
-  }
+  if (currentEanQ) q = q.ilike('ean', `%${currentEanQ}%`);
+  if (currentDescQ) q = q.ilike('descricao', `%${currentDescQ}%`);
   return q;
 }
 
@@ -618,19 +675,10 @@ async function fetchNextPage(){
     if (!data || data.length === 0) {
       serverExhausted = true;
       setStatus('Todos os dados carregados.');
-      // Só marca fim se também não há nada pendente pra render
-      if (itemsRendered >= produtosList.length) {
-        endMarker.textContent = 'Fim da lista';
-      }
+      if (itemsRendered >= produtosList.length) endMarker.textContent = 'Fim da lista';
     } else {
       upsertRowsIntoProdutos(data);
-
-      // Renderiza próximo chunk (mantém a rolagem fluida)
-      if (itemsRendered < produtosList.length) {
-        renderGeneralChunk();
-      }
-
-      // Avança offset para a próxima página
+      if (itemsRendered < produtosList.length) renderGeneralChunk();
       serverOffset += PAGE_SIZE;
       setStatus(`Carregados: ${produtosList.length} SKUs (parcial)`);
     }
@@ -646,46 +694,37 @@ async function fetchNextPage(){
 
 /* ======== RESET DE CONSULTA ======== */
 function resetAndQuery(){
-  // Estado de consulta
   produtosMap.clear();
   produtosList = [];
   serverOffset = 0;
   serverExhausted = false;
 
-  // DOM
   resetGeneralDom();
   renderFavs();
   updateFavHeight();
   updateCounts();
 
-  // Dispara primeira página
   fetchNextPage();
 }
 
 /* ======== EVENTOS UI ======== */
-btnReload.addEventListener('click', () => {
-  // Recarrega mantendo filtros atuais
-  resetAndQuery();
-});
+btnReload.addEventListener('click', () => { resetAndQuery(); });
 
 const onFilterInput = debounce(() => {
   currentEanQ = (eanFilter.value || '').trim();
   currentDescQ = (descFilter.value || '').trim();
-
-  // Nova consulta na base respeitando filtros (com debounce 500ms)
-  resetAndQuery();
+  resetAndQuery(); // nova consulta na base respeitando filtros
 }, 500);
 
 eanFilter.addEventListener('input', onFilterInput);
 descFilter.addEventListener('input', onFilterInput);
 
-/* ======== HEADER INFO ======== */
+/* ======== HEADER / SESSÃO ======== */
 async function loadHeaderInfo(){
   const { data: { session } } = await sb.auth.getSession();
   if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return null; }
   userChip.textContent = session.user?.email || 'Logado';
 
-  // lê o plano do profiles
   try{
     const { data, error } = await sb
       .from('profiles')
@@ -703,19 +742,42 @@ async function loadHeaderInfo(){
   return session;
 }
 
+/* ======== SAIR ======== */
+btnSair.addEventListener('click', async () => {
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    const uid = session?.user?.id;
+    if (uid) {
+      await sb.from('active_sessions').delete().eq('user_id', uid).eq('session_id', SESSION_ID);
+    }
+    await sb.auth.signOut();
+  } catch (e) {
+    console.error('Erro ao sair:', e);
+  } finally {
+    localStorage.removeItem('mm_login_date');
+    window.location.href = CFG.SITE_URL || 'index.html';
+  }
+});
+
 /* ======== INIT ======== */
 (async function init(){
   const session = await loadHeaderInfo(); if (!session) return;
-  enforceMaxSession();
 
-  // Inicia com filtros vazios
+  // Política de logout por virada de dia
+  enforceDayBoundaryLogout();
+
+  // Sessão única
+  const ok = await ensureSingleSession(session);
+  if (!ok) return;
+
+  // Filtros vazios
   currentEanQ = '';
   currentDescQ = '';
 
-  // Primeira carga paginada
+  // Primeira carga
   resetAndQuery();
 
-  // Garante que ao rolar no início também puxe páginas
+  // Puxa mais ao iniciar
   generalWrap.dispatchEvent(new Event('scroll'));
 })();
 </script>
