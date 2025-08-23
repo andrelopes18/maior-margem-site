@@ -7,7 +7,9 @@
   <!-- Tailwind (CDN) - opcional para visual bonito rápido -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Supabase JS v2 -->
-  <script type="module" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Carrega UMD para usar window.supabase (ou trocaremos para ESM logo abaixo) -->
+<!-- <script type="module" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script> -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <style>
     /* Evitar FOUC dos cards */
     .skeleton { background: repeating-linear-gradient(90deg, #e5e7eb, #e5e7eb 10px, #f3f4f6 10px, #f3f4f6 20px); animation: shimmer 1.2s linear infinite; }
@@ -15,6 +17,19 @@
   </style>
 </head>
 <body class="bg-slate-100 min-h-screen">
+  <!-- Guarda de autenticação ANTES de renderizar (evita abrir sem login) -->
+  <script type="module">
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'
+    const SUPABASE_URL = window?.CONFIG_SUPABASE_URL || "https://<YOUR-PROJECT-REF>.supabase.co";
+    const SUPABASE_ANON_KEY = window?.CONFIG_SUPABASE_ANON_KEY || "<YOUR-ANON-KEY>";
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      window.location.replace('index.html')
+    }
+    // injeta no window para o script principal reaproveitar a instância
+    window.__supabase = supabase
+  </script>
   <header class="bg-slate-900 text-white">
     <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
       <h1 class="text-xl font-semibold">Painel Administrativo</h1>
@@ -25,7 +40,8 @@
     </div>
   </header>
 
-  <main class="max-w-7xl mx-auto px-4 py-6">
+  <!-- Esconde conteúdo até validar autenticação -->
+  <main id="appRoot" class="max-w-7xl mx-auto px-4 py-6 hidden">
     <!-- ALERTA: Acesso restrito -->
     <div id="adminAlert" class="hidden mb-4 p-3 rounded-lg bg-red-100 text-red-800 text-sm"></div>
 
@@ -108,11 +124,11 @@
 
     // ======= TABELAS/VIEW esperadas =======
     // profiles: { id(uuid), email, name, plan, plan_price_cents, created_at, is_active (bool), role }
-    // CadastroProdutos: { ... } — usada apenas para contagem.
+    // cadastro_produtos: { ... } — usada apenas para contagem.
     // subscriptions (opcional): { status, price_cents, ... } — se existir, tentamos somar receita a partir dela.
 
-    const { createClient } = window.supabase;
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    // Usa a instância criada no guard (evita condição de corrida e UMD/ESM mix)
+    const supabase = window.__supabase || window.supabase?.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     const state = {
       page: 1,
@@ -145,6 +161,11 @@
     // ======= Boot =======
     document.addEventListener('DOMContentLoaded', async () => {
       await ensureSession();
+      await guardAdmin();
+      // mostra app somente após passar pelos guards
+      document.getElementById('appRoot')?.classList.remove('hidden');
+      await loadAll();
+    });
       await guardAdmin();
       await loadAll();
     });
@@ -213,8 +234,8 @@
       const { count: monthCount } = await selectWithCount('profiles', q => q.gte('created_at', firstDay.toISOString()));
       elMonthUsers.textContent = formatNumber(monthCount || 0);
 
-      // Produtos (CadastroProdutos)
-      const totalProducts = await countRows('CadastroProdutos');
+      // Produtos (cadastro_produtos)
+      const totalProducts = await countRows('cadastro_produtos');
       elTotalProducts.textContent = formatNumber(totalProducts);
 
       // Receita mensal recorrente (estimada)
