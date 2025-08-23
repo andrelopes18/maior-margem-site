@@ -1,60 +1,48 @@
-const supabase = window.__supabase || window.supabase?.createClient(window.CONFIG_SUPABASE_URL, window.CONFIG_SUPABASE_ANON_KEY);<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Painel Administrativo</title>
-  <!-- Tailwind (CDN) - opcional para visual bonito rápido -->
+  <!-- Tailwind (CDN) - apenas para layout rápido -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Supabase JS v2 -->
-  <!-- Supabase UMD (window.supabase) -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  
+  <!-- Supabase UMD (expondo window.supabase) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 
-<!-- Defina suas variáveis ANTES de tudo -->
-<script>
-  // Substitua pelos valores reais do seu projeto
-  window.CONFIG_SUPABASE_URL = window.CONFIG_SUPABASE_URL || 'https://<SEU-PROJETO>.supabase.co';
-  window.CONFIG_SUPABASE_ANON_KEY = window.CONFIG_SUPABASE_ANON_KEY || '<SUA-ANON-KEY>';
-</script>
+  <!-- Carrega suas chaves do arquivo config.js (deve expor variáveis globais) -->
+  <script src="config.js"></script>
+  <!-- Resolver chaves vindas do config.js (sem placeholders no HTML) -->
+  <script>
+    function getSupabaseConfig() {
+      const urlCandidates = [
+        window.SUPABASE_URL,
+        window.CONFIG_SUPABASE_URL,
+        window.config?.SUPABASE_URL,
+        window.CONFIG?.SUPABASE_URL,
+        window.env?.SUPABASE_URL,
+      ];
+      const keyCandidates = [
+        window.SUPABASE_ANON_KEY,
+        window.CONFIG_SUPABASE_ANON_KEY,
+        window.config?.SUPABASE_ANON_KEY,
+        window.CONFIG?.SUPABASE_ANON_KEY,
+        window.env?.SUPABASE_ANON_KEY,
+      ];
+      const url = urlCandidates.find(v => typeof v === 'string' && v.trim());
+      const key = keyCandidates.find(v => typeof v === 'string' && v.trim());
+      return { url, key };
+    }
+    function isValidUrl(u){ return typeof u === 'string' && /^https:\/\/.+\.supabase\.co\/?$/.test(u); }
+    function isValidKey(k){ return typeof k === 'string' && k.length > 20; }
+  </script>
+
   <style>
-    /* Evitar FOUC dos cards */
-    .skeleton { background: repeating-linear-gradient(90deg, #e5e7eb, #e5e7eb 10px, #f3f4f6 10px, #f3f4f6 20px); animation: shimmer 1.2s linear infinite; }
-    @keyframes shimmer { 0% { background-position: -40px 0 } 100% { background-position: 40px 0 } }
+    .debug { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
   </style>
 </head>
 <body class="bg-slate-100 min-h-screen">
-  <!-- Guarda de autenticação ANTES de renderizar (sem top-level await) -->
-<script>
-  (async () => {
-    try {
-      const SUPABASE_URL = window.CONFIG_SUPABASE_URL;
-      const SUPABASE_ANON_KEY = window.CONFIG_SUPABASE_ANON_KEY;
-
-      // Validação simples para evitar "Invalid URL"
-      const urlOk = typeof SUPABASE_URL === 'string' && /^https:\/\/.+\.supabase\.co\/?$/.test(SUPABASE_URL);
-      const keyOk = typeof SUPABASE_ANON_KEY === 'string' && SUPABASE_ANON_KEY.length > 20;
-      if (!urlOk || !keyOk) {
-        console.error('CONFIG_SUPABASE_URL/ANON_KEY inválidos.');
-        window.location.replace('index.html');
-        return;
-      }
-
-      const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-      const { data: { session }, error } = await supabase.auth.getSession();
-      if (error) console.warn('getSession error', error);
-      if (!session) {
-        window.location.replace('index.html');
-        return;
-      }
-      // expõe a instância para os demais scripts
-      window.__supabase = supabase;
-      window.__currentSession = session;
-    } catch (e) {
-      console.error('Guard de autenticação falhou:', e);
-      window.location.replace('index.html');
-    }
-  })();
-</script>
+  <!-- Header -->
   <header class="bg-slate-900 text-white">
     <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
       <h1 class="text-xl font-semibold">Painel Administrativo</h1>
@@ -65,11 +53,12 @@ const supabase = window.__supabase || window.supabase?.createClient(window.CONFI
     </div>
   </header>
 
-  <!-- Esconde conteúdo até validar autenticação -->
-  <main id="appRoot" class="max-w-7xl mx-auto px-4 py-6 hidden">
+  <!-- Banner de erro/aviso -->
+  <div id="banner" class="hidden mx-auto max-w-7xl px-4 mt-4 p-3 rounded-lg bg-red-100 text-red-800 text-sm"></div>
+
+  <!-- Conteúdo: escondido até autenticar + checar admin -->
+  <main id="appRoot" class="hidden max-w-7xl mx-auto px-4 py-6">
     <div id="bootInfo" class="mb-4 text-sm text-slate-500">Carregando painel...</div>
-    <!-- ALERTA: Acesso restrito -->
-    <div id="adminAlert" class="hidden mb-4 p-3 rounded-lg bg-red-100 text-red-800 text-sm"></div>
 
     <!-- Cards de Métricas -->
     <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -144,30 +133,29 @@ const supabase = window.__supabase || window.supabase?.createClient(window.CONFI
   </template>
 
   <script>
-    // ======= CONFIGURE: sua URL e chave anônima do Supabase =======
-    const SUPABASE_URL = window?.CONFIG_SUPABASE_URL || "https://<YOUR-PROJECT-REF>.supabase.co";
-    const SUPABASE_ANON_KEY = window?.CONFIG_SUPABASE_ANON_KEY || "<YOUR-ANON-KEY>";
+    // ================= Helper de UI/Debug =================
+    const banner = (msg, color = 'red') => {
+      const el = document.getElementById('banner');
+      el.textContent = msg;
+      el.className = `mx-auto max-w-7xl px-4 mt-4 p-3 rounded-lg bg-${color}-100 text-${color}-800 text-sm`;
+      el.classList.remove('hidden');
+      console.warn('[ADMIN]', msg);
+    };
 
-    // ======= TABELAS/VIEW esperadas =======
-    // profiles: { id(uuid), email, name, plan, plan_price_cents, created_at, is_active (bool), role }
-    // CadastroProdutos: { ... } — usada apenas para contagem.
-    // subscriptions (opcional): { status, price_cents, ... } — se existir, tentamos somar receita a partir dela.
+    window.addEventListener('error', (e) => banner('Erro de script: ' + (e?.error?.message || e.message)));
+    window.addEventListener('unhandledrejection', (e) => banner('Promise rejeitada: ' + (e?.reason?.message || e.reason)));
 
-    // Usa a instância criada no guard (evita condição de corrida e UMD/ESM mix)
-    const supabase = window.__supabase || window.supabase?.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
+    // ================= Estado =================
     const state = {
       page: 1,
       pageSize: 20,
-      q: "",
+      q: '',
       session: null,
       user: null,
       isAdmin: false,
     };
 
     const userEmailEl = document.getElementById('userEmail');
-    const adminAlertEl = document.getElementById('adminAlert');
-
     const elTotalUsers = document.getElementById('totalUsers');
     const elMonthUsers = document.getElementById('monthUsers');
     const elTotalProducts = document.getElementById('totalProducts');
@@ -184,188 +172,130 @@ const supabase = window.__supabase || window.supabase?.createClient(window.CONFI
     const nextPage = document.getElementById('nextPage');
     const btnSair = document.getElementById('btnSair');
 
-    // ======= Boot =======
-    document.addEventListener('DOMContentLoaded', async () => {
-      const okSession = await ensureSession();
-      if (!okSession) return;
-      const okAdmin = await guardAdmin();
-      if (!okAdmin) return;
-      // mostra app somente após passar pelos guards
-      document.getElementById('appRoot')?.classList.remove('hidden');
-      await loadAll();
-    });
-      await guardAdmin();
-      await loadAll();
-    });
-
-    btnSair.addEventListener('click', async () => {
-      await supabase.auth.signOut();
-      window.location.href = 'index.html';
-    });
-
-    btnRefresh.addEventListener('click', loadAll);
-    btnBuscar.addEventListener('click', () => { state.q = qUser.value.trim(); state.page = 1; loadUsersTable(); });
-    prevPage.addEventListener('click', () => { if (state.page > 1) { state.page--; loadUsersTable(); } });
-    nextPage.addEventListener('click', () => { state.page++; loadUsersTable(); });
-
-    // ======= Sessão & Autorização =======
-    async function ensureSession() {
+    // ================= Boot =================
+    (async function guardAndBoot() {
       try {
-        const client = window.__supabase || window.supabase?.createClient?.(SUPABASE_URL, SUPABASE_ANON_KEY)
-        if (!client) {
-          console.error('Supabase client não encontrado')
-          window.location.replace('index.html')
-          return false
+        const { url, key } = getSupabaseConfig();
+        const urlOk = isValidUrl(url);
+        const keyOk = isValidKey(key);
+        if (!urlOk || !keyOk) {
+          banner('As chaves do Supabase não foram encontradas no config.js. Garanta que ele define SUPABASE_URL e SUPABASE_ANON_KEY no escopo global.');
+          return; // não prossegue
         }
-        const { data: { session }, error } = await client.auth.getSession()
-        if (error) console.warn('getSession error', error)
-        if (!session) {
-          window.location.replace('index.html')
-          return false
-        }
+
+        const sb = window.supabase.createClient(url, key);
+        const { data: { session }, error } = await sb.auth.getSession();
+        if (error) banner('Erro ao obter sessão: ' + error.message);
+        if (!session) { banner('Sem sessão. Faça login primeiro na página index.html.'); return; }
+
+        window.__supabase = sb;
         state.session = session;
         state.user = session.user;
         userEmailEl.textContent = state.user.email || '';
-        return true
-      } catch (e) {
-        console.error('ensureSession falhou', e)
-        window.location.replace('index.html')
-        return false
-      }
-    } {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        window.location.href = 'index.html';
-        return;
-      }
-      state.session = session;
-      state.user = session.user;
-      userEmailEl.textContent = state.user.email || '';
-    }
 
-    async function guardAdmin() {
+        const isAdmin = await checkIsAdmin();
+        if (!isAdmin) { banner('Acesso negado. Esta página é exclusiva para administradores.'); return; }
+
+        // OK para exibir app
+        document.getElementById('appRoot').classList.remove('hidden');
+        await loadAll();
+      } catch (e) {
+        banner('Falha ao iniciar painel: ' + (e?.message || e));
+      }
+    })();
+
+    btnSair?.addEventListener('click', async () => {
+      try { await (window.__supabase)?.auth.signOut(); } catch {}
+      window.location.href = 'index.html';
+    });
+
+    btnRefresh?.addEventListener('click', loadAll);
+    btnBuscar?.addEventListener('click', () => { state.q = qUser.value.trim(); state.page = 1; loadUsersTable(); });
+    prevPage?.addEventListener('click', () => { if (state.page > 1) { state.page--; loadUsersTable(); } });
+    nextPage?.addEventListener('click', () => { state.page++; loadUsersTable(); });
+
+    async function checkIsAdmin() {
       try {
-        let isAdmin = false;
-        const roleMeta = state.user?.user_metadata?.role;
-        if (roleMeta === 'admin') isAdmin = true;
+        let isAdmin = state.user?.user_metadata?.role === 'admin';
         if (!isAdmin) {
           const { data, error } = await (window.__supabase)
             .from('profiles').select('role').eq('id', state.user.id).maybeSingle();
-          if (error) console.warn('profiles.role check error', error)
-          if (!error && data && data.role === 'admin') isAdmin = true;
+          if (error) banner('Erro checando role no profiles: ' + error.message);
+          isAdmin = data?.role === 'admin';
         }
-        state.isAdmin = isAdmin;
-        if (!isAdmin) {
-          adminAlertEl.textContent = 'Acesso negado. Esta página é exclusiva para administradores.';
-          adminAlertEl.classList.remove('hidden');
-          setTimeout(() => window.location.replace('dashboard.html'), 1500);
-          return false;
-        }
-        return true;
+        state.isAdmin = !!isAdmin;
+        return state.isAdmin;
       } catch (e) {
-        console.error('guardAdmin falhou', e)
-        adminAlertEl.textContent = 'Erro ao validar permissão. Redirecionando...';
-        adminAlertEl.classList.remove('hidden');
-        setTimeout(() => window.location.replace('dashboard.html'), 1500);
-        return false;
-      }
-    } {
-      // Estratégias de checagem:
-      // 1) user.user_metadata.role === 'admin'
-      // 2) profiles.role === 'admin' (consulta rápida)
-      let isAdmin = false;
-      const roleMeta = state.user?.user_metadata?.role;
-      if (roleMeta === 'admin') isAdmin = true;
-      else {
-        const { data, error } = await supabase.from('profiles').select('role').eq('id', state.user.id).maybeSingle();
-        if (!error && data && data.role === 'admin') isAdmin = true;
-      }
-
-      state.isAdmin = isAdmin;
-      if (!isAdmin) {
-        adminAlertEl.textContent = 'Acesso negado. Esta página é exclusiva para administradores.';
-        adminAlertEl.classList.remove('hidden');
-        // Opcional: redirecionar após 2s
-        setTimeout(() => window.location.href = 'dashboard.html', 1800);
-        // não interrompe o restante do script para evitar ficar tudo "em branco"
+        banner('Falha ao checar admin: ' + (e?.message || e));
         return false;
       }
     }
 
+    // ================= Carregamento Geral =================
     async function loadAll() {
+      document.getElementById('bootInfo').textContent = 'Carregando métricas e tabela...';
       await Promise.all([
         loadStats(),
         loadPlansDistribution(),
         loadUsersTable(),
       ]);
+      document.getElementById('bootInfo').textContent = '';
     }
 
-    // ======= Métricas =======
+    // ================= Métricas =================
     async function loadStats() {
-      // Total de usuários
       const totalUsers = await countRows('profiles');
       elTotalUsers.textContent = formatNumber(totalUsers);
 
-      // Usuários no mês atual
       const firstDay = new Date();
       firstDay.setDate(1); firstDay.setHours(0,0,0,0);
       const { count: monthCount } = await selectWithCount('profiles', q => q.gte('created_at', firstDay.toISOString()));
       elMonthUsers.textContent = formatNumber(monthCount || 0);
 
-      // Produtos (CadastroProdutos)
       const totalProducts = await countRows('CadastroProdutos');
       elTotalProducts.textContent = formatNumber(totalProducts);
 
-      // Receita mensal recorrente (estimada)
       const mrr = await computeMRR();
       elMRR.textContent = mrr != null ? formatCurrencyBRL(mrr / 100) : '—';
     }
 
     async function countRows(table) {
-      const { count, error } = await supabase.from(table).select('*', { count: 'exact', head: true });
-      if (error) { console.warn('countRows error', table, error); return 0; }
+      const { count, error } = await window.__supabase.from(table).select('*', { count: 'exact', head: true });
+      if (error) { banner(`countRows ${table}: ` + error.message, 'amber'); return 0; }
       return count || 0;
     }
 
     async function selectWithCount(table, build) {
-      let query = supabase.from(table).select('*', { count: 'exact', head: true });
+      let query = window.__supabase.from(table).select('*', { count: 'exact', head: true });
       if (build) query = build(query);
       const { count, error } = await query;
-      if (error) { console.warn('selectWithCount error', table, error); return { count: 0, error }; }
+      if (error) { banner(`selectWithCount ${table}: ` + error.message, 'amber'); return { count: 0, error }; }
       return { count };
     }
 
     async function computeMRR() {
-      // Estratégia 1: usar tabela subscriptions (se existir)
       try {
-        const { data, error } = await supabase.from('subscriptions').select('status, price_cents');
+        const { data, error } = await window.__supabase.from('subscriptions').select('status, price_cents');
         if (!error && Array.isArray(data)) {
           const active = data.filter(x => (x.status || '').toLowerCase() === 'active');
-          const total = active.reduce((acc, x) => acc + (x.price_cents || 0), 0);
-          return total; // em centavos
+          return active.reduce((acc, x) => acc + (x.price_cents || 0), 0);
         }
-      } catch (e) { console.warn('subscriptions not available'); }
-
-      // Estratégia 2: somar de profiles (aproximação)
-      const { data: profiles, error: e2 } = await supabase
+      } catch {}
+      const { data: profiles, error: e2 } = await window.__supabase
         .from('profiles')
         .select('plan, plan_price_cents, is_active');
-      if (e2) { console.warn('MRR profiles error', e2); return null; }
+      if (e2) { banner('MRR (profiles): ' + e2.message, 'amber'); return null; }
       const paid = (profiles || []).filter(p => (p.is_active ?? true) && !['free', 'trial', null, ''].includes((p.plan || '').toLowerCase()));
-      const total = paid.reduce((acc, p) => acc + (p.plan_price_cents || 0), 0);
-      return total; // em centavos
+      return paid.reduce((acc, p) => acc + (p.plan_price_cents || 0), 0);
     }
 
-    // ======= Distribuição por plano =======
+    // ================= Distribuição por Plano =================
     async function loadPlansDistribution() {
       plansWrap.innerHTML = '';
-      const { data, error } = await supabase.from('profiles').select('plan');
-      if (error) { plansWrap.textContent = 'Erro ao carregar.'; return; }
+      const { data, error } = await window.__supabase.from('profiles').select('plan');
+      if (error) { plansWrap.textContent = 'Erro ao carregar planos.'; banner('plans: ' + error.message, 'amber'); return; }
       const map = new Map();
-      (data || []).forEach(p => {
-        const key = (p.plan || 'sem_plano').toString();
-        map.set(key, (map.get(key) || 0) + 1);
-      });
+      (data || []).forEach(p => { const key = (p.plan || 'sem_plano') + ''; map.set(key, (map.get(key) || 0) + 1); });
       for (const [plan, qty] of map.entries()) {
         const card = document.createElement('div');
         card.className = 'p-4 rounded-xl border bg-white';
@@ -375,26 +305,24 @@ const supabase = window.__supabase || window.supabase?.createClient(window.CONFI
       }
     }
 
-    // ======= Tabela de usuários =======
+    // ================= Tabela de usuários =================
     async function loadUsersTable() {
       usersTbody.innerHTML = '';
       const from = (state.page - 1) * state.pageSize;
       const to = from + state.pageSize - 1;
 
-      let query = supabase
+      let query = window.__supabase
         .from('profiles')
         .select('id, name, email, plan, plan_price_cents, created_at', { count: 'exact' })
         .order('created_at', { ascending: false })
         .range(from, to);
 
       if (state.q) {
-        // Busca simples por ILIKE em name ou email
-        // Sugestão: criar um índice para melhorar performance
         query = query.or(`email.ilike.%${state.q}%,name.ilike.%${state.q}%`);
       }
 
       const { data, count, error } = await query;
-      if (error) { console.error(error); return; }
+      if (error) { banner('users table: ' + error.message, 'amber'); return; }
 
       (data || []).forEach(row => addUserRow(row));
       const totalPages = Math.max(1, Math.ceil((count || 0) / state.pageSize));
@@ -440,16 +368,19 @@ const supabase = window.__supabase || window.supabase?.createClient(window.CONFI
     async function updateUserPlan(id, plan, priceCents) {
       if (!confirm('Confirmar alteração de plano deste usuário?')) return;
       const price = Number(priceCents);
-      const { error } = await supabase.from('profiles').update({ plan, plan_price_cents: isNaN(price) ? null : price }).eq('id', id);
+      const { error } = await window.__supabase
+        .from('profiles')
+        .update({ plan, plan_price_cents: isNaN(price) ? null : price })
+        .eq('id', id);
       if (error) {
-        alert('Erro ao salvar: ' + error.message);
+        banner('Salvar plano: ' + error.message, 'amber');
       } else {
         alert('Plano atualizado com sucesso.');
         await Promise.all([loadPlansDistribution(), loadStats(), loadUsersTable()]);
       }
     }
 
-    // ======= Utils =======
+    // ================= Utils =================
     function formatNumber(n) { return new Intl.NumberFormat('pt-BR').format(n || 0); }
     function formatCurrencyBRL(n) { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n || 0); }
     function formatDate(iso) { if (!iso) return '—'; const d = new Date(iso); return d.toLocaleDateString('pt-BR', { year: 'numeric', month: '2-digit', day: '2-digit' }); }
