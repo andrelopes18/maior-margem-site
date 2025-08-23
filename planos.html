@@ -14,12 +14,14 @@
   .user{font-size:12px;color:#9aa0a6}
   .chip{font-size:12px;background:#1e1e1e;border:1px solid #333;padding:6px 10px;border-radius:999px}
   .chip.plan{color:#bfffc1;border-color:#2f5a2f;background:#132313}
+  .chip.warn{color:#ffd18a;border-color:#5c3f00;background:#1b1300}
   .btn{display:inline-flex;align-items:center;gap:8px;background:#00b140;color:#fff;border:none;padding:10px 14px;border-radius:8px;text-decoration:none;cursor:pointer}
   .btn:hover{background:#009b38}
   .btn.ghost{background:transparent;border:1px solid #2a2a2a;color:#ddd}
   .btn.ghost:hover{background:#1b1b1b}
   .btn.warn{background:#7a2e2e}
   .btn.warn:hover{background:#652424}
+  .btn[disabled]{opacity:.6;cursor:not-allowed}
 
   .container{max-width:1100px;margin:0 auto;padding:0 20px 32px}
 
@@ -56,6 +58,7 @@
   <h1>Planos</h1>
   <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
     <span id="planChip" class="chip plan" title="Plano atual">Plano: —</span>
+    <span id="statusChip" class="chip warn" style="display:none"></span>
     <span id="userInfo" class="user">Carregando…</span>
     <a href="dashboard.html" class="btn ghost">← Voltar</a>
   </div>
@@ -63,15 +66,14 @@
 
 <main class="container">
   <div id="banner" class="banner"></div>
-
   <div id="plansGrid" class="grid"></div>
 
   <div class="foot">
     <div class="small">
-      Os valores são mensais e a cobrança é recorrente. Você pode cancelar quando quiser.
+      Os valores são mensais e a cobrança é recorrente. Você pode cancelar a <b>renovação</b> quando quiser; seu acesso segue até o fim do ciclo já pago.
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button id="btnCancelar" class="btn warn">Cancelar assinatura (voltar ao Trial)</button>
+      <button id="btnCancelar" class="btn warn">Cancelar renovação (manter até expirar)</button>
       <a href="meusdados.html" class="btn ghost">Meus dados</a>
     </div>
   </div>
@@ -87,6 +89,7 @@ const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
 /* ====== Elementos ====== */
 const userInfo = document.getElementById('userInfo');
 const planChip = document.getElementById('planChip');
+const statusChip = document.getElementById('statusChip');
 const banner = document.getElementById('banner');
 const grid = document.getElementById('plansGrid');
 const btnCancelar = document.getElementById('btnCancelar');
@@ -95,7 +98,6 @@ const btnCancelar = document.getElementById('btnCancelar');
 function moneyBR(cents){ return (cents/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
 function showBanner(msg, type='ok'){ banner.textContent = msg; banner.className = 'banner ' + type; }
 function clearBanner(){ banner.className = 'banner'; banner.style.display='none'; banner.textContent=''; }
-
 function normalizePlanKey(name){
   const n = (name||'').toLowerCase();
   if (n.includes('trial')) return 'trial';
@@ -112,30 +114,69 @@ function featuresFor(name){
   if (n.includes('premium')) return ['Tudo do Intermediário','Prioridade máxima','Recursos avançados'];
   return ['Cobrança recorrente mensal'];
 }
+function formatDateBR(iso){
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d)) return null;
+  return d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+}
 
-/* ====== URLs fixas das Functions (seu projeto) ====== */
+/* ====== URLs das Functions ====== */
 const FUNCTIONS_BASE = "https://maprezivxfitqyifmepq.functions.supabase.co";
 const CREATE_CHECKOUT_ENDPOINT = `${FUNCTIONS_BASE}/create-checkout`;
 const CANCEL_SUBSCRIPTION_ENDPOINT = `${FUNCTIONS_BASE}/cancel-subscription`;
 
-/* ====== Sessão + plano atual ====== */
-let currentPlan = 'trial'; // valor padrão
+/* ====== Estado ====== */
+let currentPlan = 'trial';
+let subState = {
+  cancel_at_period_end: false,
+  current_period_end: null
+};
+
+/* ====== Sessão + plano/estado atual ====== */
 async function ensureSessionAndPlan(){
   const { data: { session } } = await sb.auth.getSession();
   if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return null; }
   userInfo.textContent = session.user?.email || 'Logado';
 
   try{
-    const { data, error } = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
+    const { data, error } = await sb
+      .from('profiles')
+      .select('plan, cancel_at_period_end, current_period_end, subscription_status')
+      .eq('id', session.user.id)
+      .maybeSingle();
     if (error) throw error;
+
     currentPlan = (data?.plan || 'trial').toString();
+    subState.cancel_at_period_end = !!data?.cancel_at_period_end;
+    subState.current_period_end = data?.current_period_end || null;
   }catch(e){
     console.error(e);
     currentPlan = 'trial';
+    subState.cancel_at_period_end = false;
+    subState.current_period_end = null;
   }
+
   const pretty = currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1);
   planChip.textContent = `Plano: ${pretty.replace('Basico','Básico').replace('Intermediario','Intermediário')}`;
+
+  // Status de cancelamento agendado
+  renderStatusChip();
+  // Estado do botão cancelar
+  btnCancelar.disabled = subState.cancel_at_period_end || currentPlan === 'trial';
+
   return session;
+}
+
+function renderStatusChip(){
+  if (subState.cancel_at_period_end){
+    const when = formatDateBR(subState.current_period_end) || 'fim do ciclo atual';
+    statusChip.style.display = 'inline-block';
+    statusChip.textContent = `Renovação cancelada • acesso até ${when}`;
+  }else{
+    statusChip.style.display = 'none';
+    statusChip.textContent = '';
+  }
 }
 
 /* ====== Carregar planos ====== */
@@ -167,6 +208,10 @@ function renderPlans(plans){
     const isCurrent = planKey === currentPlan;
     const feats = featuresFor(p.name);
 
+    const renewalNote = subState.cancel_at_period_end && isCurrent
+      ? `<div class="small" style="color:#ffd18a">Renovação cancelada • acesso até ${formatDateBR(subState.current_period_end) || 'fim do ciclo'}</div>`
+      : '';
+
     card.innerHTML += `
       <div class="plan-name">${p.name}${isCurrent ? ' • <span style="color:#bfffc1">seu plano atual</span>' : ''}</div>
       <div class="price">
@@ -176,6 +221,7 @@ function renderPlans(plans){
       </div>
       <div class="price-note">${moneyBR(p.price_cents)} por mês</div>
       ${feats.map(f => `<div class="feat">${f}</div>`).join('')}
+      ${renewalNote}
       <div class="spacer"></div>
       <div class="actions">
         <button class="btn" ${isCurrent ? 'disabled title="Plano já ativo"' : ''}>${isCurrent ? 'Ativo' : 'Assinar'}</button>
@@ -190,7 +236,7 @@ function renderPlans(plans){
   }
 }
 
-/* ====== Iniciar checkout (ex: PagBank por Edge Function create-checkout) ====== */
+/* ====== Iniciar checkout ====== */
 async function startCheckout(planId, planName){
   showBanner(`Criando checkout para "${planName}"…`, 'ok');
   const { data: { session } } = await sb.auth.getSession();
@@ -213,17 +259,16 @@ async function startCheckout(planId, planName){
   }
 }
 
-/* ====== Cancelar assinatura → voltar ao TRIAL ====== */
+/* ====== Cancelar RENOVAÇÃO (manter até expirar) ====== */
 btnCancelar.addEventListener('click', async ()=>{
-  const confirmMsg = 'Tem certeza que deseja cancelar a assinatura atual e voltar ao plano Trial (gratuito)?';
+  const confirmMsg = 'Confirmar cancelamento da RENOVAÇÃO? Você continuará com acesso até o fim do ciclo atual.';
   if (!confirm(confirmMsg)) return;
 
-  showBanner('Cancelando assinatura…', 'ok');
+  showBanner('Processando cancelamento da renovação…', 'ok');
   const { data: { session } } = await sb.auth.getSession();
   if (!session) { showBanner('Faça login e tente novamente.', 'warn'); return; }
 
   try{
-    // Chama a Edge Function
     const resp = await fetch(CANCEL_SUBSCRIPTION_ENDPOINT, {
       method: 'POST',
       headers: {
@@ -233,17 +278,18 @@ btnCancelar.addEventListener('click', async ()=>{
       body: JSON.stringify({})
     });
     const json = await resp.json().catch(()=>({}));
+
     if (!resp.ok) throw new Error(json.error || `Erro ${resp.status}`);
 
-    // Atualiza localmente plan = 'trial'
-    const up = await sb.from('profiles').update({ plan: 'trial' }).eq('id', session.user.id);
-    if (up.error) throw up.error;
+    // NÃO mexe no plan. Apenas atualiza estado local/UI.
+    subState.cancel_at_period_end = true;
+    if (json.current_period_end) subState.current_period_end = json.current_period_end;
 
-    currentPlan = 'trial';
-    planChip.textContent = 'Plano: Trial';
-    showBanner('Assinatura cancelada. Plano atual: Trial (gratuito).', 'ok');
+    btnCancelar.disabled = true;
+    renderStatusChip();
+    showBanner('Renovação cancelada. Você manterá acesso até o fim do ciclo atual.', 'ok');
 
-    // Recarrega cards para refletir o botão Ativo no Trial e liberar upgrade
+    // Recarrega cards apenas para refletir a faixa informativa
     const plans = await loadPlans();
     renderPlans(plans);
   }catch(e){
