@@ -252,7 +252,7 @@
       const { count: monthCount } = await selectWithCount('profiles', q => q.gte('created_at', firstDay.toISOString()));
       elMonthUsers.textContent = formatNumber(monthCount || 0);
 
-      const totalProducts = await countRows('CadastroProdutos');
+      const totalProducts = await countRows('cadastro_produtos');
       elTotalProducts.textContent = formatNumber(totalProducts);
 
       const mrr = await computeMRR();
