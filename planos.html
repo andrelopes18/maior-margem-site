@@ -147,8 +147,7 @@ async function ensureSessionAndPlan(){
       .maybeSingle();
     if (error) throw error;
 
-    // 👇 FIX 1: normalizar o plano vindo do banco (antes era sem normalizar) 
-    // (no seu arquivo anterior isto estava como .toString() puro) 
+    // FIX: normalizar o plano vindo do banco (evita falhas por acento/caixa)
     currentPlan = normalizePlanKey((data?.plan || 'trial').toString());
 
     subState.cancel_at_period_end = !!data?.cancel_at_period_end;
@@ -165,7 +164,7 @@ async function ensureSessionAndPlan(){
 
   // Status de cancelamento agendado
   renderStatusChip();
-  // Estado do botão cancelar (agora funciona mesmo que o banco tenha "Trial"/"trial"/"TRIAL")
+  // Estado do botão cancelar
   btnCancelar.disabled = subState.cancel_at_period_end || currentPlan === 'trial';
 
   return session;
@@ -317,7 +316,7 @@ btnCancelar.addEventListener('click', async ()=>{
   }
 })();
 
-/* 👇 FIX 2: auto‑refresh ao voltar do checkout com ?return=ok */
+/* Auto‑refresh ao voltar do checkout com ?return=ok */
 (function autoRefreshAfterReturn(){
   const params = new URLSearchParams(window.location.search);
   if (params.get('return') === 'ok') {
