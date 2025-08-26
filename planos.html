@@ -46,7 +46,6 @@
 
   .foot{margin-top:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 
-  /* mini spinner no botão */
   .spinner{
     width:14px;height:14px;border:2px solid rgba(255,255,255,.4);
     border-top-color:#fff;border-radius:50%;display:inline-block;animation:spin .7s linear infinite
@@ -202,12 +201,25 @@ async function startCheckout(planId, planName, btnEl){
       body: JSON.stringify({ plan_id: planId })
     });
 
-    const json = await resp.json().catch(() => ({}));
+    const text = await resp.text();
+    let json = {};
+    try { json = text ? JSON.parse(text) : {}; } catch { json = { error: text }; }
 
     if (!resp.ok || !json.pay_url) {
       console.error('create-checkout error:', json);
-      const msg = json.error || json.provider_body || 'Falha ao criar checkout';
-      throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+
+      const parts = [];
+      if (json.error) parts.push(json.error);
+      if (json.provider_status) parts.push(`STATUS=${json.provider_status}`);
+      if (json.provider_body) {
+        const bodyStr = typeof json.provider_body === 'string' ? json.provider_body : JSON.stringify(json.provider_body);
+        parts.push(`BODY=${bodyStr}`);
+      }
+      showBanner(`Não foi possível iniciar o pagamento. ${parts.join(' | ')}`, 'err');
+
+      btnEl.innerHTML = original;
+      btnEl.disabled = false;
+      return;
     }
 
     showBanner('Redirecionando para o pagamento…', 'ok');
