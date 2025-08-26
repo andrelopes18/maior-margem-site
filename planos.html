@@ -73,11 +73,13 @@
 </main>
 
 <script>
+/* ======== Setup Supabase ======== */
 const CFG = window.CONFIG || {};
 const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
 });
 
+/* ======== UI helpers ======== */
 const userInfo = document.getElementById('userInfo');
 const banner = document.getElementById('banner');
 const grid = document.getElementById('plansGrid');
@@ -93,42 +95,63 @@ function getFunctionsBaseFromSupabaseUrl(urlStr){
 const FUNCTIONS_BASE = getFunctionsBaseFromSupabaseUrl(CFG.SUPABASE_URL);
 const CREATE_CHECKOUT_ENDPOINT = `${FUNCTIONS_BASE}/create-checkout`;
 
+/* ======== Normalização de chaves ======== */
+function normalizeKey(v){
+  const s = String(v||'').toLowerCase();
+  if (s.includes('trial') || s.includes('teste') || s.includes('grat')) return 'trial';
+  if (s.includes('básico') || s.includes('basico') || s.includes('basic')) return 'basico';
+  if (s.includes('intermedi')) return 'intermediario';
+  if (s.includes('premium') || s.includes('prêmio') || s.includes('premio')) return 'premium';
+  return null;
+}
+
+/* ======== Sessão ======== */
 async function ensureSession(){
   const { data: { session } } = await sb.auth.getSession();
   if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return null; }
   return session;
 }
 
-// >>> Ajuste principal: lê plan_type e também plan (texto legado)
-async function fetchProfilePlanType(userId){
-  const { data, error } = await sb
-    .from('profiles')
-    .select('plan_type, plan')
-    .eq('id', userId)
-    .maybeSingle();
-  if (error) throw error;
+/* ======== Ler plano do perfil com 2 tentativas ======== */
+async function fetchCurrentPlanKey(userId){
+  try{
+    const { data, error } = await sb
+      .from('profiles')
+      .select('plan_type, plan')
+      .eq('id', userId)
+      .maybeSingle();
+    if (error) throw error;
 
-  function norm(v){
-    const s = String(v||'').toLowerCase();
-    if (s.includes('trial') || s.includes('teste') || s.includes('grat')) return 'trial';
-    if (s.includes('básico') || s.includes('basico') || s.includes('basic')) return 'basico';
-    if (s.includes('intermedi')) return 'intermediario';
-    if (s.includes('premium') || s.includes('prêmio') || s.includes('premio')) return 'premium';
-    return null;
+    const k = data?.plan_type || normalizeKey(data?.plan);
+    return k || 'trial';
+  }catch(e1){
+    console.warn('Falha select plan_type,plan → tentando apenas plan', e1);
+    const { data, error } = await sb
+      .from('profiles')
+      .select('plan')
+      .eq('id', userId)
+      .maybeSingle();
+    if (error) throw error;
+    return normalizeKey(data?.plan) || 'trial';
   }
-  return data?.plan_type || norm(data?.plan) || 'trial';
 }
 
-async function loadPlans(){
+/* ======== Carregar planos ativos; gerar chave mesmo sem plan_key ======== */
+async function loadActivePlans(){
   const { data, error } = await sb
     .from('billing_plans')
     .select('id,name,plan_key,price_cents,active')
     .eq('active', true)
     .order('price_cents', { ascending: true });
   if (error) throw error;
-  return (data||[]).map(p => ({...p, _key: p.plan_key || 'trial'}));
+
+  return (data || []).map(p => {
+    const key = p.plan_key || normalizeKey(p.name) || 'trial';
+    return { ...p, _key: key, plan_key: key };
+  });
 }
 
+/* ======== Recursos por plano ======== */
 function featuresFor(key){
   switch(String(key)){
     case 'trial': return ['Acesso limitado','Sem custo'];
@@ -139,20 +162,24 @@ function featuresFor(key){
   }
 }
 
+/* ======== Render ======== */
 function renderPlans(plans, currentKey){
   grid.innerHTML = '';
+
   const currentPlan = plans.find(p => p.plan_key === currentKey) || null;
   const currentPrice = currentPlan?.price_cents ?? 0;
 
   for (const p of plans){
     const card = document.createElement('div');
     card.className = 'card';
+
     const priceFmt = moneyBR(p.price_cents);
     const feats = featuresFor(p.plan_key);
 
     let btnLabel = 'Assinar';
     let btnDisabled = false;
     let pill = '';
+
     if (p.plan_key === currentKey){
       btnLabel = 'Seu plano atual';
       btnDisabled = true;
@@ -174,12 +201,15 @@ function renderPlans(plans, currentKey){
         <span class="small">renova automaticamente</span>
       </div>
     `;
+
     const btn = card.querySelector('.btn');
     if (!btnDisabled) btn.addEventListener('click', () => startCheckout(p.id, p.name, btn));
+
     grid.appendChild(card);
   }
 }
 
+/* ======== Checkout ======== */
 async function startCheckout(planId, planName, btnEl){
   const original = btnEl.innerHTML;
   btnEl.innerHTML = '<span class="spinner"></span> Processando...';
@@ -187,38 +217,65 @@ async function startCheckout(planId, planName, btnEl){
   showBanner(`Criando checkout para "${planName}"…`, 'ok');
 
   const { data: { session } } = await sb.auth.getSession();
+
   try {
     const resp = await fetch(CREATE_CHECKOUT_ENDPOINT, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${session?.access_token}`, 'Content-Type': 'application/json' },
+      headers: {
+        'Authorization': `Bearer ${session?.access_token}`,
+        'Content-Type': 'application/json'
+      },
       body: JSON.stringify({ plan_id: planId })
     });
+
     const text = await resp.text();
     let json = {};
     try { json = text ? JSON.parse(text) : {}; } catch { json = { error: text }; }
+
     if (!resp.ok || !json.pay_url) {
+      console.error('create-checkout error:', json);
       showBanner(`Não foi possível iniciar o pagamento. ${json.error || ''}`, 'err');
-      btnEl.innerHTML = original; btnEl.disabled = false; return;
+      btnEl.innerHTML = original;
+      btnEl.disabled = false;
+      return;
     }
+
     showBanner('Redirecionando para o pagamento…', 'ok');
     window.location.href = json.pay_url;
   } catch (e) {
+    console.error(e);
     showBanner(`Não foi possível iniciar o pagamento. ${e?.message ?? ''}`, 'err');
-    btnEl.innerHTML = original; btnEl.disabled = false;
+    btnEl.innerHTML = original;
+    btnEl.disabled = false;
   }
 }
 
+/* ======== Init ======== */
 (async function init(){
   const session = await ensureSession(); if (!session) return;
+
   try {
-    const planType = await fetchProfilePlanType(session.user.id);
-    userInfo.textContent = `${session.user?.email || 'Logado'} • Plano: ${planType.charAt(0).toUpperCase() + planType.slice(1)}`;
-    const plans = await loadPlans();
-    if (!plans.length) { showBanner('Nenhum plano ativo encontrado.', 'warn'); return; }
-    renderPlans(plans, planType);
+    // 1) Plano atual (com fallback)
+    const planKey = await fetchCurrentPlanKey(session.user.id);
+    userInfo.textContent = `${session.user?.email || 'Logado'} • Plano: ${planKey.charAt(0).toUpperCase() + planKey.slice(1)}`;
+
+    // 2) Planos ativos (gera chave mesmo sem plan_key)
+    const plans = await loadActivePlans();
+    if (!plans.length) {
+      showBanner('Nenhum plano ativo encontrado. Verifique a tabela billing_plans.', 'warn');
+      return;
+    }
+
+    // 3) Render
+    renderPlans(plans, planKey);
+
+    // Debug extra (abra o console do navegador)
+    console.log('[DEBUG] planKey atual:', planKey);
+    console.log('[DEBUG] planos carregados:', plans);
+
   } catch (err){
-    console.error(err);
-    showBanner('Erro ao carregar planos. Confira as políticas RLS ou sua conexão.', 'err');
+    console.error('[ERRO init planos.html]', err);
+    showBanner('Erro ao carregar planos. Confira as políticas RLS, colunas do profiles, e config.js.', 'err');
   }
 })();
 </script>
