@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -7,7 +6,7 @@
 <title>Planos de Assinatura</title>
 <style>
   :root { color-scheme: dark; }
-  * { box-sizing: border-box; }
+  *{ box-sizing:border-box }
   body{background:#121212;color:#fff;font-family:Arial,sans-serif;margin:0}
   a{color:#00b140;text-decoration:none}
   header{display:flex;align-items:center;justify-content:space-between;padding:20px}
@@ -17,33 +16,26 @@
   .btn:hover{background:#009b38}
   .btn.ghost{background:transparent;border:1px solid #2a2a2a;color:#ddd}
   .btn.ghost:hover{background:#1b1b1b}
-
   .container{max-width:1100px;margin:0 auto;padding:0 20px 32px}
-
-  /* pricing */
   .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:10px}
-  @media (max-width: 1000px){ .grid{grid-template-columns:repeat(2,1fr)} }
-  @media (max-width: 560px){ .grid{grid-template-columns:1fr} }
-
+  @media (max-width:1000px){ .grid{grid-template-columns:repeat(2,1fr)} }
+  @media (max-width:560px){ .grid{grid-template-columns:1fr} }
   .card{background:#0f0f0f;border:1px solid #2a2a2a;border-radius:14px;padding:18px;display:flex;flex-direction:column;position:relative;overflow:hidden}
   .badge{position:absolute;top:10px;right:-38px;transform:rotate(35deg);background:#1c3b1c;color:#bfffc1;padding:4px 60px;font-size:12px;border:1px solid #2a2a2a}
   .plan-name{font-weight:800;font-size:16px;letter-spacing:.3px}
   .price{display:flex;align-items:flex-end;gap:6px;margin:10px 0 2px}
-  .price .currency{font-size:18px;opacity:.9}
   .price .amount{font-size:34px;font-weight:900;line-height:1}
   .price .period{font-size:12px;color:#9aa0a6;margin-bottom:6px}
   .price-note{font-size:12px;color:#9aa0a6;margin-bottom:8px}
   .feat{display:flex;gap:8px;align-items:flex-start;margin:6px 0;color:#cfcfcf}
   .feat:before{content:"✓";opacity:.9}
   .spacer{flex:1}
-  .actions{display:flex;gap:8px;align-items:center}
+  .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .small{font-size:12px;color:#9aa0a6}
-
   .banner{border:1px solid #2a2a2a;border-radius:10px;padding:10px 12px;margin:12px 0;background:#111;display:none}
   .banner.warn{border-color:#5c3f00;background:#1b1300;color:#ffc966;display:block}
   .banner.ok{border-color:#214d21;background:#0e1a0e;color:#b7fbb7;display:block}
   .banner.err{border-color:#5c1e1e;background:#190d0d;color:#ff9a9a;display:block}
-
   .foot{margin-top:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 </style>
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
@@ -60,12 +52,10 @@
 
 <main class="container">
   <div id="banner" class="banner"></div>
-
   <div id="plansGrid" class="grid"></div>
-
   <div class="foot">
     <div class="small">
-      Os valores são mensais e a cobrança é recorrente. Você pode cancelar quando quiser.
+      Valores mensais com cobrança recorrente. Cancele quando quiser.
     </div>
     <div>
       <a href="meusdados.html" class="btn ghost">Meus dados</a>
@@ -93,11 +83,11 @@ function clearBanner(){ banner.className = 'banner'; banner.style.display='none'
 function getFunctionsBaseFromSupabaseUrl(urlStr){
   try{
     const u = new URL(urlStr);
-    const host = u.host; // ex: abcd1234.supabase.co
+    const host = u.host; // abcd.supabase.co
     const projectRef = host.split('.supabase.co')[0];
     return `https://${projectRef}.functions.supabase.co`;
   }catch{
-    return '/functions/v1'; // fallback (mesmo domínio)
+    return '/functions/v1';
   }
 }
 const FUNCTIONS_BASE = getFunctionsBaseFromSupabaseUrl(CFG.SUPABASE_URL);
@@ -111,48 +101,33 @@ async function ensureSession(){
   return session;
 }
 
-/* ====== Carregar planos do banco ====== */
+/* ====== Carregar planos ====== */
 async function loadPlans(){
-  const { data, error } = await sb.from('billing_plans')
-    .select('id,name,price_cents,interval_unit,interval_length,billing_cycles,active')
+  const { data, error } = await sb
+    .from('billing_plans')
+    .select('id,name,price_cents,interval_unit,interval_length,active')
     .eq('active', true)
     .order('price_cents', { ascending: true });
   if (error) throw error;
   return data || [];
 }
 
-/* (Opcional) features por plano — ajuste conforme seu produto */
+/* (Opcional) features por plano */
 function featuresFor(name){
   const n = (name||'').toLowerCase();
-  if (n.includes('trial')) return [
-    'Acesso limitado',
-    'Sem custo no primeiro ciclo'
-  ];
-  if (n.includes('básico') || n.includes('basico')) return [
-    'Recorrência mensal',
-    'Suporte por e-mail',
-    'Acesso ao dashboard'
-  ];
-  if (n.includes('intermedi')) return [
-    'Tudo do Básico',
-    'Relatórios adicionais',
-    'Atualizações mais rápidas'
-  ];
-  if (n.includes('premium')) return [
-    'Tudo do Intermediário',
-    'Prioridade máxima',
-    'Recursos avançados'
-  ];
+  if (n.includes('trial')) return ['Acesso limitado','Sem custo no primeiro ciclo'];
+  if (n.includes('básico') || n.includes('basico')) return ['Recorrência mensal','Suporte por e-mail','Acesso ao dashboard'];
+  if (n.includes('intermedi')) return ['Tudo do Básico','Relatórios adicionais','Atualizações mais rápidas'];
+  if (n.includes('premium')) return ['Tudo do Intermediário','Prioridade máxima','Recursos avançados'];
   return ['Cobrança recorrente mensal'];
 }
 
-/* ====== Renderização ====== */
+/* ====== Render ====== */
 function renderPlans(plans){
   grid.innerHTML = '';
   for (const p of plans){
     const card = document.createElement('div');
     card.className = 'card';
-    // destaque opcional
     const isBest = /premium|intermedi/i.test(p.name);
     if (isBest) {
       const b = document.createElement('div');
@@ -161,21 +136,21 @@ function renderPlans(plans){
       card.appendChild(b);
     }
 
-    const price = moneyBR(p.price_cents);
+    const priceFmt = moneyBR(p.price_cents);
     const feats = featuresFor(p.name);
+    const btnLabel = p.price_cents === 0 ? 'Assinar grátis' : 'Assinar';
 
     card.innerHTML += `
       <div class="plan-name">${p.name}</div>
       <div class="price">
-        <span class="currency">R$</span>
-        <span class="amount">${(p.price_cents/100).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}).replace(/^(\d+)\,(.*)$/,'$1,$2').split(',')[0]}</span>
+        <span class="amount">${priceFmt}</span>
         <span class="period">/mês</span>
       </div>
-      <div class="price-note">${price} por mês</div>
+      <div class="price-note">${priceFmt} por mês</div>
       ${feats.map(f => `<div class="feat">${f}</div>`).join('')}
       <div class="spacer"></div>
       <div class="actions">
-        <button class="btn">Assinar</button>
+        <button class="btn">${btnLabel}</button>
         <span class="small">renova automaticamente</span>
       </div>
     `;
@@ -215,10 +190,7 @@ async function startCheckout(planId, planName){
   const session = await ensureSession(); if (!session) return;
   try {
     const plans = await loadPlans();
-    if (!plans.length) {
-      showBanner('Nenhum plano ativo encontrado. Verifique a tabela billing_plans.', 'warn');
-      return;
-    }
+    if (!plans.length) { showBanner('Nenhum plano ativo encontrado. Verifique a tabela billing_plans.', 'warn'); return; }
     renderPlans(plans);
   } catch (err){
     console.error(err);
