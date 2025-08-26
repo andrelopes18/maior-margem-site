@@ -4,6 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Planos de Assinatura</title>
+
 <style>
   :root { color-scheme: dark; }
   *{ box-sizing:border-box }
@@ -12,14 +13,19 @@
   header{display:flex;align-items:center;justify-content:space-between;padding:20px}
   h1{margin:0;color:#00b140}
   .user{font-size:12px;color:#9aa0a6}
-  .btn{display:inline-flex;align-items:center;gap:8px;background:#00b140;color:#fff;border:none;padding:10px 14px;border-radius:8px;text-decoration:none;cursor:pointer}
+
+  .btn{display:inline-flex;align-items:center;gap:8px;background:#00b140;color:#fff;border:none;padding:10px 14px;border-radius:8px;text-decoration:none;cursor:pointer;transition:background .2s,opacity .2s}
   .btn:hover{background:#009b38}
+  .btn[disabled]{opacity:.7;cursor:not-allowed}
   .btn.ghost{background:transparent;border:1px solid #2a2a2a;color:#ddd}
   .btn.ghost:hover{background:#1b1b1b}
+
   .container{max-width:1100px;margin:0 auto;padding:0 20px 32px}
+
   .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:10px}
   @media (max-width:1000px){ .grid{grid-template-columns:repeat(2,1fr)} }
   @media (max-width:560px){ .grid{grid-template-columns:1fr} }
+
   .card{background:#0f0f0f;border:1px solid #2a2a2a;border-radius:14px;padding:18px;display:flex;flex-direction:column;position:relative;overflow:hidden}
   .badge{position:absolute;top:10px;right:-38px;transform:rotate(35deg);background:#1c3b1c;color:#bfffc1;padding:4px 60px;font-size:12px;border:1px solid #2a2a2a}
   .plan-name{font-weight:800;font-size:16px;letter-spacing:.3px}
@@ -32,12 +38,23 @@
   .spacer{flex:1}
   .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .small{font-size:12px;color:#9aa0a6}
+
   .banner{border:1px solid #2a2a2a;border-radius:10px;padding:10px 12px;margin:12px 0;background:#111;display:none}
   .banner.warn{border-color:#5c3f00;background:#1b1300;color:#ffc966;display:block}
   .banner.ok{border-color:#214d21;background:#0e1a0e;color:#b7fbb7;display:block}
   .banner.err{border-color:#5c1e1e;background:#190d0d;color:#ff9a9a;display:block}
+
   .foot{margin-top:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+
+  /* mini spinner no botão */
+  .spinner{
+    width:14px;height:14px;border:2px solid rgba(255,255,255,.4);
+    border-top-color:#fff;border-radius:50%;display:inline-block;animation:spin .7s linear infinite
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
 </style>
+
+<!-- Supabase + suas configs -->
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="./config.js"></script>
 </head>
@@ -54,12 +71,8 @@
   <div id="banner" class="banner"></div>
   <div id="plansGrid" class="grid"></div>
   <div class="foot">
-    <div class="small">
-      Valores mensais com cobrança recorrente. Cancele quando quiser.
-    </div>
-    <div>
-      <a href="meusdados.html" class="btn ghost">Meus dados</a>
-    </div>
+    <div class="small">Valores mensais com cobrança recorrente. Cancele quando quiser.</div>
+    <div><a href="meusdados.html" class="btn ghost">Meus dados</a></div>
   </div>
 </main>
 
@@ -70,7 +83,7 @@ const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
 });
 
-/* ====== Helpers ====== */
+/* ====== UI helpers ====== */
 const userInfo = document.getElementById('userInfo');
 const banner = document.getElementById('banner');
 const grid = document.getElementById('plansGrid');
@@ -79,15 +92,15 @@ function moneyBR(cents){ return (cents/100).toLocaleString('pt-BR',{style:'curre
 function showBanner(msg, type='ok'){ banner.textContent = msg; banner.className = 'banner ' + type; }
 function clearBanner(){ banner.className = 'banner'; banner.style.display='none'; banner.textContent=''; }
 
-/* Monta automaticamente a base das Edge Functions a partir do SUPABASE_URL */
+/* Descobre a base das Edge Functions via SUPABASE_URL */
 function getFunctionsBaseFromSupabaseUrl(urlStr){
   try{
     const u = new URL(urlStr);
-    const host = u.host; // abcd.supabase.co
+    const host = u.host; // ex: <ref>.supabase.co
     const projectRef = host.split('.supabase.co')[0];
     return `https://${projectRef}.functions.supabase.co`;
   }catch{
-    return '/functions/v1';
+    return '/functions/v1'; // fallback
   }
 }
 const FUNCTIONS_BASE = getFunctionsBaseFromSupabaseUrl(CFG.SUPABASE_URL);
@@ -101,7 +114,7 @@ async function ensureSession(){
   return session;
 }
 
-/* ====== Carregar planos ====== */
+/* ====== Carregar planos (com dedupe por nome) ====== */
 async function loadPlans(){
   const { data, error } = await sb
     .from('billing_plans')
@@ -109,7 +122,14 @@ async function loadPlans(){
     .eq('active', true)
     .order('price_cents', { ascending: true });
   if (error) throw error;
-  return data || [];
+
+  const seen = new Set();
+  const unique = [];
+  for (const p of (data || [])) {
+    const k = (p.name || '').toLowerCase().trim();
+    if (!seen.has(k)) { seen.add(k); unique.push(p); }
+  }
+  return unique;
 }
 
 /* (Opcional) features por plano */
@@ -128,6 +148,7 @@ function renderPlans(plans){
   for (const p of plans){
     const card = document.createElement('div');
     card.className = 'card';
+
     const isBest = /premium|intermedi/i.test(p.name);
     if (isBest) {
       const b = document.createElement('div');
@@ -150,22 +171,27 @@ function renderPlans(plans){
       ${feats.map(f => `<div class="feat">${f}</div>`).join('')}
       <div class="spacer"></div>
       <div class="actions">
-        <button class="btn">${btnLabel}</button>
+        <button class="btn" data-plan="${p.id}">${btnLabel}</button>
         <span class="small">renova automaticamente</span>
       </div>
     `;
 
     const btn = card.querySelector('.btn');
-    btn.addEventListener('click', () => startCheckout(p.id, p.name));
+    btn.addEventListener('click', () => startCheckout(p.id, p.name, btn));
 
     grid.appendChild(card);
   }
 }
 
 /* ====== Iniciar checkout (PagBank) ====== */
-async function startCheckout(planId, planName){
+async function startCheckout(planId, planName, btnEl){
+  const original = btnEl.innerHTML;
+  btnEl.innerHTML = '<span class="spinner"></span> Processando...';
+  btnEl.disabled = true;
   showBanner(`Criando checkout para "${planName}"…`, 'ok');
+
   const { data: { session } } = await sb.auth.getSession();
+
   try {
     const resp = await fetch(CREATE_CHECKOUT_ENDPOINT, {
       method: 'POST',
@@ -175,13 +201,22 @@ async function startCheckout(planId, planName){
       },
       body: JSON.stringify({ plan_id: planId })
     });
-    const json = await resp.json();
-    if (!resp.ok || !json.pay_url) throw new Error(json.error || 'Falha ao criar checkout');
+
+    const json = await resp.json().catch(() => ({}));
+
+    if (!resp.ok || !json.pay_url) {
+      console.error('create-checkout error:', json);
+      const msg = json.error || json.provider_body || 'Falha ao criar checkout';
+      throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    }
+
     showBanner('Redirecionando para o pagamento…', 'ok');
-    window.location.href = json.pay_url;
+    window.location.href = json.pay_url; // para plano grátis, será /meusdados.html
   } catch (e) {
     console.error(e);
-    showBanner('Não foi possível iniciar o pagamento. Tente novamente.', 'err');
+    showBanner(`Não foi possível iniciar o pagamento. ${e?.message ?? ''}`, 'err');
+    btnEl.innerHTML = original;
+    btnEl.disabled = false;
   }
 }
 
@@ -190,7 +225,10 @@ async function startCheckout(planId, planName){
   const session = await ensureSession(); if (!session) return;
   try {
     const plans = await loadPlans();
-    if (!plans.length) { showBanner('Nenhum plano ativo encontrado. Verifique a tabela billing_plans.', 'warn'); return; }
+    if (!plans.length) {
+      showBanner('Nenhum plano ativo encontrado. Verifique a tabela billing_plans.', 'warn');
+      return;
+    }
     renderPlans(plans);
   } catch (err){
     console.error(err);
