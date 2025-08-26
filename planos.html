@@ -74,13 +74,13 @@
 </main>
 
 <script>
-/* ====== Supabase client ====== */
+// ====== Supabase client ======
 const CFG = window.CONFIG || {};
 const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
 });
 
-/* ====== UI helpers ====== */
+// ====== UI helpers ======
 const userInfo = document.getElementById('userInfo');
 const banner = document.getElementById('banner');
 const grid = document.getElementById('plansGrid');
@@ -89,31 +89,18 @@ function moneyBR(cents){ return (cents/100).toLocaleString('pt-BR',{style:'curre
 function showBanner(msg, type='ok'){ banner.textContent = msg; banner.className = 'banner ' + type; }
 function clearBanner(){ banner.className = 'banner'; banner.style.display='none'; banner.textContent=''; }
 
-/* ====== Util ====== */
-/** Normaliza nome em chave sem acentos (fallback caso DB ainda não tenha plan_key) */
-function keyFrom(name){
-  return (name||'')
-    .normalize('NFD').replace(/[\u0300-\u036f]/g,'') // tira acentos
-    .toLowerCase()
-    .replace(/\s+/g,'')
-    .replace(/[^a-z0-9]/g,'');
-}
-
-/* Descobre a base das Edge Functions via SUPABASE_URL */
+// ====== Util ======
 function getFunctionsBaseFromSupabaseUrl(urlStr){
   try{
     const u = new URL(urlStr);
-    const host = u.host; // ex: <ref>.supabase.co
-    const projectRef = host.split('.supabase.co')[0];
+    const projectRef = u.host.split('.supabase.co')[0];
     return `https://${projectRef}.functions.supabase.co`;
-  }catch{
-    return '/functions/v1'; // fallback
-  }
+  }catch{ return '/functions/v1'; }
 }
 const FUNCTIONS_BASE = getFunctionsBaseFromSupabaseUrl(CFG.SUPABASE_URL);
 const CREATE_CHECKOUT_ENDPOINT = `${FUNCTIONS_BASE}/create-checkout`;
 
-/* ====== Sessão & Perfil ====== */
+// ====== Sessão & Perfil ======
 async function ensureSession(){
   const { data: { session } } = await sb.auth.getSession();
   if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return null; }
@@ -121,7 +108,6 @@ async function ensureSession(){
 }
 
 async function fetchProfilePlanType(userId){
-  // Busca plan_type no profiles (enum sem acento)
   const { data, error } = await sb
     .from('profiles')
     .select('plan_type')
@@ -131,63 +117,47 @@ async function fetchProfilePlanType(userId){
   return data?.plan_type || 'trial';
 }
 
-/* ====== Carregar planos (com plan_key se existir) ====== */
+// ====== Carregar planos (apenas ativos) ======
 async function loadPlans(){
   const { data, error } = await sb
     .from('billing_plans')
-    .select('id,name,plan_key,price_cents,interval_unit,interval_length,active')
+    .select('id,name,plan_key,price_cents,active')
     .eq('active', true)
     .order('price_cents', { ascending: true });
   if (error) throw error;
+  return (data||[]).map(p => ({...p, _key: p.plan_key || 'trial'}));
+}
 
-  // dedupe por plan_key/name
-  const seen = new Set();
-  const unique = [];
-  for (const p of (data || [])) {
-    const k = (p.plan_key || keyFrom(p.name || '')).toLowerCase();
-    if (!seen.has(k)) { seen.add(k); unique.push({ ...p, _key: k }); }
+// (Opcional) features por plano
+function featuresFor(key){
+  switch(String(key)){
+    case 'trial': return ['Acesso limitado','Sem custo'];
+    case 'basico': return ['Dashboard básico','Suporte por e-mail'];
+    case 'intermediario': return ['Tudo do Básico','Relatórios adicionais'];
+    case 'premium': return ['Tudo do Intermediário','Suporte prioritário'];
+    default: return ['Cobrança recorrente mensal'];
   }
-  return unique;
 }
 
-/* (Opcional) features por plano */
-function featuresFor(name){
-  const n = (name||'').toLowerCase();
-  if (n.includes('trial')) return ['Acesso limitado','Sem custo no primeiro ciclo'];
-  if (n.includes('básico') || n.includes('basico')) return ['Recorrência mensal','Suporte por e-mail','Acesso ao dashboard'];
-  if (n.includes('intermedi')) return ['Tudo do Básico','Relatórios adicionais','Atualizações mais rápidas'];
-  if (n.includes('premium')) return ['Tudo do Intermediário','Prioridade máxima','Recursos avançados'];
-  return ['Cobrança recorrente mensal'];
-}
-
-/* ====== Render ====== */
+// ====== Render ======
 function renderPlans(plans, currentKey){
   grid.innerHTML = '';
 
-  const currentPlan = plans.find(p => p._key === currentKey) || null;
+  const currentPlan = plans.find(p => p.plan_key === currentKey) || null;
   const currentPrice = currentPlan?.price_cents ?? 0;
 
   for (const p of plans){
     const card = document.createElement('div');
     card.className = 'card';
 
-    const isBest = /premium|intermedi/i.test(p.name);
-    if (isBest) {
-      const b = document.createElement('div');
-      b.className = 'badge';
-      b.textContent = /premium/i.test(p.name) ? 'MAIS COMPLETO' : 'MELHOR CUSTO-BENEFÍCIO';
-      card.appendChild(b);
-    }
-
     const priceFmt = moneyBR(p.price_cents);
-    const feats = featuresFor(p.name);
+    const feats = featuresFor(p.plan_key);
 
-    // Rótulo do botão conforme plano atual
     let btnLabel = 'Assinar';
     let btnDisabled = false;
     let pill = '';
 
-    if (p._key === currentKey){
+    if (p.plan_key === currentKey){
       btnLabel = 'Seu plano atual';
       btnDisabled = true;
       pill = '<span class="pill">ativo</span>';
@@ -213,15 +183,13 @@ function renderPlans(plans, currentKey){
     `;
 
     const btn = card.querySelector('.btn');
-    if (!btnDisabled) {
-      btn.addEventListener('click', () => startCheckout(p.id, p.name, btn));
-    }
+    if (!btnDisabled) btn.addEventListener('click', () => startCheckout(p.id, p.name, btn));
 
     grid.appendChild(card);
   }
 }
 
-/* ====== Iniciar checkout (PagBank) ====== */
+// ====== Iniciar checkout ======
 async function startCheckout(planId, planName, btnEl){
   const original = btnEl.innerHTML;
   btnEl.innerHTML = '<span class="spinner"></span> Processando...';
@@ -246,23 +214,14 @@ async function startCheckout(planId, planName, btnEl){
 
     if (!resp.ok || !json.pay_url) {
       console.error('create-checkout error:', json);
-
-      const parts = [];
-      if (json.error) parts.push(json.error);
-      if (json.provider_status) parts.push(`STATUS=${json.provider_status}`);
-      if (json.provider_body) {
-        const bodyStr = typeof json.provider_body === 'string' ? json.provider_body : JSON.stringify(json.provider_body);
-        parts.push(`BODY=${bodyStr}`);
-      }
-      showBanner(`Não foi possível iniciar o pagamento. ${parts.join(' | ')}`, 'err');
-
+      showBanner(`Não foi possível iniciar o pagamento. ${json.error || ''}`, 'err');
       btnEl.innerHTML = original;
       btnEl.disabled = false;
       return;
     }
 
     showBanner('Redirecionando para o pagamento…', 'ok');
-    window.location.href = json.pay_url; // para plano grátis, será /meusdados.html
+    window.location.href = json.pay_url;
   } catch (e) {
     console.error(e);
     showBanner(`Não foi possível iniciar o pagamento. ${e?.message ?? ''}`, 'err');
@@ -271,25 +230,18 @@ async function startCheckout(planId, planName, btnEl){
   }
 }
 
-/* ====== Init ====== */
+// ====== Init ======
 (async function init(){
   const session = await ensureSession(); if (!session) return;
 
   try {
-    // 1) Plano atual do usuário (profiles.plan_type)
-    const planType = await fetchProfilePlanType(session.user.id); // 'trial' | 'basico' | 'intermediario' | 'premium'
+    const planType = await fetchProfilePlanType(session.user.id); // 'trial'|'basico'|'intermediario'|'premium'
     userInfo.textContent = `${session.user?.email || 'Logado'} • Plano: ${planType}`;
 
-    // 2) Planos públicos
     const plans = await loadPlans();
-    if (!plans.length) {
-      showBanner('Nenhum plano ativo encontrado. Verifique a tabela billing_plans.', 'warn');
-      return;
-    }
+    if (!plans.length) { showBanner('Nenhum plano ativo encontrado.', 'warn'); return; }
 
-    // 3) Render com restrição por plano atual
     renderPlans(plans, planType);
-
   } catch (err){
     console.error(err);
     showBanner('Erro ao carregar planos. Confira as políticas RLS ou sua conexão.', 'err');
