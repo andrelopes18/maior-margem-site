@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -9,22 +10,17 @@
   * { box-sizing: border-box; }
   body{background:#121212;color:#fff;font-family:Arial,sans-serif;margin:0}
   a{color:#00b140;text-decoration:none}
-  header{display:flex;align-items:center;justify-content:space-between;padding:20px;gap:12px;flex-wrap:wrap}
+  header{display:flex;align-items:center;justify-content:space-between;padding:20px}
   h1{margin:0;color:#00b140}
   .user{font-size:12px;color:#9aa0a6}
-  .chip{font-size:12px;background:#1e1e1e;border:1px solid #333;padding:6px 10px;border-radius:999px}
-  .chip.plan{color:#bfffc1;border-color:#2f5a2f;background:#132313}
-  .chip.warn{color:#ffd18a;border-color:#5c3f00;background:#1b1300}
   .btn{display:inline-flex;align-items:center;gap:8px;background:#00b140;color:#fff;border:none;padding:10px 14px;border-radius:8px;text-decoration:none;cursor:pointer}
   .btn:hover{background:#009b38}
   .btn.ghost{background:transparent;border:1px solid #2a2a2a;color:#ddd}
   .btn.ghost:hover{background:#1b1b1b}
-  .btn.warn{background:#7a2e2e}
-  .btn.warn:hover{background:#652424}
-  .btn[disabled]{opacity:.6;cursor:not-allowed}
 
   .container{max-width:1100px;margin:0 auto;padding:0 20px 32px}
 
+  /* pricing */
   .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:10px}
   @media (max-width: 1000px){ .grid{grid-template-columns:repeat(2,1fr)} }
   @media (max-width: 560px){ .grid{grid-template-columns:1fr} }
@@ -40,7 +36,7 @@
   .feat{display:flex;gap:8px;align-items:flex-start;margin:6px 0;color:#cfcfcf}
   .feat:before{content:"✓";opacity:.9}
   .spacer{flex:1}
-  .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .actions{display:flex;gap:8px;align-items:center}
   .small{font-size:12px;color:#9aa0a6}
 
   .banner{border:1px solid #2a2a2a;border-radius:10px;padding:10px 12px;margin:12px 0;background:#111;display:none}
@@ -50,17 +46,13 @@
 
   .foot{margin-top:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 </style>
-
-<!-- Supabase -->
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="./config.js"></script>
 </head>
 <body>
 <header class="container">
   <h1>Planos</h1>
-  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-    <span id="planChip" class="chip plan" title="Plano atual">Plano: —</span>
-    <span id="statusChip" class="chip warn" style="display:none"></span>
+  <div style="display:flex;gap:10px;align-items:center">
     <span id="userInfo" class="user">Carregando…</span>
     <a href="dashboard.html" class="btn ghost">← Voltar</a>
   </div>
@@ -68,14 +60,14 @@
 
 <main class="container">
   <div id="banner" class="banner"></div>
+
   <div id="plansGrid" class="grid"></div>
 
   <div class="foot">
     <div class="small">
-      Os valores são mensais e a cobrança é recorrente. Você pode cancelar a <b>renovação</b> quando quiser; seu acesso segue até o fim do ciclo já pago.
+      Os valores são mensais e a cobrança é recorrente. Você pode cancelar quando quiser.
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button id="btnCancelar" class="btn warn">Cancelar renovação (manter até expirar)</button>
+    <div>
       <a href="meusdados.html" class="btn ghost">Meus dados</a>
     </div>
   </div>
@@ -88,96 +80,40 @@ const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
 });
 
-/* ====== Elementos ====== */
+/* ====== Helpers ====== */
 const userInfo = document.getElementById('userInfo');
-const planChip = document.getElementById('planChip');
-const statusChip = document.getElementById('statusChip');
 const banner = document.getElementById('banner');
 const grid = document.getElementById('plansGrid');
-const btnCancelar = document.getElementById('btnCancelar');
 
-/* ====== Helpers ====== */
 function moneyBR(cents){ return (cents/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
 function showBanner(msg, type='ok'){ banner.textContent = msg; banner.className = 'banner ' + type; }
 function clearBanner(){ banner.className = 'banner'; banner.style.display='none'; banner.textContent=''; }
-function normalizePlanKey(name){
-  const n = (name||'').toLowerCase();
-  if (n.includes('trial')) return 'trial';
-  if (n.includes('básico') || n.includes('basico')) return 'basico';
-  if (n.includes('intermedi')) return 'intermediario';
-  if (n.includes('premium')) return 'premium';
-  return n.replace(/\s+/g,'_');
-}
-function featuresFor(name){
-  const n = (name||'').toLowerCase();
-  if (n.includes('trial')) return ['Acesso limitado','Sem custo no primeiro ciclo'];
-  if (n.includes('básico') || n.includes('basico')) return ['Recorrência mensal','Suporte por e-mail','Acesso ao dashboard'];
-  if (n.includes('intermedi')) return ['Tudo do Básico','Relatórios adicionais','Atualizações mais rápidas'];
-  if (n.includes('premium')) return ['Tudo do Intermediário','Prioridade máxima','Recursos avançados'];
-  return ['Cobrança recorrente mensal'];
-}
-function formatDateBR(iso){
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (isNaN(d)) return null;
-  return d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
-}
 
-/* ====== URLs das Functions (usando secrets/config) ====== */
-const FUNCTIONS_BASE = CFG.FUNCTIONS_BASE || "https://<PROJECT-REF>.functions.supabase.co";
+/* Monta automaticamente a base das Edge Functions a partir do SUPABASE_URL */
+function getFunctionsBaseFromSupabaseUrl(urlStr){
+  try{
+    const u = new URL(urlStr);
+    const host = u.host; // ex: abcd1234.supabase.co
+    const projectRef = host.split('.supabase.co')[0];
+    return `https://${projectRef}.functions.supabase.co`;
+  }catch{
+    return '/functions/v1'; // fallback (mesmo domínio)
+  }
+}
+const FUNCTIONS_BASE = getFunctionsBaseFromSupabaseUrl(CFG.SUPABASE_URL);
 const CREATE_CHECKOUT_ENDPOINT = `${FUNCTIONS_BASE}/create-checkout`;
-const CANCEL_SUBSCRIPTION_ENDPOINT = `${FUNCTIONS_BASE}/cancel-subscription`;
 
-/* ====== Estado ====== */
-let currentPlan = 'trial';
-let subState = { cancel_at_period_end: false, current_period_end: null };
-
-/* ====== Sessão + plano/estado atual ====== */
-async function ensureSessionAndPlan(){
+/* ====== Sessão ====== */
+async function ensureSession(){
   const { data: { session } } = await sb.auth.getSession();
   if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return null; }
   userInfo.textContent = session.user?.email || 'Logado';
-
-  try{
-    const { data, error } = await sb
-      .from('profiles')
-      .select('plan, cancel_at_period_end, current_period_end, subscription_status')
-      .eq('id', session.user.id)
-      .maybeSingle();
-    if (error) throw error;
-
-    currentPlan = normalizePlanKey((data?.plan || 'trial').toString());
-    subState.cancel_at_period_end = !!data?.cancel_at_period_end;
-    subState.current_period_end = data?.current_period_end || null;
-  }catch(e){
-    console.error(e);
-    currentPlan = 'trial';
-    subState.cancel_at_period_end = false;
-    subState.current_period_end = null;
-  }
-
-  const pretty = currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1);
-  planChip.textContent = `Plano: ${pretty.replace('Basico','Básico').replace('Intermediario','Intermediário')}`;
-  renderStatusChip();
-  btnCancelar.disabled = subState.cancel_at_period_end || currentPlan === 'trial';
   return session;
 }
 
-function renderStatusChip(){
-  if (subState.cancel_at_period_end){
-    const when = formatDateBR(subState.current_period_end) || 'fim do ciclo atual';
-    statusChip.style.display = 'inline-block';
-    statusChip.textContent = `Renovação cancelada • acesso até ${when}`;
-  }else{
-    statusChip.style.display = 'none';
-    statusChip.textContent = '';
-  }
-}
-
-/* ====== Carregar planos ====== */
+/* ====== Carregar planos do banco ====== */
 async function loadPlans(){
-  const { data, error } = await sb
-    .from('billing_plans')
+  const { data, error } = await sb.from('billing_plans')
     .select('id,name,price_cents,interval_unit,interval_length,billing_cycles,active')
     .eq('active', true)
     .order('price_cents', { ascending: true });
@@ -185,12 +121,38 @@ async function loadPlans(){
   return data || [];
 }
 
-/* ====== Render ====== */
+/* (Opcional) features por plano — ajuste conforme seu produto */
+function featuresFor(name){
+  const n = (name||'').toLowerCase();
+  if (n.includes('trial')) return [
+    'Acesso limitado',
+    'Sem custo no primeiro ciclo'
+  ];
+  if (n.includes('básico') || n.includes('basico')) return [
+    'Recorrência mensal',
+    'Suporte por e-mail',
+    'Acesso ao dashboard'
+  ];
+  if (n.includes('intermedi')) return [
+    'Tudo do Básico',
+    'Relatórios adicionais',
+    'Atualizações mais rápidas'
+  ];
+  if (n.includes('premium')) return [
+    'Tudo do Intermediário',
+    'Prioridade máxima',
+    'Recursos avançados'
+  ];
+  return ['Cobrança recorrente mensal'];
+}
+
+/* ====== Renderização ====== */
 function renderPlans(plans){
   grid.innerHTML = '';
   for (const p of plans){
     const card = document.createElement('div');
     card.className = 'card';
+    // destaque opcional
     const isBest = /premium|intermedi/i.test(p.name);
     if (isBest) {
       const b = document.createElement('div');
@@ -199,39 +161,33 @@ function renderPlans(plans){
       card.appendChild(b);
     }
 
-    const planKey = normalizePlanKey(p.name);
-    const isCurrent = planKey === currentPlan;
+    const price = moneyBR(p.price_cents);
     const feats = featuresFor(p.name);
 
-    const renewalNote = subState.cancel_at_period_end && isCurrent
-      ? `<div class="small" style="color:#ffd18a">Renovação cancelada • acesso até ${formatDateBR(subState.current_period_end) || 'fim do ciclo'}</div>`
-      : '';
-
     card.innerHTML += `
-      <div class="plan-name">${p.name}${isCurrent ? ' • <span style="color:#bfffc1">seu plano atual</span>' : ''}</div>
+      <div class="plan-name">${p.name}</div>
       <div class="price">
         <span class="currency">R$</span>
-        <span class="amount">${(p.price_cents/100).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}).split(',')[0]}</span>
+        <span class="amount">${(p.price_cents/100).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}).replace(/^(\d+)\,(.*)$/,'$1,$2').split(',')[0]}</span>
         <span class="period">/mês</span>
       </div>
-      <div class="price-note">${moneyBR(p.price_cents)} por mês</div>
+      <div class="price-note">${price} por mês</div>
       ${feats.map(f => `<div class="feat">${f}</div>`).join('')}
-      ${renewalNote}
       <div class="spacer"></div>
       <div class="actions">
-        <button class="btn" ${isCurrent ? 'disabled title="Plano já ativo"' : ''}>${isCurrent ? 'Ativo' : 'Assinar'}</button>
+        <button class="btn">Assinar</button>
         <span class="small">renova automaticamente</span>
       </div>
     `;
 
     const btn = card.querySelector('.btn');
-    if (!isCurrent) btn.addEventListener('click', () => startCheckout(p.id, p.name));
+    btn.addEventListener('click', () => startCheckout(p.id, p.name));
 
     grid.appendChild(card);
   }
 }
 
-/* ====== Iniciar checkout ====== */
+/* ====== Iniciar checkout (PagBank) ====== */
 async function startCheckout(planId, planName){
   showBanner(`Criando checkout para "${planName}"…`, 'ok');
   const { data: { session } } = await sb.auth.getSession();
@@ -245,48 +201,18 @@ async function startCheckout(planId, planName){
       body: JSON.stringify({ plan_id: planId })
     });
     const json = await resp.json();
-    if (!resp.ok) throw new Error(json.error || 'Falha ao criar assinatura');
-    if (json.pay_url) {
-      window.location.href = json.pay_url; // Stripe
-    } else {
-      showBanner('Assinatura iniciada. Aguarde o webhook confirmar.', 'ok'); // PagBank
-    }
+    if (!resp.ok || !json.pay_url) throw new Error(json.error || 'Falha ao criar checkout');
+    showBanner('Redirecionando para o pagamento…', 'ok');
+    window.location.href = json.pay_url;
   } catch (e) {
     console.error(e);
     showBanner('Não foi possível iniciar o pagamento. Tente novamente.', 'err');
   }
 }
 
-/* ====== Cancelar RENOVAÇÃO ====== */
-btnCancelar.addEventListener('click', async ()=>{
-  const confirmMsg = 'Confirmar cancelamento da RENOVAÇÃO? Você continuará com acesso até o fim do ciclo atual.';
-  if (!confirm(confirmMsg)) return;
-  showBanner('Processando cancelamento da renovação…', 'ok');
-  const { data: { session } } = await sb.auth.getSession();
-  if (!session) { showBanner('Faça login e tente novamente.', 'warn'); return; }
-  try{
-    const resp = await fetch(CANCEL_SUBSCRIPTION_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({})
-    });
-    const json = await resp.json().catch(()=>({}));
-    if (!resp.ok) throw new Error(json.error || `Erro ${resp.status}`);
-    subState.cancel_at_period_end = true;
-    if (json.current_period_end) subState.current_period_end = json.current_period_end;
-    btnCancelar.disabled = true;
-    renderStatusChip();
-    showBanner('Renovação cancelada. Você manterá acesso até o fim do ciclo atual.', 'ok');
-    const plans = await loadPlans(); renderPlans(plans);
-  }catch(e){
-    console.error(e);
-    showBanner('Não foi possível cancelar agora. Verifique a função e os secrets.', 'err');
-  }
-});
-
 /* ====== Init ====== */
 (async function init(){
-  const session = await ensureSessionAndPlan(); if (!session) return;
+  const session = await ensureSession(); if (!session) return;
   try {
     const plans = await loadPlans();
     if (!plans.length) {
@@ -297,18 +223,6 @@ btnCancelar.addEventListener('click', async ()=>{
   } catch (err){
     console.error(err);
     showBanner('Erro ao carregar planos. Confira as políticas RLS ou sua conexão.', 'err');
-  }
-})();
-
-/* ====== Auto-refresh após checkout ====== */
-(function autoRefreshAfterReturn(){
-  const params = new URLSearchParams(window.location.search);
-  if (params.get('return') === 'ok') {
-    ensureSessionAndPlan().then(async () => {
-      const plans = await loadPlans();
-      renderPlans(plans);
-      showBanner('Assinatura atualizada após o pagamento.', 'ok');
-    });
   }
 })();
 </script>
