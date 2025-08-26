@@ -46,10 +46,8 @@
 
   .foot{margin-top:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 
-  .spinner{
-    width:14px;height:14px;border:2px solid rgba(255,255,255,.4);
-    border-top-color:#fff;border-radius:50%;display:inline-block;animation:spin .7s linear infinite
-  }
+  .pill{display:inline-block;padding:2px 8px;border:1px solid #2a2a2a;border-radius:999px;font-size:11px;color:#bfbfbf;margin-left:8px}
+  .spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;display:inline-block;animation:spin .7s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
 </style>
 
@@ -91,6 +89,16 @@ function moneyBR(cents){ return (cents/100).toLocaleString('pt-BR',{style:'curre
 function showBanner(msg, type='ok'){ banner.textContent = msg; banner.className = 'banner ' + type; }
 function clearBanner(){ banner.className = 'banner'; banner.style.display='none'; banner.textContent=''; }
 
+/* ====== Util ====== */
+/** Normaliza nome em chave sem acentos (fallback caso DB ainda não tenha plan_key) */
+function keyFrom(name){
+  return (name||'')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'') // tira acentos
+    .toLowerCase()
+    .replace(/\s+/g,'')
+    .replace(/[^a-z0-9]/g,'');
+}
+
 /* Descobre a base das Edge Functions via SUPABASE_URL */
 function getFunctionsBaseFromSupabaseUrl(urlStr){
   try{
@@ -105,28 +113,39 @@ function getFunctionsBaseFromSupabaseUrl(urlStr){
 const FUNCTIONS_BASE = getFunctionsBaseFromSupabaseUrl(CFG.SUPABASE_URL);
 const CREATE_CHECKOUT_ENDPOINT = `${FUNCTIONS_BASE}/create-checkout`;
 
-/* ====== Sessão ====== */
+/* ====== Sessão & Perfil ====== */
 async function ensureSession(){
   const { data: { session } } = await sb.auth.getSession();
   if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return null; }
-  userInfo.textContent = session.user?.email || 'Logado';
   return session;
 }
 
-/* ====== Carregar planos (com dedupe por nome) ====== */
+async function fetchProfilePlanType(userId){
+  // Busca plan_type no profiles (enum sem acento)
+  const { data, error } = await sb
+    .from('profiles')
+    .select('plan_type')
+    .eq('id', userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.plan_type || 'trial';
+}
+
+/* ====== Carregar planos (com plan_key se existir) ====== */
 async function loadPlans(){
   const { data, error } = await sb
     .from('billing_plans')
-    .select('id,name,price_cents,interval_unit,interval_length,active')
+    .select('id,name,plan_key,price_cents,interval_unit,interval_length,active')
     .eq('active', true)
     .order('price_cents', { ascending: true });
   if (error) throw error;
 
+  // dedupe por plan_key/name
   const seen = new Set();
   const unique = [];
   for (const p of (data || [])) {
-    const k = (p.name || '').toLowerCase().trim();
-    if (!seen.has(k)) { seen.add(k); unique.push(p); }
+    const k = (p.plan_key || keyFrom(p.name || '')).toLowerCase();
+    if (!seen.has(k)) { seen.add(k); unique.push({ ...p, _key: k }); }
   }
   return unique;
 }
@@ -142,8 +161,12 @@ function featuresFor(name){
 }
 
 /* ====== Render ====== */
-function renderPlans(plans){
+function renderPlans(plans, currentKey){
   grid.innerHTML = '';
+
+  const currentPlan = plans.find(p => p._key === currentKey) || null;
+  const currentPrice = currentPlan?.price_cents ?? 0;
+
   for (const p of plans){
     const card = document.createElement('div');
     card.className = 'card';
@@ -158,10 +181,24 @@ function renderPlans(plans){
 
     const priceFmt = moneyBR(p.price_cents);
     const feats = featuresFor(p.name);
-    const btnLabel = p.price_cents === 0 ? 'Assinar grátis' : 'Assinar';
 
-    card.innerHTML += `
-      <div class="plan-name">${p.name}</div>
+    // Rótulo do botão conforme plano atual
+    let btnLabel = 'Assinar';
+    let btnDisabled = false;
+    let pill = '';
+
+    if (p._key === currentKey){
+      btnLabel = 'Seu plano atual';
+      btnDisabled = true;
+      pill = '<span class="pill">ativo</span>';
+    } else {
+      if (p.price_cents > currentPrice) btnLabel = 'Upgrade';
+      else if (p.price_cents < currentPrice) btnLabel = 'Downgrade';
+      else btnLabel = 'Mudar para este';
+    }
+
+    card.innerHTML = `
+      <div class="plan-name">${p.name} ${pill}</div>
       <div class="price">
         <span class="amount">${priceFmt}</span>
         <span class="period">/mês</span>
@@ -170,13 +207,15 @@ function renderPlans(plans){
       ${feats.map(f => `<div class="feat">${f}</div>`).join('')}
       <div class="spacer"></div>
       <div class="actions">
-        <button class="btn" data-plan="${p.id}">${btnLabel}</button>
+        <button class="btn" data-plan="${p.id}" ${btnDisabled?'disabled':''}>${btnLabel}</button>
         <span class="small">renova automaticamente</span>
       </div>
     `;
 
     const btn = card.querySelector('.btn');
-    btn.addEventListener('click', () => startCheckout(p.id, p.name, btn));
+    if (!btnDisabled) {
+      btn.addEventListener('click', () => startCheckout(p.id, p.name, btn));
+    }
 
     grid.appendChild(card);
   }
@@ -235,13 +274,22 @@ async function startCheckout(planId, planName, btnEl){
 /* ====== Init ====== */
 (async function init(){
   const session = await ensureSession(); if (!session) return;
+
   try {
+    // 1) Plano atual do usuário (profiles.plan_type)
+    const planType = await fetchProfilePlanType(session.user.id); // 'trial' | 'basico' | 'intermediario' | 'premium'
+    userInfo.textContent = `${session.user?.email || 'Logado'} • Plano: ${planType}`;
+
+    // 2) Planos públicos
     const plans = await loadPlans();
     if (!plans.length) {
       showBanner('Nenhum plano ativo encontrado. Verifique a tabela billing_plans.', 'warn');
       return;
     }
-    renderPlans(plans);
+
+    // 3) Render com restrição por plano atual
+    renderPlans(plans, planType);
+
   } catch (err){
     console.error(err);
     showBanner('Erro ao carregar planos. Confira as políticas RLS ou sua conexão.', 'err');
