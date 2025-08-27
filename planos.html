@@ -1,135 +1,246 @@
-// supabase/functions/create-checkout/index.ts
-// Edge Function: cria um checkout no PagSeguro e retorna pay_url
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Planos de Assinatura</title>
 
-import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { v4 as uuidv4 } from "https://esm.sh/uuid@9.0.1";
+<style>
+  :root { color-scheme: dark; }
+  *{ box-sizing:border-box }
+  body{background:#121212;color:#fff;font-family:Arial,sans-serif;margin:0}
+  a{color:#00b140;text-decoration:none}
+  header{display:flex;align-items:center;justify-content:space-between;padding:20px;gap:12px;flex-wrap:wrap}
+  h1{margin:0;color:#00b140}
+  .chip{font-size:12px;background:#1e1e1e;border:1px solid #333;padding:6px 10px;border-radius:999px}
+  .chip.plan{color:#bfffc1;border-color:#2f5a2f;background:#132313}
+  .btn{display:inline-flex;align-items:center;gap:8px;background:#00b140;color:#fff;border:none;padding:10px 14px;border-radius:8px;text-decoration:none;cursor:pointer;transition:background .2s,opacity .2s}
+  .btn:hover{background:#009b38}
+  .btn.ghost{background:transparent;border:1px solid #2a2a2a;color:#ddd}
+  .btn.ghost:hover{background:#1b1b1b}
+  .btn[disabled]{opacity:.7;cursor:not-allowed}
 
-// Client com Service Role (ignora RLS)
-const supabaseAdmin = createClient(
-  Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-);
+  .container{max-width:1100px;margin:0 auto;padding:0 20px 32px}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:10px}
+  @media (max-width:1000px){ .grid{grid-template-columns:repeat(2,1fr)} }
+  @media (max-width:560px){ .grid{grid-template-columns:1fr} }
 
-// Config do PagSeguro (coloque em Secrets no dashboard)
-const PAGSEGURO_BASE = Deno.env.get("PAGSEGURO_BASE") ?? "https://sandbox.api.pagseguro.com"; // sandbox por padrão
-const PAGSEGURO_TOKEN = Deno.env.get("PAGSEGURO_TOKEN")!;
+  .card{background:#0f0f0f;border:1px solid #2a2a2a;border-radius:14px;padding:18px;display:flex;flex-direction:column}
+  .plan-name{font-weight:800;font-size:16px}
+  .price{display:flex;align-items:flex-end;gap:6px;margin:10px 0 2px}
+  .price .amount{font-size:34px;font-weight:900;line-height:1}
+  .price .period{font-size:12px;color:#9aa0a6;margin-bottom:6px}
+  .price-note{font-size:12px;color:#9aa0a6;margin-bottom:8px}
+  .feat{display:flex;gap:8px;align-items:flex-start;margin:6px 0;color:#cfcfcf}
+  .feat:before{content:"✓";opacity:.9}
+  .spacer{flex:1}
+  .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .small{font-size:12px;color:#9aa0a6}
 
-// URL do webhook
-const PROJECT_REF = new URL(Deno.env.get("SUPABASE_URL")!).host.split(".supabase.co")[0];
-const WEBHOOK_URL = `https://${PROJECT_REF}.functions.supabase.co/pagseguro-webhook`;
+  .banner{border:1px solid #2a2a2a;border-radius:10px;padding:10px 12px;margin:12px 0;background:#111;display:none}
+  .banner.warn{border-color:#5c3f00;background:#1b1300;color:#ffc966;display:block}
+  .banner.ok{border-color:#214d21;background:#0e1a0e;color:#b7fbb7;display:block}
+  .banner.err{border-color:#5c1e1e;background:#190d0d;color:#ff9a9a;display:block}
 
-serve(async (req) => {
+  .pill{display:inline-block;padding:2px 8px;border:1px solid #2a2a2a;border-radius:999px;font-size:11px;color:#bfbfbf;margin-left:8px}
+  .spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;display:inline-block;animation:spin .7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+</style>
+
+<script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="./config.js"></script>
+</head>
+<body>
+<header class="container">
+  <h1>Planos</h1>
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <span id="planChip" class="chip plan">Plano: —</span>
+    <a href="dashboard.html" class="btn ghost">← Voltar</a>
+  </div>
+</header>
+
+<main class="container">
+  <div id="banner" class="banner"></div>
+  <div id="plansGrid" class="grid"></div>
+</main>
+
+<script>
+/* ===== Supabase ===== */
+const CFG = window.CONFIG || {};
+const SUPABASE_URL = CFG.SUPABASE_URL;
+const SUPABASE_ANON_KEY = CFG.SUPABASE_ANON_KEY;
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  alert("Erro de configuração: config.js não carregado."); throw new Error("CONFIG ausente");
+}
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+});
+
+/* ===== UI ===== */
+const planChip = document.getElementById('planChip');
+const banner = document.getElementById('banner');
+const grid = document.getElementById('plansGrid');
+
+function showBanner(text, type='ok'){ banner.textContent=text; banner.className='banner '+(type==='warn'?'warn':(type==='err'?'err':'ok')); banner.style.display='block'; }
+function moneyBR(cents){ return (cents/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
+function prettyBR(plan){
+  const p = (plan||'').toString();
+  return p.charAt(0).toUpperCase()+p.slice(1)
+    .replace('Basico','Básico')
+    .replace('Intermediario','Intermediário');
+}
+
+function getFunctionsBaseFromSupabaseUrl(urlStr){
+  try{ return `https://${new URL(urlStr).host.split('.supabase.co')[0]}.functions.supabase.co`; }
+  catch{ return '/functions/v1'; }
+}
+const FUNCTIONS_BASE = getFunctionsBaseFromSupabaseUrl(SUPABASE_URL);
+const CREATE_CHECKOUT_ENDPOINT = `${FUNCTIONS_BASE}/create-checkout`;
+
+/* ===== Dados ===== */
+// Busca o plano EXATAMENTE como em meusdados.html: profiles.plan
+async function fetchCurrentPlan(userId){
+  const { data, error } = await sb
+    .from('profiles')
+    .select('plan')
+    .eq('id', userId)
+    .maybeSingle();
+  if (error) throw error;
+  return (data?.plan || 'trial').toString(); // default trial
+}
+
+async function loadActivePlans(){
+  const { data, error } = await sb
+    .from('billing_plans')
+    .select('id,name,plan_key,price_cents,active')
+    .eq('active', true)
+    .order('price_cents', { ascending: true });
+  if (error) throw error;
+
+  // Garante uma chave mesmo se plan_key vier nula
+  const norm = (name)=>{
+    const s = String(name||'').toLowerCase();
+    if (s.includes('trial')||s.includes('teste')||s.includes('grat')) return 'trial';
+    if (s.includes('básico')||s.includes('basico')||s.includes('basic')) return 'basico';
+    if (s.includes('intermedi')) return 'intermediario';
+    if (s.includes('premium')||s.includes('prêmio')||s.includes('premio')) return 'premium';
+    return 'trial';
+  };
+  return (data||[]).map(p => ({ ...p, plan_key: p.plan_key || norm(p.name) }));
+}
+
+/* ===== Render ===== */
+function renderPlans(plans, currentKey){
+  grid.innerHTML = '';
+
+  const currentPlan = plans.find(p => p.plan_key === currentKey) || null;
+  const currentPrice = currentPlan?.price_cents ?? 0;
+
+  for (const p of plans){
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    const feats = (() => {
+      switch (p.plan_key){
+        case 'trial': return ['Acesso limitado','Sem custo'];
+        case 'basico': return ['Dashboard básico','Suporte por e-mail'];
+        case 'intermediario': return ['Tudo do Básico','Relatórios adicionais'];
+        case 'premium': return ['Tudo do Intermediário','Suporte prioritário'];
+        default: return ['Cobrança recorrente mensal'];
+      }
+    })();
+
+    const priceFmt = moneyBR(p.price_cents);
+
+    let btnLabel = 'Assinar';
+    let btnDisabled = false;
+    let pill = '';
+
+    if (p.plan_key === currentKey){
+      btnLabel = 'Seu plano atual';
+      btnDisabled = true;
+      pill = '<span class="pill">ativo</span>';
+    } else {
+      if (p.price_cents > currentPrice) btnLabel = 'Upgrade';
+      else if (p.price_cents < currentPrice) btnLabel = 'Downgrade';
+      else btnLabel = 'Mudar para este';
+    }
+
+    card.innerHTML = `
+      <div class="plan-name">${p.name} ${pill}</div>
+      <div class="price"><span class="amount">${priceFmt}</span><span class="period">/mês</span></div>
+      <div class="price-note">${priceFmt} por mês</div>
+      ${feats.map(f => `<div class="feat">${f}</div>`).join('')}
+      <div class="spacer"></div>
+      <div class="actions">
+        <button class="btn" data-plan="${p.id}" ${btnDisabled?'disabled':''}>${btnLabel}</button>
+        <span class="small">renova automaticamente</span>
+      </div>
+    `;
+
+    const btn = card.querySelector('.btn');
+    if (!btnDisabled) btn.addEventListener('click', () => startCheckout(p.id, p.name, btn));
+    grid.appendChild(card);
+  }
+}
+
+/* ===== Checkout ===== */
+async function startCheckout(planId, planName, btnEl){
+  const original = btnEl.innerHTML;
+  btnEl.innerHTML = '<span class="spinner"></span> Processando...';
+  btnEl.disabled = true;
+  showBanner(`Criando checkout para "${planName}"…`, 'ok');
+
+  const { data: { session } } = await sb.auth.getSession();
   try {
-    if (req.method !== "POST") {
-      return new Response("Method not allowed", { status: 405 });
-    }
-
-    // === Autenticação do usuário ===
-    const authHeader = req.headers.get("authorization") || "";
-    const accessToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-    if (!accessToken) {
-      return new Response(JSON.stringify({ error: "Missing Bearer token" }), { status: 401 });
-    }
-
-    // Cliente "user" para pegar sessão do usuário
-    const supabaseUser = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: `Bearer ${accessToken}` } } }
-    );
-
-    const { data: { user } } = await supabaseUser.auth.getUser();
-    if (!user) {
-      return new Response(JSON.stringify({ error: "Not authenticated" }), { status: 401 });
-    }
-
-    // === Lendo body ===
-    const { plan_id } = await req.json();
-    if (!plan_id) {
-      return new Response(JSON.stringify({ error: "plan_id required" }), { status: 400 });
-    }
-
-    // Busca informações do plano
-    const { data: plan, error: e1 } = await supabaseAdmin
-      .from("billing_plans")
-      .select("id, name, price_cents, plan_key")
-      .eq("id", plan_id)
-      .eq("active", true)
-      .single();
-
-    if (e1 || !plan) {
-      return new Response(JSON.stringify({ error: "Plano inválido" }), { status: 400 });
-    }
-
-    // Gera referência única
-    const reference_id = uuidv4();
-
-    // === Monta body para PagSeguro ===
-    const body = {
-      reference_id,
-      items: [
-        {
-          name: plan.name,
-          quantity: 1,
-          unit_amount: plan.price_cents
-        }
-      ],
-      notification_urls: [WEBHOOK_URL],
-      payment_notification_urls: [WEBHOOK_URL],
-      customer: { email: user.email } // opcional, mas ajuda
-    };
-
-    // === Chama PagSeguro ===
-    const psResp = await fetch(`${PAGSEGURO_BASE}/orders`, {
-      method: "POST",
+    const resp = await fetch(CREATE_CHECKOUT_ENDPOINT, {
+      method: 'POST',
       headers: {
-        "Authorization": `Bearer ${PAGSEGURO_TOKEN}`,
-        "Content-Type": "application/json"
+        'Authorization': `Bearer ${session?.access_token}`,
+        'Content-Type': 'application/json'
       },
-      body: JSON.stringify(body)
+      body: JSON.stringify({ plan_id: planId })
     });
 
-    const text = await psResp.text();
-    let json: any = {};
+    const text = await resp.text();
+    let json = {};
     try { json = text ? JSON.parse(text) : {}; } catch { json = { error: text }; }
 
-    if (!psResp.ok) {
-      console.error("Erro PagSeguro:", json);
-      return new Response(JSON.stringify({
-        error: "Falha ao criar pedido no PagSeguro",
-        provider_status: psResp.status,
-        provider_body: json
-      }), { status: 502 });
+    if (!resp.ok || !json.pay_url) {
+      showBanner(`Não foi possível iniciar o pagamento. ${json.error || ''}`, 'err');
+      btnEl.innerHTML = original; btnEl.disabled = false; return;
     }
 
-    // O pay_url pode estar em "links" ou dentro de "charges"
-    const pay_url =
-      json?.links?.find?.((l: any) => l.rel === "PAY")?.href ||
-      json?.charges?.[0]?.links?.find?.((l: any) => l.rel === "PAY")?.href ||
-      json?.links?.[0]?.href;
-
-    if (!pay_url) {
-      return new Response(JSON.stringify({
-        error: "Checkout criado mas não encontrei pay_url",
-        provider_body: json
-      }), { status: 500 });
-    }
-
-    // (opcional) salva checkout_sessions no Supabase
-    await supabaseAdmin.from("checkout_sessions").insert({
-      user_id: user.id,
-      plan_id: plan.id,
-      plan_key: plan.plan_key,
-      reference_id,
-      pay_url,
-      status: "created"
-    });
-
-    return new Response(JSON.stringify({ pay_url, reference_id }), { status: 200 });
-
-  } catch (err) {
-    console.error("Erro create-checkout:", err);
-    return new Response(JSON.stringify({ error: err?.message || String(err) }), { status: 500 });
+    showBanner('Redirecionando para o pagamento…', 'ok');
+    window.location.href = json.pay_url;
+  } catch (e) {
+    showBanner(`Não foi possível iniciar o pagamento. ${e?.message ?? ''}`, 'err');
+    btnEl.innerHTML = original; btnEl.disabled = false;
   }
-});
+}
+
+/* ===== Init ===== */
+(async function init(){
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return; }
+
+  try {
+    // 1) Plano atual via profiles.plan (igual meusdados.html)
+    const currentPlan = await fetchCurrentPlan(session.user.id);
+    planChip.textContent = `Plano: ${prettyBR(currentPlan)}`;
+
+    // 2) Carregar planos ativos
+    const plans = await loadActivePlans();
+    if (!plans.length) { showBanner('Nenhum plano ativo encontrado.', 'warn'); return; }
+
+    // 3) Render
+    renderPlans(plans, currentPlan);
+
+  } catch (err){
+    console.error(err);
+    showBanner('Erro ao carregar planos. Confira RLS/colunas do profiles e config.js.', 'err');
+  }
+})();
+</script>
+</body>
+</html>
