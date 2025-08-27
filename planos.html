@@ -37,7 +37,7 @@
   .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .small{font-size:12px;color:#9aa0a6}
 
-  .banner{border:1px solid #2a2a2a;border-radius:10px;padding:10px 12px;margin:12px 0;background:#111;display:none}
+  .banner{border:1px solid #2a2a2a;border-radius:10px;padding:10px 12px;margin:12px 0;background:#111;display:none;white-space:pre-wrap}
   .banner.warn{border-color:#5c3f00;background:#1b1300;color:#ffc966;display:block}
   .banner.ok{border-color:#214d21;background:#0e1a0e;color:#b7fbb7;display:block}
   .banner.err{border-color:#5c1e1e;background:#190d0d;color:#ff9a9a;display:block}
@@ -67,12 +67,7 @@
 <script>
 /* ===== Supabase ===== */
 const CFG = window.CONFIG || {};
-const SUPABASE_URL = CFG.SUPABASE_URL;
-const SUPABASE_ANON_KEY = CFG.SUPABASE_ANON_KEY;
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  alert("Erro de configuração: config.js não carregado."); throw new Error("CONFIG ausente");
-}
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
 });
 
@@ -94,11 +89,10 @@ function getFunctionsBaseFromSupabaseUrl(urlStr){
   try{ return `https://${new URL(urlStr).host.split('.supabase.co')[0]}.functions.supabase.co`; }
   catch{ return '/functions/v1'; }
 }
-const FUNCTIONS_BASE = getFunctionsBaseFromSupabaseUrl(SUPABASE_URL);
+const FUNCTIONS_BASE = getFunctionsBaseFromSupabaseUrl(CFG.SUPABASE_URL);
 const CREATE_CHECKOUT_ENDPOINT = `${FUNCTIONS_BASE}/create-checkout`;
 
 /* ===== Dados ===== */
-// Busca o plano EXATAMENTE como em meusdados.html: profiles.plan
 async function fetchCurrentPlan(userId){
   const { data, error } = await sb
     .from('profiles')
@@ -106,7 +100,7 @@ async function fetchCurrentPlan(userId){
     .eq('id', userId)
     .maybeSingle();
   if (error) throw error;
-  return (data?.plan || 'trial').toString(); // default trial
+  return (data?.plan || 'trial').toString();
 }
 
 async function loadActivePlans(){
@@ -116,8 +110,6 @@ async function loadActivePlans(){
     .eq('active', true)
     .order('price_cents', { ascending: true });
   if (error) throw error;
-
-  // Garante uma chave mesmo se plan_key vier nula
   const norm = (name)=>{
     const s = String(name||'').toLowerCase();
     if (s.includes('trial')||s.includes('teste')||s.includes('grat')) return 'trial';
@@ -132,7 +124,6 @@ async function loadActivePlans(){
 /* ===== Render ===== */
 function renderPlans(plans, currentKey){
   grid.innerHTML = '';
-
   const currentPlan = plans.find(p => p.plan_key === currentKey) || null;
   const currentPrice = currentPlan?.price_cents ?? 0;
 
@@ -151,7 +142,6 @@ function renderPlans(plans, currentKey){
     })();
 
     const priceFmt = moneyBR(p.price_cents);
-
     let btnLabel = 'Assinar';
     let btnDisabled = false;
     let pill = '';
@@ -207,7 +197,9 @@ async function startCheckout(planId, planName, btnEl){
     try { json = text ? JSON.parse(text) : {}; } catch { json = { error: text }; }
 
     if (!resp.ok || !json.pay_url) {
-      showBanner(`Não foi possível iniciar o pagamento. ${json.error || ''}`, 'err');
+      // Mostra também o detalhe que a função devolve
+      const msg = `Não foi possível iniciar o pagamento.\n${json.error || ''}\n${json.error_detail || ''}`;
+      showBanner(msg, 'err');
       btnEl.innerHTML = original; btnEl.disabled = false; return;
     }
 
@@ -225,17 +217,11 @@ async function startCheckout(planId, planName, btnEl){
   if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return; }
 
   try {
-    // 1) Plano atual via profiles.plan (igual meusdados.html)
     const currentPlan = await fetchCurrentPlan(session.user.id);
     planChip.textContent = `Plano: ${prettyBR(currentPlan)}`;
-
-    // 2) Carregar planos ativos
     const plans = await loadActivePlans();
     if (!plans.length) { showBanner('Nenhum plano ativo encontrado.', 'warn'); return; }
-
-    // 3) Render
     renderPlans(plans, currentPlan);
-
   } catch (err){
     console.error(err);
     showBanner('Erro ao carregar planos. Confira RLS/colunas do profiles e config.js.', 'err');
