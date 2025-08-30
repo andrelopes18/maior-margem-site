@@ -11,15 +11,16 @@
 
   <script type="module">
   import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
-  // window.CONFIG deve existir no site (como você já tem)
+
+  // window.CONFIG precisa existir no site (você já usa isso em outras páginas)
   const supa = createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_ANON_KEY);
 
-  const { data: { session } } = await supa.auth.getSession();
+  const { data: { session} } = await supa.auth.getSession();
   if (!session) {
     document.getElementById('msg').textContent = 'Faça login novamente para concluir.';
   } else {
     let tries = 0;
-    const maxTries = 40; // ~20s se intervalo 500ms
+    const maxTries = 40; // ~20s
     const interval = setInterval(async () => {
       tries++;
       const { data: profile } = await supa
