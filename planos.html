@@ -56,6 +56,7 @@
   <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
     <span id="planChip" class="chip plan">Plano: —</span>
     <a href="dashboard.html" class="btn ghost">← Voltar</a>
+    <a href="meusdados.html" class="btn ghost">Meus dados</a>
   </div>
 </header>
 
@@ -76,7 +77,12 @@ const planChip = document.getElementById('planChip');
 const banner = document.getElementById('banner');
 const grid = document.getElementById('plansGrid');
 
-function showBanner(text, type='ok'){ banner.textContent=text; banner.className='banner '+(type==='warn'?'warn':(type==='err'?'err':'ok')); banner.style.display='block'; }
+function showBanner(content, type='ok', allowHTML=false){
+  banner.className = 'banner ' + (type==='warn'?'warn':(type==='err'?'err':'ok'));
+  banner.style.display = 'block';
+  if (allowHTML) banner.innerHTML = content;
+  else banner.textContent = content;
+}
 function moneyBR(cents){ return (cents/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
 function prettyBR(plan){
   const p = (plan||'').toString();
@@ -84,7 +90,6 @@ function prettyBR(plan){
     .replace('Basico','Básico')
     .replace('Intermediario','Intermediário');
 }
-
 function getFunctionsBaseFromSupabaseUrl(urlStr){
   try{ return `https://${new URL(urlStr).host.split('.supabase.co')[0]}.functions.supabase.co`; }
   catch{ return '/functions/v1'; }
@@ -102,7 +107,6 @@ async function fetchCurrentPlan(userId){
   if (error) throw error;
   return (data?.plan || 'trial').toString();
 }
-
 async function loadActivePlans(){
   const { data, error } = await sb
     .from('billing_plans')
@@ -119,6 +123,48 @@ async function loadActivePlans(){
     return 'trial';
   };
   return (data||[]).map(p => ({ ...p, plan_key: p.plan_key || norm(p.name) }));
+}
+
+/* ===== Pré-validação do perfil (PF/PJ) ===== */
+async function validateCustomerProfile(userId) {
+  const { data, error } = await sb
+    .from('profiles')
+    .select('first_name,last_name,cpf_cnpj,cpf_cnpj_type,razao_social,email,phone')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (error) {
+    return { ok: false, message: 'Não foi possível ler seu perfil. Tente novamente.' };
+  }
+
+  const type = (data?.cpf_cnpj_type || '').toString().toUpperCase(); // CPF | CNPJ
+  const tax = (data?.cpf_cnpj || '').toString().replace(/\D/g, '');
+  const namePF = [data?.first_name, data?.last_name].filter(Boolean).join(' ').trim();
+  const namePJ = (data?.razao_social || '').toString().trim();
+
+  const missing = [];
+  if (!type) missing.push('cpf_cnpj_type (CPF ou CNPJ)');
+  if (!tax) missing.push('cpf_cnpj');
+  if (type === 'CPF') {
+    if (!namePF) missing.push('first_name/last_name');
+    if (tax && tax.length !== 11) missing.push('cpf com 11 dígitos');
+  } else if (type === 'CNPJ') {
+    if (!namePJ) missing.push('razao_social');
+    if (tax && tax.length !== 14) missing.push('cnpj com 14 dígitos');
+  } else if (type) {
+    missing.push('cpf_cnpj_type válido (CPF ou CNPJ)');
+  }
+
+  if (missing.length) {
+    const link = `<a class="btn ghost" href="meusdados.html">Completar cadastro</a>`;
+    return {
+      ok: false,
+      message: `Complete seu cadastro: ${missing.join(', ')}.<br>${link}`,
+      allowHTML: true
+    };
+  }
+
+  return { ok: true };
 }
 
 /* ===== Render ===== */
@@ -182,6 +228,20 @@ async function startCheckout(planId, planName, btnEl){
   showBanner(`Criando checkout para "${planName}"…`, 'ok');
 
   const { data: { session } } = await sb.auth.getSession();
+  if (!session) {
+    showBanner('Você precisa estar logado para assinar.', 'err');
+    btnEl.innerHTML = original; btnEl.disabled = false;
+    return;
+  }
+
+  // 1) Pré-valida perfil
+  const pre = await validateCustomerProfile(session.user.id);
+  if (!pre.ok) {
+    showBanner(pre.message, 'warn', !!pre.allowHTML);
+    btnEl.innerHTML = original; btnEl.disabled = false;
+    return;
+  }
+
   try {
     const resp = await fetch(CREATE_CHECKOUT_ENDPOINT, {
       method: 'POST',
@@ -194,19 +254,43 @@ async function startCheckout(planId, planName, btnEl){
 
     const text = await resp.text();
     let json = {};
-    try { json = text ? JSON.parse(text) : {}; } catch { json = { error: text }; }
+    try { json = text ? JSON.parse(text) : {}; }
+    catch { json = { ok:false, error: 'Resposta inválida da função', error_detail: text }; }
 
-    if (!resp.ok || !json.pay_url) {
-      // Mostra também o detalhe que a função devolve
-      const msg = `Não foi possível iniciar o pagamento.\n${json.error || ''}\n${json.error_detail || ''}`;
-      showBanner(msg, 'err');
-      btnEl.innerHTML = original; btnEl.disabled = false; return;
+    // Helper para formatar erros de forma legível
+    function toReadableError(obj) {
+      if (!obj) return '';
+      if (typeof obj === 'string') return obj;
+      if (obj.message && typeof obj.message === 'string') return obj.message;
+      if (Array.isArray(obj.missing)) return `${obj.message ?? 'Dados faltando'}: ${obj.missing.join(', ')}`;
+      if (obj.provider_message) return obj.provider_message;
+      try { return JSON.stringify(obj); } catch { return String(obj); }
+    }
+
+    if (!resp.ok || json.ok === false) {
+      const msgParts = [
+        json.error || 'Erro ao iniciar pagamento',
+        toReadableError(json.error_detail)
+      ].filter(Boolean);
+      showBanner(`Não foi possível iniciar o pagamento.<br>${msgParts.join('<br>')}`, 'err', true);
+      console.error('Pagamento - detalhe do erro:', json);
+      btnEl.innerHTML = original; btnEl.disabled = false;
+      return;
+    }
+
+    if (!json.pay_url) {
+      showBanner('Pedido criado, mas sem URL de pagamento. Verifique credenciais/fluxo no PagSeguro.', 'warn');
+      console.warn('Resposta sem pay_url:', json);
+      btnEl.innerHTML = original; btnEl.disabled = false;
+      return;
     }
 
     showBanner('Redirecionando para o pagamento…', 'ok');
     window.location.href = json.pay_url;
+
   } catch (e) {
-    showBanner(`Não foi possível iniciar o pagamento. ${e?.message ?? ''}`, 'err');
+    showBanner(`Não foi possível iniciar o pagamento.<br>${e?.message ?? e}`, 'err', true);
+    console.error('Falha de rede ao chamar a função:', e);
     btnEl.innerHTML = original; btnEl.disabled = false;
   }
 }
