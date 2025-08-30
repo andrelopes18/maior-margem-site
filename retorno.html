@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Confirmando pagamento...</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+</head>
+<body style="font-family: system-ui, sans-serif; padding: 24px;">
+  <h2 id="title">Finalizando seu pagamento…</h2>
+  <p id="msg">Aguarde, estamos confirmando seu plano junto ao PagBank.</p>
+
+  <script type="module">
+  import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+  // window.CONFIG deve existir no site (como você já tem)
+  const supa = createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_ANON_KEY);
+
+  const { data: { session } } = await supa.auth.getSession();
+  if (!session) {
+    document.getElementById('msg').textContent = 'Faça login novamente para concluir.';
+  } else {
+    let tries = 0;
+    const maxTries = 40; // ~20s se intervalo 500ms
+    const interval = setInterval(async () => {
+      tries++;
+      const { data: profile } = await supa
+        .from("profiles")
+        .select("plan")
+        .eq("id", session.user.id)
+        .maybeSingle();
+
+      if (profile?.plan && profile.plan !== "basico") {
+        clearInterval(interval);
+        document.getElementById('title').textContent = 'Pagamento confirmado 🎉';
+        document.getElementById('msg').textContent = `Seu plano agora é: ${profile.plan}.`;
+        // Opcional: ir para o dashboard
+        // setTimeout(() => location.href = "/dashboard.html", 1200);
+      } else if (tries >= maxTries) {
+        clearInterval(interval);
+        document.getElementById('msg').textContent = 'Ainda não confirmamos com o PagBank. Atualize em alguns segundos ou retorne ao dashboard.';
+      }
+    }, 500);
+  }
+  </script>
+</body>
+</html>
