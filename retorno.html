@@ -2,45 +2,276 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
-  <title>Confirmando pagamento...</title>
+  <title>Confirmando pagamento… (com debug)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-</head>
-<body style="font-family: system-ui, sans-serif; padding: 24px;">
-  <h2 id="title">Finalizando seu pagamento…</h2>
-  <p id="msg">Aguarde, estamos confirmando seu plano junto ao PagBank.</p>
-
+  <style>
+    :root { color-scheme: dark; }
+    body{font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;margin:0;background:#0b0b0b;color:#eaeaea}
+    .wrap{max-width:900px;margin:0 auto;padding:24px}
+    h1{margin:0 0 6px 0;font-size:22px}
+    .muted{color:#9aa0a6;font-size:13px;margin:0 0 16px}
+    .ok{color:#b7fbb7} .err{color:#ff9a9a} .warn{color:#ffc966}
+    .card{background:#0f0f0f;border:1px solid #262626;border-radius:12px;padding:16px;margin:14px 0}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .btn{display:inline-flex;align-items:center;gap:8px;background:#00b140;border:0;color:#fff;padding:8px 12px;border-radius:8px;cursor:pointer}
+    .btn.ghost{background:transparent;border:1px solid #2a2a2a;color:#ddd}
+    .btn.small{padding:6px 10px;font-size:13px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .kv{display:flex;gap:8px}
+    .k{min-width:180px;color:#9aa0a6}
+    .log{background:#0a0a0a;border:1px solid #222;border-radius:8px;padding:10px;white-space:pre-wrap;font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;font-size:12px;max-height:300px;overflow:auto}
+    input,textarea{background:#121212;border:1px solid #2a2a2a;border-radius:8px;color:#eaeaea;padding:8px;width:100%}
+    label{font-size:12px;color:#9aa0a6}
+    .hide{display:none}
+  </style>
+  <!-- Se já carrega config.js globalmente, pode remover esta linha -->
+  <script src="./config.js"></script>
   <script type="module">
   import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
-  // window.CONFIG precisa existir no site (você já usa isso em outras páginas)
-  const supa = createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_ANON_KEY);
+  // ---------- util ----------
+  const $ = (sel) => document.querySelector(sel);
+  const logsEl = () => $('#logs');
+  const mask = (s, keep=6) => !s ? '' : String(s).slice(0, keep) + '…';
+  const ts = () => new Date().toLocaleTimeString('pt-BR');
 
-  const { data: { session} } = await supa.auth.getSession();
-  if (!session) {
-    document.getElementById('msg').textContent = 'Faça login novamente para concluir.';
+  function log(line, type='') {
+    const el = logsEl();
+    if (!el) return;
+    const prefix = type==='err' ? '✖' : type==='ok' ? '✓' : '•';
+    el.textContent += `[${ts()}] ${prefix} ${line}\n`;
+    el.scrollTop = el.scrollHeight;
+  }
+  function setKV(id, val) {
+    const el = $(id);
+    if (el) el.textContent = val ?? '—';
+  }
+  function qsFlag(name) {
+    const u = new URL(location.href);
+    return u.searchParams.get(name);
+  }
+  function copyDiagnostics() {
+    const el = logsEl();
+    if (!el) return;
+    navigator.clipboard.writeText(el.textContent).then(() => alert('Diagnóstico copiado!'));
+  }
+
+  // ---------- debug panel toggle ----------
+  const debugOn = qsFlag('debug') === '1' || qsFlag('debug') === 'true';
+  window.addEventListener('DOMContentLoaded', () => {
+    if (debugOn) $('#debugCard').classList.remove('hide');
+  });
+
+  // ---------- main ----------
+  const CFG = window.CONFIG || {};
+  const SUPABASE_URL = CFG.SUPABASE_URL;
+  const SUPABASE_ANON_KEY = CFG.SUPABASE_ANON_KEY;
+
+  // Mostra informações iniciais
+  window.addEventListener('DOMContentLoaded', () => {
+    $('#statusTitle').textContent = 'Finalizando seu pagamento…';
+    $('#statusMsg').textContent = 'Aguarde: estamos confirmando seu plano junto ao PagBank. Esta página se atualiza automaticamente quando o plano mudar.';
+    setKV('#kv_url', location.href);
+    setKV('#kv_ref', document.referrer || '(sem referrer)');
+    setKV('#kv_sb_url', SUPABASE_URL ? mask(SUPABASE_URL, 30) : '(vazio)');
+    setKV('#kv_has_anon', SUPABASE_ANON_KEY ? 'Sim' : 'Não');
+  });
+
+  // Valida config
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    log('CONFIG ausente: verifique se config.js está carregado e contém SUPABASE_URL/ANON_KEY.', 'err');
   } else {
-    let tries = 0;
-    const maxTries = 40; // ~20s
-    const interval = setInterval(async () => {
-      tries++;
-      const { data: profile } = await supa
-        .from("profiles")
-        .select("plan")
-        .eq("id", session.user.id)
-        .maybeSingle();
+    log('CONFIG ok: SUPABASE_URL/ANON_KEY presentes.', 'ok');
+  }
 
-      if (profile?.plan && profile.plan !== "basico") {
-        clearInterval(interval);
-        document.getElementById('title').textContent = 'Pagamento confirmado 🎉';
-        document.getElementById('msg').textContent = `Seu plano agora é: ${profile.plan}.`;
-        // Opcional: ir para o dashboard
-        // setTimeout(() => location.href = "/dashboard.html", 1200);
-      } else if (tries >= maxTries) {
-        clearInterval(interval);
-        document.getElementById('msg').textContent = 'Ainda não confirmamos com o PagBank. Atualize em alguns segundos ou retorne ao dashboard.';
+  const supa = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // Sessão
+  const { data: { session }, error: sessErr } = await supa.auth.getSession();
+  if (sessErr) {
+    log('Erro ao ler sessão Supabase: ' + (sessErr.message || sessErr), 'err');
+  }
+  if (!session) {
+    log('Sem sessão. Usuário não está logado. A página não consegue verificar o plano sem login.', 'err');
+    $('#statusMsg').innerHTML = 'Faça login novamente e retorne a esta página.';
+  } else {
+    const uid = session.user.id;
+    const email = session.user.email || '(sem email)';
+    setKV('#kv_user', uid);
+    setKV('#kv_email', email);
+    log(`Sessão ok. user.id=${uid}, email=${email}`, 'ok');
+
+    // Consulta inicial do perfil
+    async function fetchProfileOnce() {
+      try {
+        const { data, error } = await supa
+          .from('profiles')
+          .select('plan, subscription_status, updated_at')
+          .eq('id', uid)
+          .maybeSingle();
+        if (error) {
+          log('Erro ao consultar profiles.plan: ' + (error.message || JSON.stringify(error)), 'err');
+          return null;
+        }
+        const plan = data?.plan ?? '(nulo)';
+        const sub = data?.subscription_status ?? '(nulo)';
+        const up = data?.updated_at ?? '(sem updated_at)';
+        setKV('#kv_plan', plan);
+        setKV('#kv_sub', sub);
+        setKV('#kv_upd', up);
+        log(`Perfil atual → plan=${plan} | subscription_status=${sub} | updated_at=${up}`);
+        return { plan, sub, up };
+      } catch (e) {
+        log('Exceção ao consultar profile: ' + (e?.message || e), 'err');
+        return null;
       }
-    }, 500);
+    }
+
+    await fetchProfileOnce();
+
+    // Polling até detectar mudança de plano
+    let tries = 0;
+    const maxTries = 60; // ~ 60 * 700ms ≈ 42s
+    const intervalMs = 700;
+
+    async function tick() {
+      tries++;
+      try {
+        const { data, error } = await supa
+          .from('profiles')
+          .select('plan, subscription_status, updated_at')
+          .eq('id', uid)
+          .maybeSingle();
+
+        if (error) {
+          log(`Tentativa ${tries}: erro ao consultar profile → ${error.message || JSON.stringify(error)}`, 'err');
+        } else {
+          const plan = data?.plan ?? '(nulo)';
+          const sub = data?.subscription_status ?? '(nulo)';
+          const up = data?.updated_at ?? '(sem updated_at)';
+          setKV('#kv_plan', plan);
+          setKV('#kv_sub', sub);
+          setKV('#kv_upd', up);
+          log(`Tentativa ${tries}: plan=${plan} | subscription_status=${sub} | updated_at=${up}`);
+
+          // Considera sucesso quando plan deixa de ser 'basico'/'trial'
+          if (plan && !['basico','trial','gratuito','free'].includes(String(plan).toLowerCase())) {
+            $('#statusTitle').textContent = 'Pagamento confirmado 🎉';
+            $('#statusMsg').textContent = `Seu plano agora é: ${plan}.`;
+            clearInterval(loopId);
+            log('Plano alterado detectado. Encerrando polling.', 'ok');
+            return;
+          }
+        }
+      } catch (e) {
+        log(`Tentativa ${tries}: exceção → ${e?.message || e}`, 'err');
+      }
+
+      if (tries >= maxTries) {
+        clearInterval(loopId);
+        $('#statusMsg').textContent = 'Ainda não confirmamos com o PagBank. Se você já pagou, aguarde mais alguns segundos e recarregue.';
+        log('Polling esgotado sem detectar mudança. Verifique webhook/notification_urls/reference_id.', 'warn');
+      }
+    }
+
+    const loopId = setInterval(tick, intervalMs);
+
+    // Ações
+    $('#btnRefresh').addEventListener('click', async () => {
+      log('Recarregando estado agora…');
+      await fetchProfileOnce();
+      tries = 0;
+    });
+    $('#btnCopy').addEventListener('click', copyDiagnostics);
+
+    // ----- Painel extra (opcional) para simular webhook, só com debug=1 -----
+    if (debugOn) {
+      const base = SUPABASE_URL?.match(/^https:\/\/([^.]*)/)?.[1] || '';
+      const defaultWebhook = base ? `https://${base}.functions.supabase.co/webhooks-pagbank` : '';
+      $('#wh_url').value = defaultWebhook;
+      $('#wh_ref').value = `${uid}|intermediario`;
+
+      $('#btnSimulate').addEventListener('click', async () => {
+        const url = $('#wh_url').value.trim();
+        const secret = $('#wh_secret').value.trim();
+        const reference = $('#wh_ref').value.trim();
+        const status = $('#wh_status').value.trim() || 'PAID';
+
+        if (!url || !secret || !reference) {
+          alert('Preencha URL do webhook, secret e reference_id.');
+          return;
+        }
+        const full = `${url}?secret=${encodeURIComponent(secret)}`;
+        log(`Simulando webhook: POST ${full} body={status:${status}, reference_id:${reference}}`);
+        try {
+          const r = await fetch(full, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status, reference_id: reference, paid_at: new Date().toISOString() })
+          });
+          const t = await r.text();
+          log(`Webhook respondeu (${r.status}): ${t.slice(0, 300)}…`, r.ok ? 'ok' : 'err');
+        } catch(e) {
+          log('Falha ao chamar webhook simulado: ' + (e?.message || e), 'err');
+        }
+      });
+    }
   }
   </script>
+</head>
+<body>
+  <div class="wrap">
+    <h1 id="statusTitle">Finalizando seu pagamento…</h1>
+    <p id="statusMsg" class="muted">Aguarde: estamos confirmando seu plano junto ao PagBank.</p>
+
+    <div class="card">
+      <div class="grid">
+        <div class="kv"><div class="k">URL atual:</div><div id="kv_url">—</div></div>
+        <div class="kv"><div class="k">Referrer:</div><div id="kv_ref">—</div></div>
+        <div class="kv"><div class="k">SUPABASE_URL:</div><div id="kv_sb_url">—</div></div>
+        <div class="kv"><div class="k">ANON_KEY presente:</div><div id="kv_has_anon">—</div></div>
+        <div class="kv"><div class="k">Usuário (id):</div><div id="kv_user">—</div></div>
+        <div class="kv"><div class="k">E-mail:</div><div id="kv_email">—</div></div>
+        <div class="kv"><div class="k">profiles.plan:</div><div id="kv_plan">—</div></div>
+        <div class="kv"><div class="k">subscription_status:</div><div id="kv_sub">—</div></div>
+        <div class="kv"><div class="k">updated_at:</div><div id="kv_upd">—</div></div>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <button id="btnRefresh" class="btn ghost small">Recarregar agora</button>
+        <button id="btnCopy" class="btn ghost small">Copiar diagnóstico</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="log" id="logs"></div>
+    </div>
+
+    <!-- Painel opcional de simulação do webhook: aparece com ?debug=1 -->
+    <div id="debugCard" class="card hide">
+      <h3 style="margin:0 0 8px">Simular webhook (uso temporário de teste)</h3>
+      <p class="muted">Use apenas em homologação. Isso chama sua Edge Function de webhook diretamente do navegador.</p>
+      <div class="grid">
+        <div>
+          <label>URL do webhook (sem secret)</label>
+          <input id="wh_url" placeholder="https://<ref>.functions.supabase.co/webhooks-pagbank" />
+        </div>
+        <div>
+          <label>secret (query ?secret=…)</label>
+          <input id="wh_secret" placeholder="WEBHOOK_SHARED_SECRET" />
+        </div>
+        <div>
+          <label>reference_id (userUUID|plan_key)</label>
+          <input id="wh_ref" placeholder="00000000-0000-0000-0000-000000000000|intermediario" />
+        </div>
+        <div>
+          <label>status (ex.: PAID)</label>
+          <input id="wh_status" value="PAID" />
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button id="btnSimulate" class="btn small">Disparar webhook de teste</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
