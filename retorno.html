@@ -3,121 +3,233 @@
 <head>
   <meta charset="UTF-8" />
   <title>Retorno do Pagamento</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Seu arquivo com SUPABASE_URL e SUPABASE_ANON_KEY -->
   <script src="config.js"></script>
+  <!-- supabase-js v2 (ESM) -->
   <script type="module" src="https://esm.sh/@supabase/supabase-js@2"></script>
   <style>
+    :root {
+      --bg: #f6f7fb;
+      --card: #ffffff;
+      --ok: #0e8f3b;
+      --muted: #727b86;
+      --danger: #c62828;
+      --primary: #0069d9;
+    }
+    * { box-sizing: border-box; }
     body {
-      font-family: Arial, sans-serif;
-      background: #f7f7f7;
-      padding: 30px;
-      color: #333;
+      margin: 0; padding: 24px;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+      background: var(--bg); color: #111;
     }
-    h1 { color: #006400; }
-    pre {
-      background: #222;
-      color: #0f0;
-      padding: 10px;
-      max-height: 300px;
-      overflow: auto;
+    .wrap {
+      max-width: 860px; margin: 0 auto;
     }
+    .card {
+      background: var(--card);
+      border-radius: 14px;
+      padding: 20px;
+      box-shadow: 0 6px 24px rgba(0,0,0,.06);
+    }
+    h1 { margin: 0 0 6px; font-size: 24px; }
+    p.lead { color: var(--muted); margin: 0 0 16px; }
+    .row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; }
+    .actions { display: flex; gap: 8px; }
     button {
-      margin-top: 10px;
-      padding: 10px 20px;
-      border: none;
-      border-radius: 6px;
-      background: #007bff;
-      color: white;
-      cursor: pointer;
+      padding: 10px 14px; border-radius: 10px; border: 0; cursor: pointer;
+      background: var(--primary); color: #fff; font-weight: 600;
     }
-    button:hover { background: #0056b3; }
+    button.secondary { background: #e9eef7; color: #1a2b4b; }
+    button.danger { background: var(--danger); }
+    pre#log {
+      margin-top: 14px; background: #0f172a; color: #c7f7c7;
+      border-radius: 10px; padding: 12px; max-height: 340px; overflow: auto;
+      line-height: 1.35; font-size: 13px;
+    }
+    .status {
+      margin-top: 10px; display: inline-block; padding: 6px 10px; border-radius: 999px;
+      font-size: 12px; font-weight: 700; letter-spacing: .3px;
+      color: #fff; background: #8892a6;
+    }
+    .status.ok { background: var(--ok); }
+    .status.err { background: var(--danger); }
+    .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
+    a.link { color: var(--primary); text-decoration: none; font-weight: 600; }
+    a.link:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
-  <h1>Retorno do Pagamento</h1>
-  <p>Estamos verificando sua assinatura...</p>
+  <div class="wrap">
+    <div class="card">
+      <div class="row">
+        <div>
+          <h1>Finalizando sua assinatura</h1>
+          <p class="lead">Validando o pagamento e atualizando seu acesso…</p>
+        </div>
+        <div>
+          <span id="pill" class="status">INICIALIZANDO</span>
+        </div>
+      </div>
 
-  <button id="btnSimular">Simular Webhook (PAID / intermediario)</button>
-  <pre id="log"></pre>
+      <div class="actions">
+        <button id="btnRepetir">Repetir atualização</button>
+        <button id="btnIrDashboard" class="secondary">Ir para o Dashboard</button>
+      </div>
+      <div class="hint">Se houver algum atraso de rede, aguarde alguns segundos. Você também pode clicar em <b>Repetir atualização</b>.</div>
+
+      <pre id="log"></pre>
+      <div class="hint">
+        Problemas? Confira se o usuário está logado e se a política RLS permite atualizar o próprio perfil.
+        <br/>Se preferir, retorne à <a href="/planos.html" class="link">página de planos</a>.
+      </div>
+    </div>
+  </div>
 
   <script type="module">
     import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-    // Constrói cliente Supabase
-    const supabase = createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_ANON_KEY);
+    // === Configuração & utilitários ===
+    const TARGET_PLAN = "intermediario"; // plano que queremos aplicar
+    const REDIRECT_OK = "/dashboard.html"; // para onde mandar quando detectar 'active/intermediario'
+    const MAX_POLL = 30;  // tentativas pós-update (segundos)
 
     const logBox = document.getElementById("log");
-    const log = (msg) => {
-      console.log(msg);
-      logBox.textContent += msg + "\n";
+    const pill = document.getElementById("pill");
+    const log = (line) => {
+      const ts = new Date().toLocaleTimeString();
+      console.log(`[${ts}] ${line}`);
+      logBox.textContent += `[${ts}] ${line}\n`;
+      logBox.scrollTop = logBox.scrollHeight;
+    };
+    const setPill = (txt, cls = "") => {
+      pill.textContent = txt;
+      pill.className = "status " + cls;
     };
 
-    // ---- Sessão ----
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      log("✖ Sem sessão, redirecionando para login...");
-      location.href = "/index.html";
+    // Verifica config.js
+    if (!window.CONFIG?.SUPABASE_URL || !window.CONFIG?.SUPABASE_ANON_KEY) {
+      setPill("CONFIG AUSENTE", "err");
+      log("✖ Falha: Não encontrei SUPABASE_URL/ANON_KEY no window.CONFIG (confira config.js).");
+      throw new Error("CONFIG ausente");
+    } else {
+      log("✓ CONFIG ok: SUPABASE_URL/ANON_KEY presentes.");
     }
-    const userId = session.user.id;
-    log("✓ Sessão ok. user.id=" + userId + ", email=" + session.user.email);
 
-    // ---- Consulta perfil ----
+    // Cria o client
+    const supabase = createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_ANON_KEY);
+
+    // === Fluxo principal ===
+    let sessionUserId = null;
+
+    async function getSessionOrRedirect() {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      if (error) {
+        setPill("ERRO SESSÃO", "err");
+        log("✖ Erro ao obter sessão: " + (error?.message || error));
+        return null;
+      }
+      if (!session) {
+        setPill("SEM SESSÃO", "err");
+        log("✖ Sem sessão ativa. Redirecionando para login…");
+        window.location.href = "/index.html";
+        return null;
+      }
+      sessionUserId = session.user.id;
+      log(`✓ Sessão ok. user.id=${session.user.id}, email=${session.user.email}`);
+      return session.user;
+    }
+
     async function fetchProfile() {
       const { data, error } = await supabase
         .from("profiles")
         .select("plan, subscription_status, updated_at")
-        .eq("id", userId)
+        .eq("id", sessionUserId)
         .maybeSingle();
-      if (error) log("Erro select profiles: " + error.message);
+      if (error) {
+        log("✖ Erro ao consultar profiles: " + error.message);
+        return null;
+      }
       return data;
     }
 
-    const showProfile = (p) => {
-      log(`• Perfil atual → plan=${p?.plan} | subscription_status=${p?.subscription_status} | updated_at=${p?.updated_at}`);
+    async function applyUpgrade() {
+      // Aplica o update que você já validou no console
+      setPill("ATUALIZANDO…");
+      log(`• Atualizando perfil → plan=${TARGET_PLAN}, subscription_status=active`);
+      const { data, error } = await supabase
+        .from("profiles")
+        .update({
+          plan: TARGET_PLAN,
+          subscription_status: "active",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", sessionUserId)
+        .select();
+
+      if (error) {
+        setPill("ERRO UPDATE", "err");
+        log("✖ Falha no update: " + error.message);
+        return false;
+      }
+      log("✓ Update executado. Retorno: " + JSON.stringify(data));
+      return true;
+    }
+
+    async function pollUntilApplied() {
+      // Polling curto, apenas para confirmar e redirecionar
+      setPill("VALIDANDO…");
+      for (let i = 1; i <= MAX_POLL; i++) {
+        const p = await fetchProfile();
+        if (p) {
+          log(`• Tentativa ${i}: plan=${p.plan} | subscription_status=${p.subscription_status} | updated_at=${p.updated_at}`);
+          if (p.subscription_status === "active" && p.plan === TARGET_PLAN) {
+            setPill("OK", "ok");
+            log("✓ Upgrade detectado! Redirecionando…");
+            window.location.href = REDIRECT_OK;
+            return;
+          }
+        } else {
+          log("• Tentativa falhou ao ler perfil (verifique rede/RLS).");
+        }
+        await new Promise(r => setTimeout(r, 1000));
+      }
+      setPill("SEM MUDANÇA", "err");
+      log("• Polling esgotado sem detectar mudança. Você pode clicar em 'Repetir atualização'.");
+    }
+
+    // === Inicialização ===
+    setPill("INICIALIZANDO");
+    const user = await getSessionOrRedirect();
+    if (user) {
+      // Mostra estado atual
+      const now = await fetchProfile();
+      if (now) {
+        log(`• Perfil atual → plan=${now.plan} | subscription_status=${now.subscription_status} | updated_at=${now.updated_at}`);
+        // Se já estiver OK, redireciona direto
+        if (now.subscription_status === "active" && now.plan === TARGET_PLAN) {
+          setPill("OK", "ok");
+          log("✓ Já está ativo/intermediario. Redirecionando…");
+          window.location.href = REDIRECT_OK;
+        } else {
+          // Aplica upgrade e valida
+          const ok = await applyUpgrade();
+          if (ok) await pollUntilApplied();
+        }
+      } else {
+        setPill("ERRO PERFIL", "err");
+        log("✖ Não foi possível ler o perfil atual.");
+      }
+    }
+
+    // === Ações manuais ===
+    document.getElementById("btnRepetir").onclick = async () => {
+      setPill("ATUALIZANDO…");
+      const ok = await applyUpgrade();
+      if (ok) await pollUntilApplied();
     };
-
-    const initial = await fetchProfile();
-    showProfile(initial);
-
-    // ---- Polling ----
-    let attempts = 0;
-    const maxAttempts = 60;
-
-    const int = setInterval(async () => {
-      attempts++;
-      const cur = await fetchProfile();
-      log(`• Tentativa ${attempts}: plan=${cur?.plan} | subscription_status=${cur?.subscription_status} | updated_at=${cur?.updated_at}`);
-
-      if (cur?.subscription_status === "active" && cur?.plan === "intermediario") {
-        clearInterval(int);
-        log("✓ Detectado upgrade para intermediario. Redirecionando...");
-        location.href = "/dashboard.html"; // ajuste destino
-      }
-      if (attempts >= maxAttempts) {
-        clearInterval(int);
-        log("• Polling esgotado sem detectar mudança. Verifique webhook/notification_urls/reference_id.");
-      }
-    }, 1000);
-
-    // ---- Simulador de webhook ----
-    const FN_URL = "https://maprezivxfitqyifmepq.functions.supabase.co/webhooks-pagbank";
-    const WEBHOOK_SECRET = "uBLUkW-ZLDMB983"; // tem que ser o mesmo configurado na function!
-
-    document.getElementById("btnSimular").onclick = async () => {
-      const body = {
-        status: "PAID",
-        reference_id: `${userId}|intermediario`,
-      };
-      try {
-        const res = await fetch(`${FN_URL}?secret=${encodeURIComponent(WEBHOOK_SECRET)}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        const data = await res.json().catch(() => ({}));
-        log(`Simulação Webhook → HTTP ${res.status} ${JSON.stringify(data)}`);
-      } catch (e) {
-        log("✖ Falha ao chamar webhook simulado: " + e);
-      }
+    document.getElementById("btnIrDashboard").onclick = () => {
+      window.location.href = REDIRECT_OK;
     };
   </script>
 </body>
