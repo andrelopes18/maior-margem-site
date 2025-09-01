@@ -1,362 +1,458 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Planos de Assinatura</title>
-
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Planos</title>
 <style>
   :root { color-scheme: dark; }
-  *{ box-sizing:border-box }
-  body{background:#121212;color:#fff;font-family:Arial,sans-serif;margin:0}
-  a{color:#00b140;text-decoration:none}
-  header{display:flex;align-items:center;justify-content:space-between;padding:20px;gap:12px;flex-wrap:wrap}
-  h1{margin:0;color:#00b140}
-  .chip{font-size:12px;background:#1e1e1e;border:1px solid #333;padding:6px 10px;border-radius:999px}
-  .chip.plan{color:#bfffc1;border-color:#2f5a2f;background:#132313}
-  .btn{display:inline-flex;align-items:center;gap:8px;background:#00b140;color:#fff;border:none;padding:10px 14px;border-radius:8px;text-decoration:none;cursor:pointer;transition:background .2s,opacity .2s}
-  .btn:hover{background:#009b38}
-  .btn.ghost{background:transparent;border:1px solid #2a2a2a;color:#ddd}
-  .btn.ghost:hover{background:#1b1b1b}
-  .btn[disabled]{opacity:.7;cursor:not-allowed}
+  *{ box-sizing: border-box }
+  body{ background:#121212; color:#fff; font-family: Arial, sans-serif; margin:0; padding:24px }
+  a{ color:#00b140 }
 
-  .container{max-width:1100px;margin:0 auto;padding:0 20px 32px}
-  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:10px}
-  @media (max-width:1000px){ .grid{grid-template-columns:repeat(2,1fr)} }
-  @media (max-width:560px){ .grid{grid-template-columns:1fr} }
+  header{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:18px }
+  h1{ color:#00b140; margin:0 }
+  .chip{ font-size:12px; background:#1e1e1e; border:1px solid #333; padding:6px 10px; border-radius:999px }
+  .chip.plan{ color:#bfffc1; border-color:#2f5a2f; background:#132313 }
+  .btn{ display:inline-flex; align-items:center; gap:8px; background:#00b140; color:#fff; border:none; padding:10px 14px; border-radius:10px; cursor:pointer }
+  .btn:hover{ background:#009b38 }
+  .btn.ghost{ background:transparent; border:1px solid #2a2a2a; color:#ddd }
+  .btn.ghost:hover{ background:#1a1a1a }
+  .btn.warn{ background:#6b2a2a }
+  .btn.warn:hover{ background:#7a2f2f }
 
-  .card{background:#0f0f0f;border:1px solid #2a2a2a;border-radius:14px;padding:18px;display:flex;flex-direction:column}
-  .plan-name{font-weight:800;font-size:16px}
-  .price{display:flex;align-items:flex-end;gap:6px;margin:10px 0 2px}
-  .price .amount{font-size:34px;font-weight:900;line-height:1}
-  .price .period{font-size:12px;color:#9aa0a6;margin-bottom:6px}
-  .price-note{font-size:12px;color:#9aa0a6;margin-bottom:8px}
-  .feat{display:flex;gap:8px;align-items:flex-start;margin:6px 0;color:#cfcfcf}
-  .feat:before{content:"✓";opacity:.9}
-  .spacer{flex:1}
-  .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-  .small{font-size:12px;color:#9aa0a6}
+  .container{ max-width:980px; margin:0 auto }
+  .grid{ display:grid; grid-template-columns: repeat(4, 1fr); gap:16px }
+  @media (max-width: 980px){ .grid{ grid-template-columns: repeat(2, 1fr) } }
+  @media (max-width: 560px){ .grid{ grid-template-columns: 1fr } }
 
-  .banner{border:1px solid #2a2a2a;border-radius:10px;padding:10px 12px;margin:12px 0;background:#111;display:none}
-  .banner.warn{border-color:#5c3f00;background:#1b1300;color:#ffc966;display:block}
-  .banner.ok{border-color:#214d21;background:#0e1a0e;color:#b7fbb7;display:block}
-  .banner.err{border-color:#5c1e1e;background:#190d0d;color:#ff9a9a;display:block}
+  .card{ background:#0f0f0f; border:1px solid #2a2a2a; border-radius:16px; padding:16px; display:flex; flex-direction:column; gap:12px }
+  .price{ font-size:28px; font-weight:700 }
+  .per{ font-size:12px; color:#9aa0a6 }
+  .muted{ color:#9aa0a6; font-size:13px }
 
-  .pill{display:inline-block;padding:2px 8px;border:1px solid #2a2a2a;border-radius:999px;font-size:11px;color:#bfbfbf;margin-left:8px}
-  .spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;display:inline-block;animation:spin .7s linear infinite}
-  @keyframes spin{to{transform:rotate(360deg)}}
+  .banner{ border:1px solid #2a2a2a; border-radius:10px; padding:10px 12px; margin-bottom:16px; background:#111; display:none }
+  .banner.ok{ border-color:#214d21; background:#0e1a0e; color:#b7fbb7; display:block }
+  .banner.err{ border-color:#5c1e1e; background:#190d0d; color:#ff9a9a; display:block }
+  .banner.warn{ border-color:#5c3f00; background:#1b1300; color:#ffc966; display:block }
+
+  /* Diagnóstico */
+  details.diag{ margin-top:18px }
+  details.diag summary{ cursor:pointer; user-select:none; padding:8px 10px; background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px }
+  .diag-wrap{ margin-top:10px; display:grid; grid-template-columns: 1fr; gap:8px }
+  .kv{ display:flex; gap:8px; flex-wrap:wrap; font-size:13px; color:#ddd }
+  .kv b{ color:#b5ffd1 }
+  pre.log{ margin:0; background:#0b0b0b; border:1px solid #2a2a2a; border-radius:10px; padding:10px; max-height:260px; overflow:auto; font-size:12px; line-height:1.45 }
+
+  .row-actions{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:flex-end; margin: 6px 0 2px }
+
+  .sep{ height:1px; background:#262626; margin:10px 0 }
 </style>
-
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="./config.js"></script>
 </head>
 <body>
 <header class="container">
   <h1>Planos</h1>
-  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+  <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap">
     <span id="planChip" class="chip plan">Plano: —</span>
     <a href="dashboard.html" class="btn ghost">← Voltar</a>
+    <a href="meusdados.html" class="btn ghost">Meus dados</a>
+    <button id="btnSair" class="btn">Sair</button>
   </div>
 </header>
 
 <main class="container">
   <div id="banner" class="banner"></div>
-  <div id="plansGrid" class="grid"></div>
+
+  <section id="cards" class="grid" aria-live="polite"></section>
+
+  <details class="diag">
+    <summary>Diagnóstico / Logs (clique para abrir)</summary>
+    <div class="diag-wrap">
+      <div class="kv"><b>Usuário:</b><span id="kvUser">—</span></div>
+      <div class="kv"><b>Plano atual (profiles.plan):</b><span id="kvCurrentPlan">—</span></div>
+      <div class="kv"><b>Edge Functions base:</b><span id="kvFnBase">—</span></div>
+      <div class="row-actions">
+        <button id="btnSync" class="btn ghost" title="Força leitura de checkout_sessions e aplica o plano pago mais recente.">🔄 Sincronizar agora</button>
+        <button id="btnCopy" class="btn ghost">📋 Copiar logs</button>
+        <button id="btnClear" class="btn ghost">🧹 Limpar logs</button>
+      </div>
+      <pre id="log" class="log" aria-live="polite"></pre>
+    </div>
+  </details>
 </main>
 
 <script>
-/* ===== Supabase ===== */
+/* ================== Setup Supabase / Config ================== */
 const CFG = window.CONFIG || {};
 const SUPABASE_URL = CFG.SUPABASE_URL;
 const SUPABASE_ANON_KEY = CFG.SUPABASE_ANON_KEY;
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  alert("Erro de configuração: config.js não carregado."); throw new Error("CONFIG ausente");
-}
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) { alert('Erro: config.js não carregado.'); throw new Error('CONFIG ausente'); }
+
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
 });
-// supabase/functions/create-checkout/index.ts
-// Edge Function: cria um checkout no PagSeguro e retorna pay_url
 
-/* ===== UI ===== */
+/* ======================== DOM refs ========================== */
+const bannerEl = document.getElementById('banner');
+const cardsEl  = document.getElementById('cards');
+const logEl    = document.getElementById('log');
 const planChip = document.getElementById('planChip');
-const banner = document.getElementById('banner');
-const grid = document.getElementById('plansGrid');
+const kvUser   = document.getElementById('kvUser');
+const kvCurrentPlan = document.getElementById('kvCurrentPlan');
+const kvFnBase = document.getElementById('kvFnBase');
 
-function showBanner(text, type='ok'){ banner.textContent=text; banner.className='banner '+(type==='warn'?'warn':(type==='err'?'err':'ok')); banner.style.display='block'; }
-function moneyBR(cents){ return (cents/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
-function prettyBR(plan){
-  const p = (plan||'').toString();
-  return p.charAt(0).toUpperCase()+p.slice(1)
-    .replace('Basico','Básico')
-    .replace('Intermediario','Intermediário');
+const btnSair  = document.getElementById('btnSair');
+const btnCopy  = document.getElementById('btnCopy');
+const btnClear = document.getElementById('btnClear');
+const btnSync  = document.getElementById('btnSync');
+
+/* ======================== Utils ============================= */
+function brlFromCents(c){ if (typeof c !== 'number') return 'R$ 0,00'; return (c/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) }
+function showBanner(msg, type='ok'){ bannerEl.textContent = msg; bannerEl.className = 'banner ' + (type==='err'?'err': (type==='warn'?'warn':'ok')); bannerEl.style.display='block'; }
+function hideBanner(){ bannerEl.style.display='none'; bannerEl.textContent=''; }
+function log(...args){
+  const ts = new Date().toLocaleString('pt-BR');
+  const line = `[${ts}] ` + args.map(a=>{
+    if (a instanceof Error) return a.message;
+    if (typeof a === 'object') try { return JSON.stringify(a, null, 2) } catch { return String(a)}
+    return String(a);
+  }).join(' ');
+  logEl.textContent += line + "\n";
+  logEl.scrollTop = logEl.scrollHeight;
+}
+function getFunctionsBase(){
+  try{
+    const u = new URL(SUPABASE_URL);
+    // https://xxx.supabase.co  -> https://xxx.functions.supabase.co
+    return `${u.protocol}//${u.host.replace('.supabase.co','.functions.supabase.co')}`;
+  }catch{ return '(desconhecido)' }
 }
 
-function getFunctionsBaseFromSupabaseUrl(urlStr){
-  try{ return `https://${new URL(urlStr).host.split('.supabase.co')[0]}.functions.supabase.co`; }
-  catch{ return '/functions/v1'; }
-}
-const FUNCTIONS_BASE = getFunctionsBaseFromSupabaseUrl(SUPABASE_URL);
-const CREATE_CHECKOUT_ENDPOINT = `${FUNCTIONS_BASE}/create-checkout`;
+/* ============= Estado global dessa página =================== */
+let sessionUser = null;         // objeto de sessão
+let currentPlanKey = 'trial';   // profiles.plan
+let plansByKey = new Map();     // Map<'trial'|'basico'|'intermediario'|'premium', planRow>
+let lastCheckoutKey = 'mm_last_checkout';  // guarda info da tentativa de compra p/ pós-retorno
 
-/* ===== Dados ===== */
-// Busca o plano EXATAMENTE como em meusdados.html: profiles.plan
-async function fetchCurrentPlan(userId){
-  const { data, error } = await sb
-    .from('profiles')
-    .select('plan')
-    .eq('id', userId)
-    .maybeSingle();
-  if (error) throw error;
-  return (data?.plan || 'trial').toString(); // default trial
+/* ===================== Sessão & Header ====================== */
+async function ensureSession(){
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session){ window.location.href = CFG.SITE_URL || 'index.html'; return null; }
+  sessionUser = session.user;
+  kvUser.textContent = `${session.user.email} (${session.user.id})`;
+  kvFnBase.textContent = getFunctionsBase();
+  return session;
 }
 
-async function loadActivePlans(){
+async function loadCurrentPlan(){
+  try{
+    const { data, error } = await sb.from('profiles').select('plan').eq('id', sessionUser.id).maybeSingle();
+    if (error) throw error;
+    currentPlanKey = (data?.plan || 'trial').toString();
+    planChip.textContent = `Plano: ${ucfirstBR(currentPlanKey)}`;
+    kvCurrentPlan.textContent = currentPlanKey;
+  }catch(e){
+    log('Erro ao ler profiles.plan:', e);
+    showBanner('Falha ao ler seu plano atual (tabela "profiles").', 'warn');
+  }
+}
+function ucfirstBR(s){ const m = {basico:'Básico', intermediario:'Intermediário', premium:'Premium', trial:'Trial'}; return m[s] || (s?.charAt(0)?.toUpperCase()+s?.slice(1)); }
+
+/* ===================== Carregar Planos ====================== */
+async function loadPlans(){
+  log('Carregando planos em billing_plans (active=true)…');
   const { data, error } = await sb
     .from('billing_plans')
-    .select('id,name,plan_key,price_cents,active')
+    .select('id,name,price_cents,interval_unit,interval_length,active,plan_key')
     .eq('active', true)
     .order('price_cents', { ascending: true });
-  if (error) throw error;
 
-  // Garante uma chave mesmo se plan_key vier nula
-  const norm = (name)=>{
-    const s = String(name||'').toLowerCase();
-    if (s.includes('trial')||s.includes('teste')||s.includes('grat')) return 'trial';
-    if (s.includes('básico')||s.includes('basico')||s.includes('basic')) return 'basico';
-    if (s.includes('intermedi')) return 'intermediario';
-    if (s.includes('premium')||s.includes('prêmio')||s.includes('premio')) return 'premium';
-    return 'trial';
-  };
-  return (data||[]).map(p => ({ ...p, plan_key: p.plan_key || norm(p.name) }));
+  if (error) { log('Erro billing_plans:', error); showBanner('Erro ao carregar planos. Verifique RLS/colunas.', 'err'); return; }
+  if (!data || !data.length){ showBanner('Nenhum plano ativo encontrado em billing_plans.', 'warn'); return; }
+
+  // Deduplicar por plan_key e manter só os 4 esperados
+  const allowed = new Set(['trial','basico','intermediario','premium']);
+  plansByKey.clear();
+  for (const row of data){
+    const k = (row.plan_key || '').toString().toLowerCase();
+    if (!allowed.has(k)) continue;
+    if (!plansByKey.has(k)) plansByKey.set(k, row);
+  }
+
+  renderCards();
 }
 
-/* ===== Render ===== */
-function renderPlans(plans, currentKey){
-  grid.innerHTML = '';
+/* ====================== Render Cards ======================== */
+function renderCards(){
+  cardsEl.innerHTML = '';
+  const order = ['trial','basico','intermediario','premium'];
+  for (const k of order){
+    const p = plansByKey.get(k);
+    if (!p) continue;
 
-  const currentPlan = plans.find(p => p.plan_key === currentKey) || null;
-  const currentPrice = currentPlan?.price_cents ?? 0;
-
-  for (const p of plans){
     const card = document.createElement('div');
     card.className = 'card';
 
-    const feats = (() => {
-      switch (p.plan_key){
-        case 'trial': return ['Acesso limitado','Sem custo'];
-        case 'basico': return ['Dashboard básico','Suporte por e-mail'];
-        case 'intermediario': return ['Tudo do Básico','Relatórios adicionais'];
-        case 'premium': return ['Tudo do Intermediário','Suporte prioritário'];
-        default: return ['Cobrança recorrente mensal'];
-      }
-    })();
+    const h2 = document.createElement('h2');
+    h2.textContent = p.name || ucfirstBR(k);
+    card.appendChild(h2);
 
-    const priceFmt = moneyBR(p.price_cents);
+    const price = document.createElement('div');
+    price.className = 'price';
+    price.textContent = brlFromCents(p.price_cents || 0);
+    card.appendChild(price);
 
-    let btnLabel = 'Assinar';
-    let btnDisabled = false;
-    let pill = '';
+    const per = document.createElement('div');
+    per.className = 'per';
+    per.textContent = `Cobrança: ${p.interval_length||1}× / ${p.interval_unit||'month'}`;
+    card.appendChild(per);
 
-    if (p.plan_key === currentKey){
-      btnLabel = 'Seu plano atual';
-      btnDisabled = true;
-      pill = '<span class="pill">ativo</span>';
-    } else {
-      if (p.price_cents > currentPrice) btnLabel = 'Upgrade';
-      else if (p.price_cents < currentPrice) btnLabel = 'Downgrade';
-      else btnLabel = 'Mudar para este';
-    }
-import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { v4 as uuidv4 } from "https://esm.sh/uuid@9.0.1";
+    const features = document.createElement('div');
+    features.className = 'muted';
+    features.innerHTML = (k==='trial')
+      ? 'Plano gratuito para conhecer a plataforma.'
+      : 'Acesso aos recursos do plano selecionado. Cancelamento a qualquer momento.';
+    card.appendChild(features);
 
-    card.innerHTML = `
-      <div class="plan-name">${p.name} ${pill}</div>
-      <div class="price"><span class="amount">${priceFmt}</span><span class="period">/mês</span></div>
-      <div class="price-note">${priceFmt} por mês</div>
-      ${feats.map(f => `<div class="feat">${f}</div>`).join('')}
-      <div class="spacer"></div>
-      <div class="actions">
-        <button class="btn" data-plan="${p.id}" ${btnDisabled?'disabled':''}>${btnLabel}</button>
-        <span class="small">renova automaticamente</span>
-      </div>
-    `;
+    const actions = document.createElement('div');
+    actions.className = 'row-actions';
 
-    const btn = card.querySelector('.btn');
-    if (!btnDisabled) btn.addEventListener('click', () => startCheckout(p.id, p.name, btn));
-    grid.appendChild(card);
-  }
-}
-// Client com Service Role (ignora RLS)
-const supabaseAdmin = createClient(
-  Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-);
-
-/* ===== Checkout ===== */
-async function startCheckout(planId, planName, btnEl){
-  const original = btnEl.innerHTML;
-  btnEl.innerHTML = '<span class="spinner"></span> Processando...';
-  btnEl.disabled = true;
-  showBanner(`Criando checkout para "${planName}"…`, 'ok');
-// Config do PagSeguro (coloque em Secrets no dashboard)
-const PAGSEGURO_BASE = Deno.env.get("PAGSEGURO_BASE") ?? "https://sandbox.api.pagseguro.com"; // sandbox por padrão
-const PAGSEGURO_TOKEN = Deno.env.get("PAGSEGURO_TOKEN")!;
-
-  const { data: { session } } = await sb.auth.getSession();
-// URL do webhook
-const PROJECT_REF = new URL(Deno.env.get("SUPABASE_URL")!).host.split(".supabase.co")[0];
-const WEBHOOK_URL = `https://${PROJECT_REF}.functions.supabase.co/pagseguro-webhook`;
-
-serve(async (req) => {
-try {
-    const resp = await fetch(CREATE_CHECKOUT_ENDPOINT, {
-      method: 'POST',
-    if (req.method !== "POST") {
-      return new Response("Method not allowed", { status: 405 });
+    // Cancelar (aparece nos pagos quando é o plano atual)
+    if (k !== 'trial' && k === currentPlanKey){
+      const btnCancel = document.createElement('button');
+      btnCancel.className = 'btn warn';
+      btnCancel.textContent = 'Cancelar assinatura (Trial)';
+      btnCancel.addEventListener('click', () => cancelSubscription());
+      actions.appendChild(btnCancel);
     }
 
-    // === Autenticação do usuário ===
-    const authHeader = req.headers.get("authorization") || "";
-    const accessToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-    if (!accessToken) {
-      return new Response(JSON.stringify({ error: "Missing Bearer token" }), { status: 401 });
-    }
+    // Chamar checkout (desativado se já é o plano atual)
+    const btn = document.createElement('button');
+    btn.className = (k===currentPlanKey) ? 'btn ghost' : 'btn';
+    btn.disabled = (k===currentPlanKey);
+    btn.textContent = (k===currentPlanKey) ? 'Plano atual' : 'Assinar / Migrar';
+    btn.addEventListener('click', () => startCheckout(p));
+    actions.appendChild(btn);
 
-    // Cliente "user" para pegar sessão do usuário
-    const supabaseUser = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: `Bearer ${accessToken}` } } }
-    );
-
-    const { data: { user } } = await supabaseUser.auth.getUser();
-    if (!user) {
-      return new Response(JSON.stringify({ error: "Not authenticated" }), { status: 401 });
-    }
-
-    // === Lendo body ===
-    const { plan_id } = await req.json();
-    if (!plan_id) {
-      return new Response(JSON.stringify({ error: "plan_id required" }), { status: 400 });
-    }
-
-    // Busca informações do plano
-    const { data: plan, error: e1 } = await supabaseAdmin
-      .from("billing_plans")
-      .select("id, name, price_cents, plan_key")
-      .eq("id", plan_id)
-      .eq("active", true)
-      .single();
-
-    if (e1 || !plan) {
-      return new Response(JSON.stringify({ error: "Plano inválido" }), { status: 400 });
-    }
-
-    // Gera referência única
-    const reference_id = uuidv4();
-
-    // === Monta body para PagSeguro ===
-    const body = {
-      reference_id,
-      items: [
-        {
-          name: plan.name,
-          quantity: 1,
-          unit_amount: plan.price_cents
-        }
-      ],
-      notification_urls: [WEBHOOK_URL],
-      payment_notification_urls: [WEBHOOK_URL],
-      customer: { email: user.email } // opcional, mas ajuda
-    };
-
-    // === Chama PagSeguro ===
-    const psResp = await fetch(`${PAGSEGURO_BASE}/orders`, {
-      method: "POST",
-headers: {
-        'Authorization': `Bearer ${session?.access_token}`,
-        'Content-Type': 'application/json'
-        "Authorization": `Bearer ${PAGSEGURO_TOKEN}`,
-        "Content-Type": "application/json"
-},
-      body: JSON.stringify({ plan_id: planId })
-      body: JSON.stringify(body)
-});
-
-    const text = await resp.text();
-    let json = {};
-    const text = await psResp.text();
-    let json: any = {};
-try { json = text ? JSON.parse(text) : {}; } catch { json = { error: text }; }
-
-    if (!resp.ok || !json.pay_url) {
-      showBanner(`Não foi possível iniciar o pagamento. ${json.error || ''}`, 'err');
-      btnEl.innerHTML = original; btnEl.disabled = false; return;
-    if (!psResp.ok) {
-      console.error("Erro PagSeguro:", json);
-      return new Response(JSON.stringify({
-        error: "Falha ao criar pedido no PagSeguro",
-        provider_status: psResp.status,
-        provider_body: json
-      }), { status: 502 });
-}
-
-    showBanner('Redirecionando para o pagamento…', 'ok');
-    window.location.href = json.pay_url;
-  } catch (e) {
-    showBanner(`Não foi possível iniciar o pagamento. ${e?.message ?? ''}`, 'err');
-    btnEl.innerHTML = original; btnEl.disabled = false;
+    card.appendChild(actions);
+    cardsEl.appendChild(card);
   }
 }
 
-/* ===== Init ===== */
-(async function init(){
-  const { data: { session } } = await sb.auth.getSession();
-  if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return; }
+/* =================== Iniciar Checkout ======================= */
+async function getCustomerData(){
+  // Lê dados do cliente para enviar à função
+  const { data, error } = await sb
+    .from('profiles')
+    .select('first_name,last_name,cpf_cnpj,cpf_cnpj_type,razao_social,phone,email')
+    .eq('id', sessionUser.id).maybeSingle();
+  if (error) throw error;
+  return {
+    first_name: data?.first_name || '',
+    last_name : data?.last_name  || '',
+    cpf_cnpj  : data?.cpf_cnpj   || '',
+    cpf_cnpj_type: data?.cpf_cnpj_type || '',
+    razao_social : data?.razao_social || '',
+    phone        : data?.phone || '',
+    email        : sessionUser.email || ''
+  };
+}
+function ensureCustomerReady(cust){
+  // Regras mínimas para PagSeguro: nome e documento
+  if (!cust.first_name || !cust.last_name) return 'Informe seu nome e sobrenome em "Meus dados".';
+  if (!cust.cpf_cnpj) return 'Informe CPF ou CNPJ em "Meus dados".';
+  if (!cust.cpf_cnpj_type) return 'Selecione o tipo (CPF/CNPJ) em "Meus dados".';
+  if (cust.cpf_cnpj_type === 'cnpj' && !cust.razao_social) return 'Para CNPJ, informe a Razão social em "Meus dados".';
+  if (!cust.phone) return 'Informe um telefone com DDD em "Meus dados".';
+  return null;
+}
 
-  try {
-    // 1) Plano atual via profiles.plan (igual meusdados.html)
-    const currentPlan = await fetchCurrentPlan(session.user.id);
-    planChip.textContent = `Plano: ${prettyBR(currentPlan)}`;
-    // O pay_url pode estar em "links" ou dentro de "charges"
-    const pay_url =
-      json?.links?.find?.((l: any) => l.rel === "PAY")?.href ||
-      json?.charges?.[0]?.links?.find?.((l: any) => l.rel === "PAY")?.href ||
-      json?.links?.[0]?.href;
+async function startCheckout(planRow){
+  hideBanner();
+  const plan_id = planRow.id;
+  log('> startCheckout para', planRow);
 
-    if (!pay_url) {
-      return new Response(JSON.stringify({
-        error: "Checkout criado mas não encontrei pay_url",
-        provider_body: json
-      }), { status: 500 });
-    }
+  try{
+    const customer = await getCustomerData();
+    const missing = ensureCustomerReady(customer);
+    if (missing){ showBanner(missing, 'warn'); log('Dados incompletos:', customer); return; }
 
-    // 2) Carregar planos ativos
-    const plans = await loadActivePlans();
-    if (!plans.length) { showBanner('Nenhum plano ativo encontrado.', 'warn'); return; }
-    // (opcional) salva checkout_sessions no Supabase
-    await supabaseAdmin.from("checkout_sessions").insert({
-      user_id: user.id,
-      plan_id: plan.id,
-      plan_key: plan.plan_key,
-      reference_id,
-      pay_url,
-      status: "created"
+    // Guarda tentativa para pós-retorno
+    localStorage.setItem(lastCheckoutKey, JSON.stringify({ when: Date.now(), plan_id }));
+
+    // Chama a Edge Function
+    log('Chamando create-checkout…');
+    const { data, error } = await sb.functions.invoke('create-checkout', {
+      body: { plan_id, user_id: sessionUser.id, customer }
     });
 
-    // 3) Render
-    renderPlans(plans, currentPlan);
-    return new Response(JSON.stringify({ pay_url, reference_id }), { status: 200 });
+    if (error) {
+      log('create-checkout ERRO:', error);
+      showBanner('Falha ao criar checkout. Veja os logs abaixo.', 'err');
+      return;
+    }
+    log('create-checkout OK. Resposta:', data);
 
-  } catch (err){
-    console.error(err);
-    showBanner('Erro ao carregar planos. Confira RLS/colunas do profiles e config.js.', 'err');
-  } catch (err) {
-    console.error("Erro create-checkout:", err);
-    return new Response(JSON.stringify({ error: err?.message || String(err) }), { status: 500 });
+    const payUrl = data?.pay_url || data?.link || data?.url;
+    if (!payUrl){
+      showBanner('A função respondeu sem pay_url/link. Confira os logs.', 'err');
+      return;
+    }
+
+    // Redireciona para o pagamento
+    window.location.href = payUrl;
+  }catch(e){
+    log('Exceção em startCheckout:', e);
+    showBanner('Erro inesperado ao iniciar o pagamento.', 'err');
+  }
 }
+
+/* ====================== Pós-retorno ========================= */
+// Tenta aplicar plano com base na checkout_sessions paga mais recente do usuário
+async function tryApplyPaidPlan(){
+  log('Sincronizando… lendo checkout_sessions do usuário');
+  // Busca a última sessão do usuário
+  const { data, error } = await sb
+    .from('checkout_sessions')
+    .select('id,plan_id,status,external_id,created_at')
+    .eq('user_id', sessionUser.id)
+    .order('created_at', { descending: true })
+    .limit(1);
+
+  if (error){ log('checkout_sessions erro:', error); showBanner('Erro ao ler checkout_sessions.', 'err'); return false; }
+  if (!data || !data.length){ log('Nenhuma checkout_session encontrada.'); showBanner('Nenhuma compra encontrada para sincronizar.', 'warn'); return false; }
+
+  const sess = data[0];
+  log('Última sessão:', sess);
+
+  const paidStatuses = new Set(['paid','authorized','settled','approved','succeeded','success']);
+  if (!paidStatuses.has((sess.status||'').toLowerCase())){
+    showBanner(`Aguardando confirmação do pagamento (status atual: ${sess.status}).`, 'warn');
+    return false;
+  }
+
+  // Pega o plano e aplica em profiles
+  const planRow = plansByKey.get(await planKeyFromId(sess.plan_id));
+  if (!planRow){
+    log('Plano não encontrado em cache; lendo diretamente…');
+    const { data: one, error: e2 } = await sb.from('billing_plans')
+      .select('id, name, price_cents, plan_key').eq('id', sess.plan_id).maybeSingle();
+    if (e2){ log('Erro lendo billing_plans:', e2); showBanner('Erro ao ler o plano para aplicar.', 'err'); return false; }
+    planRow = one;
+  }
+
+  const newKey = (planRow.plan_key||'').toString();
+  log('Aplicando plano no profiles:', { plan: newKey, plan_id: planRow.id });
+
+  const { error: upErr } = await sb
+    .from('profiles')
+    .update({
+      plan: newKey,
+      plan_id: planRow.id,
+      plan_name: planRow.name,
+      plan_price_cents: planRow.price_cents,
+      plan_status: 'active',
+      subscription_status: 'active',
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', sessionUser.id);
+
+  if (upErr){ log('Falha ao atualizar profiles:', upErr); showBanner('Falha ao atualizar o plano no seu cadastro.', 'err'); return false; }
+
+  currentPlanKey = newKey;
+  planChip.textContent = `Plano: ${ucfirstBR(currentPlanKey)}`;
+  showBanner('Assinatura confirmada e aplicada ao seu perfil. ✅', 'ok');
+  renderCards();
+  return true;
+}
+
+// Mapeia id -> plan_key
+async function planKeyFromId(id){
+  for (const [k,v] of plansByKey.entries()) if (v.id === id) return k;
+  const { data, error } = await sb.from('billing_plans').select('plan_key').eq('id', id).maybeSingle();
+  if (error) { log('Erro lendo plan_key por id:', error); return 'trial'; }
+  return (data?.plan_key || 'trial').toString();
+}
+
+// Dispara sincronização manual (ou pós-retorno)
+async function syncNow(){
+  hideBanner();
+  log('--- SINCRONIZAR (manual) ---');
+
+  // Tentativa opcional: chamar função 'sync-subscription', se existir
+  try{
+    log('Tentando sb.functions.invoke("sync-subscription")…');
+    const { data, error } = await sb.functions.invoke('sync-subscription', { body: { user_id: sessionUser.id }});
+    if (error) log('sync-subscription retornou erro (pode não existir):', error);
+    if (data) log('sync-subscription retorno:', data);
+  }catch(e){
+    log('sync-subscription exceção (ignorada se função não existe):', e);
+  }
+
+  // Fallback: checa checkout_sessions e aplica
+  await tryApplyPaidPlan();
+}
+
+/* ============== Cancelar Assinatura (downgrade) ============= */
+async function cancelSubscription(){
+  if (!confirm('Confirmar cancelamento e voltar ao plano Trial?')) return;
+  hideBanner();
+  log('Chamando cancel-subscription…');
+
+  try{
+    const { data, error } = await sb.functions.invoke('cancel-subscription', {
+      body: { user_id: sessionUser.id }
+    });
+    if (error){ log('cancel-subscription ERRO:', error); showBanner('Falha ao cancelar assinatura. Veja os logs.', 'err'); return; }
+    log('cancel-subscription OK:', data);
+
+    // Backup do downgrade direto no profiles
+    const { error: upErr } = await sb
+      .from('profiles')
+      .update({ plan: 'trial', plan_status: 'canceled', subscription_status: 'canceled', updated_at: new Date().toISOString() })
+      .eq('id', sessionUser.id);
+    if (upErr){ log('Falha ao marcar Trial no profiles:', upErr); }
+
+    currentPlanKey = 'trial';
+    planChip.textContent = 'Plano: Trial';
+    showBanner('Assinatura cancelada. Você está em Trial.', 'ok');
+    renderCards();
+  }catch(e){
+    log('Exceção em cancelSubscription:', e);
+    showBanner('Erro inesperado ao cancelar.', 'err');
+  }
+}
+
+/* ====================== UI: botões diag ===================== */
+btnCopy.addEventListener('click', async ()=>{
+  try{ await navigator.clipboard.writeText(logEl.textContent); showBanner('Logs copiados para a área de transferência.', 'ok'); }catch{}
+});
+btnClear.addEventListener('click', ()=>{ logEl.textContent=''; });
+btnSync.addEventListener('click', ()=>{ syncNow(); });
+
+btnSair.addEventListener('click', async ()=>{
+  try{ await sb.auth.signOut(); }catch{}
+  window.location.href = CFG.SITE_URL || 'index.html';
+});
+
+/* ========================= INIT ============================= */
+(async function init(){
+  const session = await ensureSession(); if (!session) return;
+
+  await loadCurrentPlan();
+  await loadPlans();
+
+  // Se voltou do provedor, tenta sincronizar automaticamente
+  const sp = new URLSearchParams(location.search);
+  const hintedReturn = sp.has('success') || sp.has('paid') || sp.get('status')==='success';
+  const last = JSON.parse(localStorage.getItem(lastCheckoutKey) || 'null');
+  if (hintedReturn || last){
+    log('Pós-retorno detectado. Iniciando sincronização automática…');
+    await syncNow();
+    localStorage.removeItem(lastCheckoutKey);
+  }
 })();
 </script>
 </body>
