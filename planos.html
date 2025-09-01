@@ -4,268 +4,249 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Planos de Assinatura</title>
+
 <style>
-  :root { color-scheme: dark; }
-  * { box-sizing: border-box; }
-  body{background:#121212;color:#fff;font-family:Arial,sans-serif;margin:0}
-  a{color:#00b140;text-decoration:none}
-  header{display:flex;align-items:center;justify-content:space-between;padding:20px;gap:12px;flex-wrap:wrap}
-  h1{margin:0;color:#00b140}
-  .user{font-size:12px;color:#9aa0a6}
-  .chip{font-size:12px;background:#1e1e1e;border:1px solid #333;padding:6px 10px;border-radius:999px}
-  .chip.plan{color:#bfffc1;border-color:#2f5a2f;background:#132313}
-  .btn{display:inline-flex;align-items:center;gap:8px;background:#00b140;color:#fff;border:none;padding:10px 14px;border-radius:8px;text-decoration:none;cursor:pointer}
-  .btn:hover{background:#009b38}
-  .btn.ghost{background:transparent;border:1px solid #2a2a2a;color:#ddd}
-  .btn.ghost:hover{background:#1b1b1b}
-  .btn.warn{background:#7a2e2e}
-  .btn.warn:hover{background:#652424}
+:root { color-scheme: dark; }
+*{ box-sizing:border-box }
+body{background:#121212;color:#fff;font-family:Arial,sans-serif;margin:0}
+a{color:#00b140;text-decoration:none}
+header{display:flex;align-items:center;justify-content:space-between;padding:20px;gap:12px;flex-wrap:wrap}
+h1{margin:0;color:#00b140}
+.chip{font-size:12px;background:#1e1e1e;border:1px solid #333;padding:6px 10px;border-radius:999px}
+.chip.plan{color:#bfffc1;border-color:#2f5a2f;background:#132313}
+.btn{display:inline-flex;align-items:center;gap:8px;background:#00b140;color:#fff;border:none;padding:10px 14px;border-radius:8px;text-decoration:none;cursor:pointer;transition:background .2s,opacity .2s}
+.btn:hover{background:#009b38}
+.btn.ghost{background:transparent;border:1px solid #2a2a2a;color:#ddd}
+.btn.ghost:hover{background:#1b1b1b}
+.btn[disabled]{opacity:.7;cursor:not-allowed}
 
-  .container{max-width:1100px;margin:0 auto;padding:0 20px 32px}
+.container{max-width:1100px;margin:0 auto;padding:0 20px 32px}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:10px}
+@media (max-width:1000px){ .grid{grid-template-columns:repeat(2,1fr)} }
+@media (max-width:560px){ .grid{grid-template-columns:1fr} }
 
-  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:10px}
-  @media (max-width: 1000px){ .grid{grid-template-columns:repeat(2,1fr)} }
-  @media (max-width: 560px){ .grid{grid-template-columns:1fr} }
-
-  .card{background:#0f0f0f;border:1px solid #2a2a2a;border-radius:14px;padding:18px;display:flex;flex-direction:column;position:relative;overflow:hidden}
-  .badge{position:absolute;top:10px;right:-38px;transform:rotate(35deg);background:#1c3b1c;color:#bfffc1;padding:4px 60px;font-size:12px;border:1px solid #2a2a2a}
-  .plan-name{font-weight:800;font-size:16px;letter-spacing:.3px}
-  .price{display:flex;align-items:flex-end;gap:6px;margin:10px 0 2px}
-  .price .currency{font-size:18px;opacity:.9}
-  .price .amount{font-size:34px;font-weight:900;line-height:1}
-  .price .period{font-size:12px;color:#9aa0a6;margin-bottom:6px}
-  .price-note{font-size:12px;color:#9aa0a6;margin-bottom:8px}
-  .feat{display:flex;gap:8px;align-items:flex-start;margin:6px 0;color:#cfcfcf}
-  .feat:before{content:"✓";opacity:.9}
-  .spacer{flex:1}
-  .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-  .small{font-size:12px;color:#9aa0a6}
+.card{background:#0f0f0f;border:1px solid #2a2a2a;border-radius:14px;padding:18px;display:flex;flex-direction:column}
+.plan-name{font-weight:800;font-size:16px}
+.price{display:flex;align-items:flex-end;gap:6px;margin:10px 0 2px}
+.price .amount{font-size:34px;font-weight:900;line-height:1}
+.price .period{font-size:12px;color:#9aa0a6;margin-bottom:6px}
+.price-note{font-size:12px;color:#9aa0a6;margin-bottom:8px}
+.feat{display:flex;gap:8px;align-items:flex-start;margin:6px 0;color:#cfcfcf}
+.feat:before{content:"✓";opacity:.9}
+.spacer{flex:1}
+.actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.small{font-size:12px;color:#9aa0a6}
 
   .banner{border:1px solid #2a2a2a;border-radius:10px;padding:10px 12px;margin:12px 0;background:#111;display:none}
-  .banner.warn{border-color:#5c3f00;background:#1b1300;color:#ffc966;display:block}
-  .banner.ok{border-color:#214d21;background:#0e1a0e;color:#b7fbb7;display:block}
-  .banner.err{border-color:#5c1e1e;background:#190d0d;color:#ff9a9a;display:block}
+  .banner{border:1px solid #2a2a2a;border-radius:10px;padding:10px 12px;margin:12px 0;background:#111;display:none;white-space:pre-wrap}
+.banner.warn{border-color:#5c3f00;background:#1b1300;color:#ffc966;display:block}
+.banner.ok{border-color:#214d21;background:#0e1a0e;color:#b7fbb7;display:block}
+.banner.err{border-color:#5c1e1e;background:#190d0d;color:#ff9a9a;display:block}
 
-  .foot{margin-top:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.pill{display:inline-block;padding:2px 8px;border:1px solid #2a2a2a;border-radius:999px;font-size:11px;color:#bfbfbf;margin-left:8px}
+.spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;display:inline-block;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
 </style>
+
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="./config.js"></script>
 </head>
 <body>
 <header class="container">
-  <h1>Planos</h1>
-  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-    <span id="planChip" class="chip plan" title="Plano atual">Plano: —</span>
-    <span id="userInfo" class="user">Carregando…</span>
-    <a href="dashboard.html" class="btn ghost">← Voltar</a>
-  </div>
+<h1>Planos</h1>
+<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+<span id="planChip" class="chip plan">Plano: —</span>
+<a href="dashboard.html" class="btn ghost">← Voltar</a>
+</div>
 </header>
 
 <main class="container">
-  <div id="banner" class="banner"></div>
-
-  <div id="plansGrid" class="grid"></div>
-
-  <div class="foot">
-    <div class="small">
-      Os valores são mensais e a cobrança é recorrente. Você pode cancelar quando quiser.
-    </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button id="btnCancelar" class="btn warn">Cancelar assinatura (voltar ao Trial)</button>
-      <a href="meusdados.html" class="btn ghost">Meus dados</a>
-    </div>
-  </div>
+<div id="banner" class="banner"></div>
+<div id="plansGrid" class="grid"></div>
 </main>
 
 <script>
-/* ====== Supabase client ====== */
+/* ===== Supabase ===== */
 const CFG = window.CONFIG || {};
+const SUPABASE_URL = CFG.SUPABASE_URL;
+const SUPABASE_ANON_KEY = CFG.SUPABASE_ANON_KEY;
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  alert("Erro de configuração: config.js não carregado."); throw new Error("CONFIG ausente");
+}
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
-  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
 });
 
-/* ====== Elementos ====== */
-const userInfo = document.getElementById('userInfo');
+/* ===== UI ===== */
 const planChip = document.getElementById('planChip');
 const banner = document.getElementById('banner');
 const grid = document.getElementById('plansGrid');
-const btnCancelar = document.getElementById('btnCancelar');
 
-/* ====== Helpers ====== */
+function showBanner(text, type='ok'){ banner.textContent=text; banner.className='banner '+(type==='warn'?'warn':(type==='err'?'err':'ok')); banner.style.display='block'; }
 function moneyBR(cents){ return (cents/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
-function showBanner(msg, type='ok'){ banner.textContent = msg; banner.className = 'banner ' + type; }
-function clearBanner(){ banner.className = 'banner'; banner.style.display='none'; banner.textContent=''; }
-
-function normalizePlanKey(name){
-  const n = (name||'').toLowerCase();
-  if (n.includes('trial')) return 'trial';
-  if (n.includes('básico') || n.includes('basico')) return 'basico';
-  if (n.includes('intermedi')) return 'intermediario';
-  if (n.includes('premium')) return 'premium';
-  return n.replace(/\s+/g,'_');
-}
-function featuresFor(name){
-  const n = (name||'').toLowerCase();
-  if (n.includes('trial')) return ['Acesso limitado','Sem custo no primeiro ciclo'];
-  if (n.includes('básico') || n.includes('basico')) return ['Recorrência mensal','Suporte por e-mail','Acesso ao dashboard'];
-  if (n.includes('intermedi')) return ['Tudo do Básico','Relatórios adicionais','Atualizações mais rápidas'];
-  if (n.includes('premium')) return ['Tudo do Intermediário','Prioridade máxima','Recursos avançados'];
-  return ['Cobrança recorrente mensal'];
+function prettyBR(plan){
+const p = (plan||'').toString();
+return p.charAt(0).toUpperCase()+p.slice(1)
+.replace('Basico','Básico')
+.replace('Intermediario','Intermediário');
 }
 
-/* ====== URLs fixas das Functions (seu projeto) ====== */
-const FUNCTIONS_BASE = "https://maprezivxfitqyifmepq.functions.supabase.co";
+function getFunctionsBaseFromSupabaseUrl(urlStr){
+try{ return `https://${new URL(urlStr).host.split('.supabase.co')[0]}.functions.supabase.co`; }
+catch{ return '/functions/v1'; }
+}
+const FUNCTIONS_BASE = getFunctionsBaseFromSupabaseUrl(SUPABASE_URL);
+const FUNCTIONS_BASE = getFunctionsBaseFromSupabaseUrl(CFG.SUPABASE_URL);
 const CREATE_CHECKOUT_ENDPOINT = `${FUNCTIONS_BASE}/create-checkout`;
-const CANCEL_SUBSCRIPTION_ENDPOINT = `${FUNCTIONS_BASE}/cancel-subscription`;
 
-/* ====== Sessão + plano atual ====== */
-let currentPlan = 'trial'; // valor padrão
-async function ensureSessionAndPlan(){
-  const { data: { session } } = await sb.auth.getSession();
-  if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return null; }
-  userInfo.textContent = session.user?.email || 'Logado';
-
-  try{
-    const { data, error } = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
-    if (error) throw error;
-    currentPlan = (data?.plan || 'trial').toString();
-  }catch(e){
-    console.error(e);
-    currentPlan = 'trial';
-  }
-  const pretty = currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1);
-  planChip.textContent = `Plano: ${pretty.replace('Basico','Básico').replace('Intermediario','Intermediário')}`;
-  return session;
+/* ===== Dados ===== */
+// Busca o plano EXATAMENTE como em meusdados.html: profiles.plan
+async function fetchCurrentPlan(userId){
+const { data, error } = await sb
+.from('profiles')
+.select('plan')
+.eq('id', userId)
+.maybeSingle();
+if (error) throw error;
+  return (data?.plan || 'trial').toString(); // default trial
+  return (data?.plan || 'trial').toString();
 }
 
-/* ====== Carregar planos ====== */
-async function loadPlans(){
-  const { data, error } = await sb
-    .from('billing_plans')
-    .select('id,name,price_cents,interval_unit,interval_length,billing_cycles,active')
-    .eq('active', true)
-    .order('price_cents', { ascending: true });
-  if (error) throw error;
-  return data || [];
+async function loadActivePlans(){
+const { data, error } = await sb
+.from('billing_plans')
+.select('id,name,plan_key,price_cents,active')
+.eq('active', true)
+.order('price_cents', { ascending: true });
+if (error) throw error;
+
+  // Garante uma chave mesmo se plan_key vier nula
+const norm = (name)=>{
+const s = String(name||'').toLowerCase();
+if (s.includes('trial')||s.includes('teste')||s.includes('grat')) return 'trial';
+if (s.includes('básico')||s.includes('basico')||s.includes('basic')) return 'basico';
+if (s.includes('intermedi')) return 'intermediario';
+if (s.includes('premium')||s.includes('prêmio')||s.includes('premio')) return 'premium';
+return 'trial';
+};
+return (data||[]).map(p => ({ ...p, plan_key: p.plan_key || norm(p.name) }));
 }
 
-/* ====== Render ====== */
-function renderPlans(plans){
-  grid.innerHTML = '';
-  for (const p of plans){
-    const card = document.createElement('div');
-    card.className = 'card';
-    const isBest = /premium|intermedi/i.test(p.name);
-    if (isBest) {
-      const b = document.createElement('div');
-      b.className = 'badge';
-      b.textContent = /premium/i.test(p.name) ? 'MAIS COMPLETO' : 'MELHOR CUSTO-BENEFÍCIO';
-      card.appendChild(b);
-    }
+/* ===== Render ===== */
+function renderPlans(plans, currentKey){
+grid.innerHTML = '';
 
-    const planKey = normalizePlanKey(p.name);
-    const isCurrent = planKey === currentPlan;
-    const feats = featuresFor(p.name);
+const currentPlan = plans.find(p => p.plan_key === currentKey) || null;
+const currentPrice = currentPlan?.price_cents ?? 0;
 
-    card.innerHTML += `
-      <div class="plan-name">${p.name}${isCurrent ? ' • <span style="color:#bfffc1">seu plano atual</span>' : ''}</div>
-      <div class="price">
-        <span class="currency">R$</span>
-        <span class="amount">${(p.price_cents/100).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}).split(',')[0]}</span>
-        <span class="period">/mês</span>
-      </div>
-      <div class="price-note">${moneyBR(p.price_cents)} por mês</div>
-      ${feats.map(f => `<div class="feat">${f}</div>`).join('')}
-      <div class="spacer"></div>
-      <div class="actions">
-        <button class="btn" ${isCurrent ? 'disabled title="Plano já ativo"' : ''}>${isCurrent ? 'Ativo' : 'Assinar'}</button>
-        <span class="small">renova automaticamente</span>
-      </div>
-    `;
+for (const p of plans){
+const card = document.createElement('div');
+card.className = 'card';
 
-    const btn = card.querySelector('.btn');
-    if (!isCurrent) btn.addEventListener('click', () => startCheckout(p.id, p.name));
+const feats = (() => {
+switch (p.plan_key){
+case 'trial': return ['Acesso limitado','Sem custo'];
+case 'basico': return ['Dashboard básico','Suporte por e-mail'];
+case 'intermediario': return ['Tudo do Básico','Relatórios adicionais'];
+case 'premium': return ['Tudo do Intermediário','Suporte prioritário'];
+default: return ['Cobrança recorrente mensal'];
+}
+})();
 
-    grid.appendChild(card);
-  }
+const priceFmt = moneyBR(p.price_cents);
+
+let btnLabel = 'Assinar';
+let btnDisabled = false;
+let pill = '';
+
+if (p.plan_key === currentKey){
+btnLabel = 'Seu plano atual';
+btnDisabled = true;
+pill = '<span class="pill">ativo</span>';
+} else {
+if (p.price_cents > currentPrice) btnLabel = 'Upgrade';
+else if (p.price_cents < currentPrice) btnLabel = 'Downgrade';
+else btnLabel = 'Mudar para este';
 }
 
-/* ====== Iniciar checkout (ex: PagBank por Edge Function create-checkout) ====== */
-async function startCheckout(planId, planName){
-  showBanner(`Criando checkout para "${planName}"…`, 'ok');
-  const { data: { session } } = await sb.auth.getSession();
-  try {
-    const resp = await fetch(CREATE_CHECKOUT_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session?.access_token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ plan_id: planId })
-    });
-    const json = await resp.json();
-    if (!resp.ok || !json.pay_url) throw new Error(json.error || 'Falha ao criar checkout');
-    showBanner('Redirecionando para o pagamento…', 'ok');
-    window.location.href = json.pay_url;
-  } catch (e) {
-    console.error(e);
-    showBanner('Não foi possível iniciar o pagamento. Tente novamente.', 'err');
-  }
+card.innerHTML = `
+     <div class="plan-name">${p.name} ${pill}</div>
+     <div class="price"><span class="amount">${priceFmt}</span><span class="period">/mês</span></div>
+     <div class="price-note">${priceFmt} por mês</div>
+     ${feats.map(f => `<div class="feat">${f}</div>`).join('')}
+     <div class="spacer"></div>
+     <div class="actions">
+       <button class="btn" data-plan="${p.id}" ${btnDisabled?'disabled':''}>${btnLabel}</button>
+       <span class="small">renova automaticamente</span>
+     </div>
+   `;
+
+const btn = card.querySelector('.btn');
+if (!btnDisabled) btn.addEventListener('click', () => startCheckout(p.id, p.name, btn));
+grid.appendChild(card);
+}
 }
 
-/* ====== Cancelar assinatura → voltar ao TRIAL ====== */
-btnCancelar.addEventListener('click', async ()=>{
-  const confirmMsg = 'Tem certeza que deseja cancelar a assinatura atual e voltar ao plano Trial (gratuito)?';
-  if (!confirm(confirmMsg)) return;
+/* ===== Checkout ===== */
+async function startCheckout(planId, planName, btnEl){
+const original = btnEl.innerHTML;
+btnEl.innerHTML = '<span class="spinner"></span> Processando...';
+btnEl.disabled = true;
+showBanner(`Criando checkout para "${planName}"…`, 'ok');
 
-  showBanner('Cancelando assinatura…', 'ok');
-  const { data: { session } } = await sb.auth.getSession();
-  if (!session) { showBanner('Faça login e tente novamente.', 'warn'); return; }
-
-  try{
-    // Chama a Edge Function
-    const resp = await fetch(CANCEL_SUBSCRIPTION_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({})
-    });
-    const json = await resp.json().catch(()=>({}));
-    if (!resp.ok) throw new Error(json.error || `Erro ${resp.status}`);
-
-    // Atualiza localmente plan = 'trial'
-    const up = await sb.from('profiles').update({ plan: 'trial' }).eq('id', session.user.id);
-    if (up.error) throw up.error;
-
-    currentPlan = 'trial';
-    planChip.textContent = 'Plano: Trial';
-    showBanner('Assinatura cancelada. Plano atual: Trial (gratuito).', 'ok');
-
-    // Recarrega cards para refletir o botão Ativo no Trial e liberar upgrade
-    const plans = await loadPlans();
-    renderPlans(plans);
-  }catch(e){
-    console.error(e);
-    showBanner('Não foi possível cancelar agora. Verifique a função e os secrets.', 'err');
-  }
+const { data: { session } } = await sb.auth.getSession();
+try {
+const resp = await fetch(CREATE_CHECKOUT_ENDPOINT, {
+method: 'POST',
+headers: {
+'Authorization': `Bearer ${session?.access_token}`,
+'Content-Type': 'application/json'
+},
+body: JSON.stringify({ plan_id: planId })
 });
 
-/* ====== Init ====== */
+const text = await resp.text();
+let json = {};
+try { json = text ? JSON.parse(text) : {}; } catch { json = { error: text }; }
+
+if (!resp.ok || !json.pay_url) {
+      showBanner(`Não foi possível iniciar o pagamento. ${json.error || ''}`, 'err');
+      // Mostra também o detalhe que a função devolve
+      const msg = `Não foi possível iniciar o pagamento.\n${json.error || ''}\n${json.error_detail || ''}`;
+      showBanner(msg, 'err');
+btnEl.innerHTML = original; btnEl.disabled = false; return;
+}
+
+showBanner('Redirecionando para o pagamento…', 'ok');
+window.location.href = json.pay_url;
+} catch (e) {
+showBanner(`Não foi possível iniciar o pagamento. ${e?.message ?? ''}`, 'err');
+btnEl.innerHTML = original; btnEl.disabled = false;
+}
+}
+
+/* ===== Init ===== */
 (async function init(){
-  const session = await ensureSessionAndPlan(); if (!session) return;
-  try {
-    const plans = await loadPlans();
-    if (!plans.length) {
-      showBanner('Nenhum plano ativo encontrado. Verifique a tabela billing_plans.', 'warn');
-      return;
-    }
-    renderPlans(plans);
-  } catch (err){
-    console.error(err);
-    showBanner('Erro ao carregar planos. Confira as políticas RLS ou sua conexão.', 'err');
-  }
+const { data: { session } } = await sb.auth.getSession();
+if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return; }
+
+try {
+    // 1) Plano atual via profiles.plan (igual meusdados.html)
+const currentPlan = await fetchCurrentPlan(session.user.id);
+planChip.textContent = `Plano: ${prettyBR(currentPlan)}`;
+
+    // 2) Carregar planos ativos
+const plans = await loadActivePlans();
+if (!plans.length) { showBanner('Nenhum plano ativo encontrado.', 'warn'); return; }
+
+    // 3) Render
+renderPlans(plans, currentPlan);
+
+} catch (err){
+console.error(err);
+showBanner('Erro ao carregar planos. Confira RLS/colunas do profiles e config.js.', 'err');
+}
 })();
 </script>
 </body>
