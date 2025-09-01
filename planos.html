@@ -118,7 +118,7 @@
     }
 
     const supabase = createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_ANON_KEY);
-    let session, user, currentPlan, currentStatus;
+    let session, user;
 
     async function loadSession() {
       const { data, error } = await supabase.auth.getSession();
@@ -132,7 +132,7 @@
     async function loadProfile() {
       const { data, error } = await supabase.from("profiles").select("plan,subscription_status").eq("id", user.id).maybeSingle();
       if (error) { log("✖ Erro perfil: "+error.message,"err"); return; }
-      currentPlan = data?.plan; currentStatus = data?.subscription_status;
+      const currentPlan = data?.plan; const currentStatus = data?.subscription_status;
       document.getElementById("currentPlan").textContent = currentPlan||"—";
       document.getElementById("currentStatus").textContent = currentStatus||"—";
       document.querySelectorAll(".card").forEach(card=>{
@@ -144,15 +144,24 @@
     }
 
     async function startCheckout(planSlug) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { alert("Faça login novamente."); location.href="/index.html"; return; }
+
+      log(`• Iniciando checkout (${planSlug}), token len=${(session.access_token||"").length}`);
+
       try {
-        log(`• Iniciando checkout (${planSlug})`);
         const res = await fetch(CREATE_CHECKOUT_URL, {
           method:"POST",
           headers:{
-            "Authorization":`Bearer ${session.access_token}`, // ESSENCIAL
+            "Authorization":`Bearer ${session.access_token}`, // header
             "Content-Type":"application/json"
           },
-          body:JSON.stringify({ plan:planSlug, success_url:SUCCESS_URL, cancel_url:CANCEL_URL })
+          body:JSON.stringify({
+            plan: planSlug,
+            success_url: SUCCESS_URL,
+            cancel_url: CANCEL_URL,
+            supabase_token: session.access_token              // fallback no body
+          })
         });
         const data=await res.json().catch(()=>({}));
         if(!res.ok){ log(`✖ Falha checkout (${res.status}): ${data?.error||""}`,"err"); if(data?.raw) log("RAW:"+data.raw,"err"); alert("Erro ao iniciar pagamento."); return; }
