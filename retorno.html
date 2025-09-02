@@ -1,236 +1,110 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
-  <title>Retorno do Pagamento</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- Seu arquivo com SUPABASE_URL e SUPABASE_ANON_KEY -->
-  <script src="config.js"></script>
-  <!-- supabase-js v2 (ESM) -->
-  <script type="module" src="https://esm.sh/@supabase/supabase-js@2"></script>
-  <style>
-    :root {
-      --bg: #f6f7fb;
-      --card: #ffffff;
-      --ok: #0e8f3b;
-      --muted: #727b86;
-      --danger: #c62828;
-      --primary: #0069d9;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0; padding: 24px;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
-      background: var(--bg); color: #111;
-    }
-    .wrap {
-      max-width: 860px; margin: 0 auto;
-    }
-    .card {
-      background: var(--card);
-      border-radius: 14px;
-      padding: 20px;
-      box-shadow: 0 6px 24px rgba(0,0,0,.06);
-    }
-    h1 { margin: 0 0 6px; font-size: 24px; }
-    p.lead { color: var(--muted); margin: 0 0 16px; }
-    .row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; }
-    .actions { display: flex; gap: 8px; }
-    button {
-      padding: 10px 14px; border-radius: 10px; border: 0; cursor: pointer;
-      background: var(--primary); color: #fff; font-weight: 600;
-    }
-    button.secondary { background: #e9eef7; color: #1a2b4b; }
-    button.danger { background: var(--danger); }
-    pre#log {
-      margin-top: 14px; background: #0f172a; color: #c7f7c7;
-      border-radius: 10px; padding: 12px; max-height: 340px; overflow: auto;
-      line-height: 1.35; font-size: 13px;
-    }
-    .status {
-      margin-top: 10px; display: inline-block; padding: 6px 10px; border-radius: 999px;
-      font-size: 12px; font-weight: 700; letter-spacing: .3px;
-      color: #fff; background: #8892a6;
-    }
-    .status.ok { background: var(--ok); }
-    .status.err { background: var(--danger); }
-    .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
-    a.link { color: var(--primary); text-decoration: none; font-weight: 600; }
-    a.link:hover { text-decoration: underline; }
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Retorno do Pagamento</title>
+<style>
+  :root { color-scheme: dark; }
+  *{ box-sizing: border-box }
+  body{ background:#121212; color:#fff; font-family: Arial, sans-serif; margin:0; padding:24px }
+  .container{ max-width:720px; margin:0 auto }
+  .card{ background:#0f0f0f; border:1px solid #2a2a2a; border-radius:16px; padding:20px; display:flex; flex-direction:column; gap:14px }
+  .btn{ display:inline-flex; align-items:center; gap:8px; background:#00b140; color:#fff; border:none; padding:12px 16px; border-radius:10px; cursor:pointer; font-size:16px }
+  .btn:hover{ background:#009b38 }
+  .muted{ color:#9aa0a6; font-size:13px }
+  .ok{ color:#b7fbb7 }
+  .err{ color:#ff9a9a }
+</style>
+<script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="./config.js"></script>
 </head>
 <body>
-  <div class="wrap">
-    <div class="card">
-      <div class="row">
-        <div>
-          <h1>Finalizando sua assinatura</h1>
-          <p class="lead">Validando o pagamento e atualizando seu acesso…</p>
-        </div>
-        <div>
-          <span id="pill" class="status">INICIALIZANDO</span>
-        </div>
-      </div>
-
-      <div class="actions">
-        <button id="btnRepetir">Repetir atualização</button>
-        <button id="btnIrDashboard" class="secondary">Ir para o Dashboard</button>
-      </div>
-      <div class="hint">Se houver algum atraso de rede, aguarde alguns segundos. Você também pode clicar em <b>Repetir atualização</b>.</div>
-
-      <pre id="log"></pre>
-      <div class="hint">
-        Problemas? Confira se o usuário está logado e se a política RLS permite atualizar o próprio perfil.
-        <br/>Se preferir, retorne à <a href="/planos.html" class="link">página de planos</a>.
-      </div>
+<main class="container">
+  <h1>Confirmação do Pagamento</h1>
+  <div class="card">
+    <div id="status">Verificando…</div>
+    <div id="detail" class="muted"></div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap">
+      <a href="planos.html" class="btn">← Ir para Planos</a>
+      <a href="dashboard.html" class="btn" style="background:#333">Dashboard</a>
     </div>
   </div>
+</main>
 
-  <script type="module">
-    import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+<script>
+const CFG = window.CONFIG || {};
+const sb  = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+});
 
-    // === Configuração & utilitários ===
-    const TARGET_PLAN = "intermediario"; // plano que queremos aplicar
-    const REDIRECT_OK = "/dashboard.html"; // para onde mandar quando detectar 'active/intermediario'
-    const MAX_POLL = 30;  // tentativas pós-update (segundos)
+const statusEl = document.getElementById('status');
+const detailEl = document.getElementById('detail');
 
-    const logBox = document.getElementById("log");
-    const pill = document.getElementById("pill");
-    const log = (line) => {
-      const ts = new Date().toLocaleTimeString();
-      console.log(`[${ts}] ${line}`);
-      logBox.textContent += `[${ts}] ${line}\n`;
-      logBox.scrollTop = logBox.scrollHeight;
-    };
-    const setPill = (txt, cls = "") => {
-      pill.textContent = txt;
-      pill.className = "status " + cls;
-    };
+let sessionUser = null;
+let statusParam = (new URLSearchParams(location.search).get('status') || '').toLowerCase();
 
-    // Verifica config.js
-    if (!window.CONFIG?.SUPABASE_URL || !window.CONFIG?.SUPABASE_ANON_KEY) {
-      setPill("CONFIG AUSENTE", "err");
-      log("✖ Falha: Não encontrei SUPABASE_URL/ANON_KEY no window.CONFIG (confira config.js).");
-      throw new Error("CONFIG ausente");
-    } else {
-      log("✓ CONFIG ok: SUPABASE_URL/ANON_KEY presentes.");
-    }
+function ucfirstBR(s){ const m = {trial:'Trial', basico:'Básico', intermediario:'Intermediário', premium:'Premium'}; return m[s] || s; }
+function brl(c){ return (c/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) }
 
-    // Cria o client
-    const supabase = createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_ANON_KEY);
+async function ensureSession(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if (!session){ statusEl.textContent = 'Você não está logado.'; statusEl.className='err'; return null; }
+  sessionUser = session.user; return session;
+}
 
-    // === Fluxo principal ===
-    let sessionUserId = null;
+async function readPlanByKey(key){
+  const { data, error } = await sb
+    .from('billing_plans')
+    .select('id,name,price_cents,plan_key')
+    .eq('plan_key', key).maybeSingle();
+  if (error || !data) return null;
+  return data;
+}
 
-    async function getSessionOrRedirect() {
-      const { data: { session }, error } = await supabase.auth.getSession();
-      if (error) {
-        setPill("ERRO SESSÃO", "err");
-        log("✖ Erro ao obter sessão: " + (error?.message || error));
-        return null;
-      }
-      if (!session) {
-        setPill("SEM SESSÃO", "err");
-        log("✖ Sem sessão ativa. Redirecionando para login…");
-        window.location.href = "/index.html";
-        return null;
-      }
-      sessionUserId = session.user.id;
-      log(`✓ Sessão ok. user.id=${session.user.id}, email=${session.user.email}`);
-      return session.user;
-    }
+async function applyPlan(planKey){
+  const planRow = await readPlanByKey(planKey);
+  if (!planRow){ statusEl.textContent = 'Plano não encontrado.'; statusEl.className='err'; return false; }
+  const { error } = await sb.from('profiles').update({
+    plan: planRow.plan_key,
+    plan_id: planRow.id,
+    plan_name: planRow.name,
+    plan_price_cents: planRow.price_cents,
+    plan_status: 'active',
+    subscription_status: 'active',
+    updated_at: new Date().toISOString()
+  }).eq('id', sessionUser.id);
+  if (error){ statusEl.textContent = 'Falha ao aplicar o plano no perfil.'; statusEl.className='err'; detailEl.textContent = error.message; return false; }
+  statusEl.innerHTML = `✅ Plano aplicado: <span class="ok">${ucfirstBR(planRow.plan_key)}</span>`;
+  detailEl.textContent = `Valor: ${brl(planRow.price_cents||0)} • Conta: ${sessionUser.email}`;
+  return true;
+}
 
-    async function fetchProfile() {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("plan, subscription_status, updated_at")
-        .eq("id", sessionUserId)
-        .maybeSingle();
-      if (error) {
-        log("✖ Erro ao consultar profiles: " + error.message);
-        return null;
-      }
-      return data;
-    }
+(async function init(){
+  const s = await ensureSession(); if (!s) return;
 
-    async function applyUpgrade() {
-      // Aplica o update que você já validou no console
-      setPill("ATUALIZANDO…");
-      log(`• Atualizando perfil → plan=${TARGET_PLAN}, subscription_status=active`);
-      const { data, error } = await supabase
-        .from("profiles")
-        .update({
-          plan: TARGET_PLAN,
-          subscription_status: "active",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", sessionUserId)
-        .select();
+  // IMPORTANTE (homologação): usamos o plano salvo localmente na hora do clique
+  const planKey = localStorage.getItem('mm_selected_plan');
+  const paid    = ['success','approved','succeeded','ok'].includes(statusParam);
 
-      if (error) {
-        setPill("ERRO UPDATE", "err");
-        log("✖ Falha no update: " + error.message);
-        return false;
-      }
-      log("✓ Update executado. Retorno: " + JSON.stringify(data));
-      return true;
-    }
+  if (!paid){
+    statusEl.textContent = 'Pagamento não confirmado (status diferente de sucesso).';
+    statusEl.className = 'err';
+    detailEl.textContent = 'Se você concluiu o pagamento, aguarde alguns instantes e tente novamente.';
+    return;
+  }
+  if (!planKey){
+    statusEl.textContent = 'Não foi possível identificar o plano selecionado.';
+    statusEl.className = 'err';
+    detailEl.textContent = 'Volte para a página de planos e tente novamente.';
+    return;
+  }
+  await applyPlan(planKey);
 
-    async function pollUntilApplied() {
-      // Polling curto, apenas para confirmar e redirecionar
-      setPill("VALIDANDO…");
-      for (let i = 1; i <= MAX_POLL; i++) {
-        const p = await fetchProfile();
-        if (p) {
-          log(`• Tentativa ${i}: plan=${p.plan} | subscription_status=${p.subscription_status} | updated_at=${p.updated_at}`);
-          if (p.subscription_status === "active" && p.plan === TARGET_PLAN) {
-            setPill("OK", "ok");
-            log("✓ Upgrade detectado! Redirecionando…");
-            window.location.href = REDIRECT_OK;
-            return;
-          }
-        } else {
-          log("• Tentativa falhou ao ler perfil (verifique rede/RLS).");
-        }
-        await new Promise(r => setTimeout(r, 1000));
-      }
-      setPill("SEM MUDANÇA", "err");
-      log("• Polling esgotado sem detectar mudança. Você pode clicar em 'Repetir atualização'.");
-    }
-
-    // === Inicialização ===
-    setPill("INICIALIZANDO");
-    const user = await getSessionOrRedirect();
-    if (user) {
-      // Mostra estado atual
-      const now = await fetchProfile();
-      if (now) {
-        log(`• Perfil atual → plan=${now.plan} | subscription_status=${now.subscription_status} | updated_at=${now.updated_at}`);
-        // Se já estiver OK, redireciona direto
-        if (now.subscription_status === "active" && now.plan === TARGET_PLAN) {
-          setPill("OK", "ok");
-          log("✓ Já está ativo/intermediario. Redirecionando…");
-          window.location.href = REDIRECT_OK;
-        } else {
-          // Aplica upgrade e valida
-          const ok = await applyUpgrade();
-          if (ok) await pollUntilApplied();
-        }
-      } else {
-        setPill("ERRO PERFIL", "err");
-        log("✖ Não foi possível ler o perfil atual.");
-      }
-    }
-
-    // === Ações manuais ===
-    document.getElementById("btnRepetir").onclick = async () => {
-      setPill("ATUALIZANDO…");
-      const ok = await applyUpgrade();
-      if (ok) await pollUntilApplied();
-    };
-    document.getElementById("btnIrDashboard").onclick = () => {
-      window.location.href = REDIRECT_OK;
-    };
-  </script>
+  // Limpeza (opcional)
+  localStorage.removeItem('mm_selected_plan');
+  localStorage.removeItem('mm_selected_at');
+})();
+</script>
 </body>
 </html>

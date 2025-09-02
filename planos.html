@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Planos</title>
 <style>
   :root { color-scheme: dark; }
@@ -36,17 +36,7 @@
   .banner.err{ border-color:#5c1e1e; background:#190d0d; color:#ff9a9a; display:block }
   .banner.warn{ border-color:#5c3f00; background:#1b1300; color:#ffc966; display:block }
 
-  /* Diagnóstico */
-  details.diag{ margin-top:18px }
-  details.diag summary{ cursor:pointer; user-select:none; padding:8px 10px; background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px }
-  .diag-wrap{ margin-top:10px; display:grid; grid-template-columns: 1fr; gap:8px }
-  .kv{ display:flex; gap:8px; flex-wrap:wrap; font-size:13px; color:#ddd }
-  .kv b{ color:#b5ffd1 }
-  pre.log{ margin:0; background:#0b0b0b; border:1px solid #2a2a2a; border-radius:10px; padding:10px; max-height:260px; overflow:auto; font-size:12px; line-height:1.45 }
-
   .row-actions{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:flex-end; margin: 6px 0 2px }
-
-  .sep{ height:1px; background:#262626; margin:10px 0 }
 </style>
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="./config.js"></script>
@@ -64,176 +54,101 @@
 
 <main class="container">
   <div id="banner" class="banner"></div>
-
   <section id="cards" class="grid" aria-live="polite"></section>
-
-  <details class="diag">
-    <summary>Diagnóstico / Logs (clique para abrir)</summary>
-    <div class="diag-wrap">
-      <div class="kv"><b>Usuário:</b><span id="kvUser">—</span></div>
-      <div class="kv"><b>Plano atual (profiles.plan):</b><span id="kvCurrentPlan">—</span></div>
-      <div class="kv"><b>Edge Functions base:</b><span id="kvFnBase">—</span></div>
-      <div class="row-actions">
-        <button id="btnSync" class="btn ghost" title="Força leitura de checkout_sessions e aplica o plano pago mais recente.">🔄 Sincronizar agora</button>
-        <button id="btnCopy" class="btn ghost">📋 Copiar logs</button>
-        <button id="btnClear" class="btn ghost">🧹 Limpar logs</button>
-      </div>
-      <pre id="log" class="log" aria-live="polite"></pre>
-    </div>
-  </details>
 </main>
 
 <script>
-/* ================== Setup Supabase / Config ================== */
+/* ========== Setup Supabase ========== */
 const CFG = window.CONFIG || {};
-const SUPABASE_URL = CFG.SUPABASE_URL;
-const SUPABASE_ANON_KEY = CFG.SUPABASE_ANON_KEY;
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) { alert('Erro: config.js não carregado.'); throw new Error('CONFIG ausente'); }
-
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+const sb  = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
 });
 
-/* ======================== DOM refs ========================== */
 const bannerEl = document.getElementById('banner');
 const cardsEl  = document.getElementById('cards');
-const logEl    = document.getElementById('log');
 const planChip = document.getElementById('planChip');
-const kvUser   = document.getElementById('kvUser');
-const kvCurrentPlan = document.getElementById('kvCurrentPlan');
-const kvFnBase = document.getElementById('kvFnBase');
-
 const btnSair  = document.getElementById('btnSair');
-const btnCopy  = document.getElementById('btnCopy');
-const btnClear = document.getElementById('btnClear');
-const btnSync  = document.getElementById('btnSync');
 
-/* ======================== Utils ============================= */
-function brlFromCents(c){ if (typeof c !== 'number') return 'R$ 0,00'; return (c/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) }
-function showBanner(msg, type='ok'){ bannerEl.textContent = msg; bannerEl.className = 'banner ' + (type==='err'?'err': (type==='warn'?'warn':'ok')); bannerEl.style.display='block'; }
-function hideBanner(){ bannerEl.style.display='none'; bannerEl.textContent=''; }
-function log(...args){
-  const ts = new Date().toLocaleString('pt-BR');
-  const line = `[${ts}] ` + args.map(a=>{
-    if (a instanceof Error) return a.message;
-    if (typeof a === 'object') try { return JSON.stringify(a, null, 2) } catch { return String(a)}
-    return String(a);
-  }).join(' ');
-  logEl.textContent += line + "\n";
-  logEl.scrollTop = logEl.scrollHeight;
-}
-function getFunctionsBase(){
-  try{
-    const u = new URL(SUPABASE_URL);
-    // https://xxx.supabase.co  -> https://xxx.functions.supabase.co
-    return `${u.protocol}//${u.host.replace('.supabase.co','.functions.supabase.co')}`;
-  }catch{ return '(desconhecido)' }
+let sessionUser = null;
+let currentPlanKey = 'trial';
+let plansByKey = new Map();
+
+function showBanner(msg, type='ok'){
+  bannerEl.textContent = msg;
+  bannerEl.className = 'banner ' + (type==='err'?'err': (type==='warn'?'warn':'ok'));
+  bannerEl.style.display='block';
 }
 
-/* ============= Estado global dessa página =================== */
-let sessionUser = null;         // objeto de sessão
-let currentPlanKey = 'trial';   // profiles.plan
-let plansByKey = new Map();     // Map<'trial'|'basico'|'intermediario'|'premium', planRow>
-let lastCheckoutKey = 'mm_last_checkout';  // guarda info da tentativa de compra p/ pós-retorno
-
-/* ===================== Sessão & Header ====================== */
+/* ------------ Sessão ------------ */
 async function ensureSession(){
   const { data: { session } } = await sb.auth.getSession();
   if (!session){ window.location.href = CFG.SITE_URL || 'index.html'; return null; }
   sessionUser = session.user;
-  kvUser.textContent = `${session.user.email} (${session.user.id})`;
-  kvFnBase.textContent = getFunctionsBase();
   return session;
 }
 
+/* ------------ Plano atual ------------ */
 async function loadCurrentPlan(){
   try{
     const { data, error } = await sb.from('profiles').select('plan').eq('id', sessionUser.id).maybeSingle();
     if (error) throw error;
     currentPlanKey = (data?.plan || 'trial').toString();
     planChip.textContent = `Plano: ${ucfirstBR(currentPlanKey)}`;
-    kvCurrentPlan.textContent = currentPlanKey;
   }catch(e){
-    log('Erro ao ler profiles.plan:', e);
-    showBanner('Falha ao ler seu plano atual (tabela "profiles").', 'warn');
+    showBanner('Falha ao ler seu plano atual (profiles).', 'warn');
   }
 }
-function ucfirstBR(s){ const m = {basico:'Básico', intermediario:'Intermediário', premium:'Premium', trial:'Trial'}; return m[s] || (s?.charAt(0)?.toUpperCase()+s?.slice(1)); }
+function ucfirstBR(s){ const m = {trial:'Trial', basico:'Básico', intermediario:'Intermediário', premium:'Premium'}; return m[s] || s; }
 
-/* ===================== Carregar Planos ====================== */
+/* ------------ Carregar planos (billing_plans) ------------ */
 async function loadPlans(){
-  log('Carregando planos em billing_plans (active=true)…');
   const { data, error } = await sb
     .from('billing_plans')
     .select('id,name,price_cents,interval_unit,interval_length,active,plan_key')
     .eq('active', true)
     .order('price_cents', { ascending: true });
 
-  if (error) { log('Erro billing_plans:', error); showBanner('Erro ao carregar planos. Verifique RLS/colunas.', 'err'); return; }
+  if (error){ showBanner('Erro ao carregar planos. Verifique RLS/colunas.', 'err'); return; }
   if (!data || !data.length){ showBanner('Nenhum plano ativo encontrado em billing_plans.', 'warn'); return; }
 
-  // Deduplicar por plan_key e manter só os 4 esperados
   const allowed = new Set(['trial','basico','intermediario','premium']);
   plansByKey.clear();
   for (const row of data){
-    const k = (row.plan_key || '').toString().toLowerCase();
-    if (!allowed.has(k)) continue;
-    if (!plansByKey.has(k)) plansByKey.set(k, row);
+    const k = (row.plan_key || '').toLowerCase();
+    if (allowed.has(k) && !plansByKey.has(k)) plansByKey.set(k, row);
   }
-
   renderCards();
 }
 
-/* ====================== Render Cards ======================== */
+/* ------------ Render ------------ */
+function brl(c){ return (c/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) }
 function renderCards(){
   cardsEl.innerHTML = '';
   const order = ['trial','basico','intermediario','premium'];
   for (const k of order){
-    const p = plansByKey.get(k);
-    if (!p) continue;
+    const p = plansByKey.get(k); if (!p) continue;
+    const card = document.createElement('div'); card.className='card';
+    card.innerHTML = `
+      <h2>${p.name || ucfirstBR(k)}</h2>
+      <div class="price">${brl(p.price_cents || 0)}</div>
+      <div class="per">Cobrança: ${p.interval_length||1}× / ${p.interval_unit||'month'}</div>
+      <div class="muted">${k==='trial' ? 'Plano gratuito para conhecer a plataforma.' : 'Acesso aos recursos do plano selecionado. Cancelamento a qualquer momento.'}</div>
+    `;
+    const actions = document.createElement('div'); actions.className='row-actions';
 
-    const card = document.createElement('div');
-    card.className = 'card';
-
-    const h2 = document.createElement('h2');
-    h2.textContent = p.name || ucfirstBR(k);
-    card.appendChild(h2);
-
-    const price = document.createElement('div');
-    price.className = 'price';
-    price.textContent = brlFromCents(p.price_cents || 0);
-    card.appendChild(price);
-
-    const per = document.createElement('div');
-    per.className = 'per';
-    per.textContent = `Cobrança: ${p.interval_length||1}× / ${p.interval_unit||'month'}`;
-    card.appendChild(per);
-
-    const features = document.createElement('div');
-    features.className = 'muted';
-    features.innerHTML = (k==='trial')
-      ? 'Plano gratuito para conhecer a plataforma.'
-      : 'Acesso aos recursos do plano selecionado. Cancelamento a qualquer momento.';
-    card.appendChild(features);
-
-    const actions = document.createElement('div');
-    actions.className = 'row-actions';
-
-    // Cancelar (aparece nos pagos quando é o plano atual)
     if (k !== 'trial' && k === currentPlanKey){
-      const btnCancel = document.createElement('button');
-      btnCancel.className = 'btn warn';
-      btnCancel.textContent = 'Cancelar assinatura (Trial)';
-      btnCancel.addEventListener('click', () => cancelSubscription());
-      actions.appendChild(btnCancel);
+      const cancel = document.createElement('button');
+      cancel.className = 'btn warn';
+      cancel.textContent = 'Cancelar assinatura (Trial)';
+      cancel.onclick = () => downgradeToTrial();
+      actions.appendChild(cancel);
     }
 
-    // Chamar checkout (desativado se já é o plano atual)
     const btn = document.createElement('button');
     btn.className = (k===currentPlanKey) ? 'btn ghost' : 'btn';
     btn.disabled = (k===currentPlanKey);
     btn.textContent = (k===currentPlanKey) ? 'Plano atual' : 'Assinar / Migrar';
-    btn.addEventListener('click', () => startCheckout(p));
+    btn.onclick = () => goToPayment(k);
     actions.appendChild(btn);
 
     card.appendChild(actions);
@@ -241,218 +156,40 @@ function renderCards(){
   }
 }
 
-/* =================== Iniciar Checkout ======================= */
-async function getCustomerData(){
-  // Lê dados do cliente para enviar à função
-  const { data, error } = await sb
-    .from('profiles')
-    .select('first_name,last_name,cpf_cnpj,cpf_cnpj_type,razao_social,phone,email')
-    .eq('id', sessionUser.id).maybeSingle();
-  if (error) throw error;
-  return {
-    first_name: data?.first_name || '',
-    last_name : data?.last_name  || '',
-    cpf_cnpj  : data?.cpf_cnpj   || '',
-    cpf_cnpj_type: data?.cpf_cnpj_type || '',
-    razao_social : data?.razao_social || '',
-    phone        : data?.phone || '',
-    email        : sessionUser.email || ''
-  };
-}
-function ensureCustomerReady(cust){
-  // Regras mínimas para PagSeguro: nome e documento
-  if (!cust.first_name || !cust.last_name) return 'Informe seu nome e sobrenome em "Meus dados".';
-  if (!cust.cpf_cnpj) return 'Informe CPF ou CNPJ em "Meus dados".';
-  if (!cust.cpf_cnpj_type) return 'Selecione o tipo (CPF/CNPJ) em "Meus dados".';
-  if (cust.cpf_cnpj_type === 'cnpj' && !cust.razao_social) return 'Para CNPJ, informe a Razão social em "Meus dados".';
-  if (!cust.phone) return 'Informe um telefone com DDD em "Meus dados".';
-  return null;
+/* ------------ Fluxos ------------ */
+function goToPayment(planKey){
+  // Guarda o plano escolhido (usamos na volta)
+  localStorage.setItem('mm_selected_plan', planKey);
+  // Abre página de pagamento (sem secrets)
+  const url = new URL('pagamento.html', location.origin);
+  url.searchParams.set('plan', planKey);
+  window.location.href = url.toString();
 }
 
-async function startCheckout(planRow){
-  hideBanner();
-  const plan_id = planRow.id;
-  log('> startCheckout para', planRow);
-
-  try{
-    const customer = await getCustomerData();
-    const missing = ensureCustomerReady(customer);
-    if (missing){ showBanner(missing, 'warn'); log('Dados incompletos:', customer); return; }
-
-    // Guarda tentativa para pós-retorno
-    localStorage.setItem(lastCheckoutKey, JSON.stringify({ when: Date.now(), plan_id }));
-
-    // Chama a Edge Function
-    log('Chamando create-checkout…');
-    const { data, error } = await sb.functions.invoke('create-checkout', {
-      body: { plan_id, user_id: sessionUser.id, customer }
-    });
-
-    if (error) {
-      log('create-checkout ERRO:', error);
-      showBanner('Falha ao criar checkout. Veja os logs abaixo.', 'err');
-      return;
-    }
-    log('create-checkout OK. Resposta:', data);
-
-    const payUrl = data?.pay_url || data?.link || data?.url;
-    if (!payUrl){
-      showBanner('A função respondeu sem pay_url/link. Confira os logs.', 'err');
-      return;
-    }
-
-    // Redireciona para o pagamento
-    window.location.href = payUrl;
-  }catch(e){
-    log('Exceção em startCheckout:', e);
-    showBanner('Erro inesperado ao iniciar o pagamento.', 'err');
-  }
-}
-
-/* ====================== Pós-retorno ========================= */
-// Tenta aplicar plano com base na checkout_sessions paga mais recente do usuário
-async function tryApplyPaidPlan(){
-  log('Sincronizando… lendo checkout_sessions do usuário');
-  // Busca a última sessão do usuário
-  const { data, error } = await sb
-    .from('checkout_sessions')
-    .select('id,plan_id,status,external_id,created_at')
-    .eq('user_id', sessionUser.id)
-    .order('created_at', { descending: true })
-    .limit(1);
-
-  if (error){ log('checkout_sessions erro:', error); showBanner('Erro ao ler checkout_sessions.', 'err'); return false; }
-  if (!data || !data.length){ log('Nenhuma checkout_session encontrada.'); showBanner('Nenhuma compra encontrada para sincronizar.', 'warn'); return false; }
-
-  const sess = data[0];
-  log('Última sessão:', sess);
-
-  const paidStatuses = new Set(['paid','authorized','settled','approved','succeeded','success']);
-  if (!paidStatuses.has((sess.status||'').toLowerCase())){
-    showBanner(`Aguardando confirmação do pagamento (status atual: ${sess.status}).`, 'warn');
-    return false;
-  }
-
-  // Pega o plano e aplica em profiles
-  const planRow = plansByKey.get(await planKeyFromId(sess.plan_id));
-  if (!planRow){
-    log('Plano não encontrado em cache; lendo diretamente…');
-    const { data: one, error: e2 } = await sb.from('billing_plans')
-      .select('id, name, price_cents, plan_key').eq('id', sess.plan_id).maybeSingle();
-    if (e2){ log('Erro lendo billing_plans:', e2); showBanner('Erro ao ler o plano para aplicar.', 'err'); return false; }
-    planRow = one;
-  }
-
-  const newKey = (planRow.plan_key||'').toString();
-  log('Aplicando plano no profiles:', { plan: newKey, plan_id: planRow.id });
-
-  const { error: upErr } = await sb
-    .from('profiles')
-    .update({
-      plan: newKey,
-      plan_id: planRow.id,
-      plan_name: planRow.name,
-      plan_price_cents: planRow.price_cents,
-      plan_status: 'active',
-      subscription_status: 'active',
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', sessionUser.id);
-
-  if (upErr){ log('Falha ao atualizar profiles:', upErr); showBanner('Falha ao atualizar o plano no seu cadastro.', 'err'); return false; }
-
-  currentPlanKey = newKey;
-  planChip.textContent = `Plano: ${ucfirstBR(currentPlanKey)}`;
-  showBanner('Assinatura confirmada e aplicada ao seu perfil. ✅', 'ok');
-  renderCards();
-  return true;
-}
-
-// Mapeia id -> plan_key
-async function planKeyFromId(id){
-  for (const [k,v] of plansByKey.entries()) if (v.id === id) return k;
-  const { data, error } = await sb.from('billing_plans').select('plan_key').eq('id', id).maybeSingle();
-  if (error) { log('Erro lendo plan_key por id:', error); return 'trial'; }
-  return (data?.plan_key || 'trial').toString();
-}
-
-// Dispara sincronização manual (ou pós-retorno)
-async function syncNow(){
-  hideBanner();
-  log('--- SINCRONIZAR (manual) ---');
-
-  // Tentativa opcional: chamar função 'sync-subscription', se existir
-  try{
-    log('Tentando sb.functions.invoke("sync-subscription")…');
-    const { data, error } = await sb.functions.invoke('sync-subscription', { body: { user_id: sessionUser.id }});
-    if (error) log('sync-subscription retornou erro (pode não existir):', error);
-    if (data) log('sync-subscription retorno:', data);
-  }catch(e){
-    log('sync-subscription exceção (ignorada se função não existe):', e);
-  }
-
-  // Fallback: checa checkout_sessions e aplica
-  await tryApplyPaidPlan();
-}
-
-/* ============== Cancelar Assinatura (downgrade) ============= */
-async function cancelSubscription(){
+async function downgradeToTrial(){
   if (!confirm('Confirmar cancelamento e voltar ao plano Trial?')) return;
-  hideBanner();
-  log('Chamando cancel-subscription…');
-
-  try{
-    const { data, error } = await sb.functions.invoke('cancel-subscription', {
-      body: { user_id: sessionUser.id }
-    });
-    if (error){ log('cancel-subscription ERRO:', error); showBanner('Falha ao cancelar assinatura. Veja os logs.', 'err'); return; }
-    log('cancel-subscription OK:', data);
-
-    // Backup do downgrade direto no profiles
-    const { error: upErr } = await sb
-      .from('profiles')
-      .update({ plan: 'trial', plan_status: 'canceled', subscription_status: 'canceled', updated_at: new Date().toISOString() })
-      .eq('id', sessionUser.id);
-    if (upErr){ log('Falha ao marcar Trial no profiles:', upErr); }
-
-    currentPlanKey = 'trial';
-    planChip.textContent = 'Plano: Trial';
-    showBanner('Assinatura cancelada. Você está em Trial.', 'ok');
-    renderCards();
-  }catch(e){
-    log('Exceção em cancelSubscription:', e);
-    showBanner('Erro inesperado ao cancelar.', 'err');
-  }
+  await sb.from('profiles').update({
+    plan: 'trial',
+    plan_status: 'canceled',
+    subscription_status: 'canceled',
+    updated_at: new Date().toISOString()
+  }).eq('id', sessionUser.id);
+  currentPlanKey = 'trial';
+  planChip.textContent = 'Plano: Trial';
+  renderCards();
 }
 
-/* ====================== UI: botões diag ===================== */
-btnCopy.addEventListener('click', async ()=>{
-  try{ await navigator.clipboard.writeText(logEl.textContent); showBanner('Logs copiados para a área de transferência.', 'ok'); }catch{}
-});
-btnClear.addEventListener('click', ()=>{ logEl.textContent=''; });
-btnSync.addEventListener('click', ()=>{ syncNow(); });
-
+/* ------------ Sair ------------ */
 btnSair.addEventListener('click', async ()=>{
   try{ await sb.auth.signOut(); }catch{}
   window.location.href = CFG.SITE_URL || 'index.html';
 });
 
-/* ========================= INIT ============================= */
+/* ------------ Init ------------ */
 (async function init(){
   const session = await ensureSession(); if (!session) return;
-
   await loadCurrentPlan();
   await loadPlans();
-
-  // Se voltou do provedor, tenta sincronizar automaticamente
-  const sp = new URLSearchParams(location.search);
-  const hintedReturn = sp.has('success') || sp.has('paid') || sp.get('status')==='success';
-  const last = JSON.parse(localStorage.getItem(lastCheckoutKey) || 'null');
-  if (hintedReturn || last){
-    log('Pós-retorno detectado. Iniciando sincronização automática…');
-    await syncNow();
-    localStorage.removeItem(lastCheckoutKey);
-  }
 })();
 </script>
 </body>
