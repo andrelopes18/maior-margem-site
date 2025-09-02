@@ -1,109 +1,60 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Retorno do Pagamento</title>
 <style>
-  :root { color-scheme: dark; }
-  *{ box-sizing: border-box }
-  body{ background:#121212; color:#fff; font-family: Arial, sans-serif; margin:0; padding:24px }
-  .container{ max-width:720px; margin:0 auto }
-  .card{ background:#0f0f0f; border:1px solid #2a2a2a; border-radius:16px; padding:20px; display:flex; flex-direction:column; gap:14px }
-  .btn{ display:inline-flex; align-items:center; gap:8px; background:#00b140; color:#fff; border:none; padding:12px 16px; border-radius:10px; cursor:pointer; font-size:16px }
-  .btn:hover{ background:#009b38 }
-  .muted{ color:#9aa0a6; font-size:13px }
-  .ok{ color:#b7fbb7 }
-  .err{ color:#ff9a9a }
+  :root{color-scheme:dark}body{background:#121212;color:#fff;font-family:Arial,sans-serif;margin:0;padding:24px}
+  .container{max-width:760px;margin:0 auto}.card{background:#0f0f0f;border:1px solid #2a2a2a;border-radius:14px;padding:18px}
+  .btn{display:inline-flex;align-items:center;gap:8px;background:#00b140;border:none;color:#fff;padding:10px 14px;border-radius:10px;cursor:pointer}
+  .btn:hover{background:#009b38}.muted{color:#9aa0a6}
 </style>
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="./config.js"></script>
+<script src="/config.js"></script>
 </head>
 <body>
 <main class="container">
-  <h1>Confirmação do Pagamento</h1>
+  <h1>Confirmação</h1>
   <div class="card">
     <div id="status">Verificando…</div>
-    <div id="detail" class="muted"></div>
-    <div style="display:flex; gap:8px; flex-wrap:wrap">
-      <a href="planos.html" class="btn">← Ir para Planos</a>
-      <a href="dashboard.html" class="btn" style="background:#333">Dashboard</a>
+    <div id="det" class="muted"></div>
+    <div style="display:flex;gap:10px;margin-top:12px">
+      <a class="btn" href="dashboard.html">Dashboard</a>
+      <a class="btn" style="background:#333" href="planos.html">Planos</a>
     </div>
   </div>
 </main>
 
 <script>
-const CFG = window.CONFIG || {};
-const sb  = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
-  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
-});
-
-const statusEl = document.getElementById('status');
-const detailEl = document.getElementById('detail');
-
-let sessionUser = null;
-let statusParam = (new URLSearchParams(location.search).get('status') || '').toLowerCase();
-
-function ucfirstBR(s){ const m = {trial:'Trial', basico:'Básico', intermediario:'Intermediário', premium:'Premium'}; return m[s] || s; }
-function brl(c){ return (c/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) }
-
-async function ensureSession(){
-  const { data:{ session } } = await sb.auth.getSession();
-  if (!session){ statusEl.textContent = 'Você não está logado.'; statusEl.className='err'; return null; }
-  sessionUser = session.user; return session;
-}
-
-async function readPlanByKey(key){
-  const { data, error } = await sb
-    .from('billing_plans')
-    .select('id,name,price_cents,plan_key')
-    .eq('plan_key', key).maybeSingle();
-  if (error || !data) return null;
-  return data;
-}
-
-async function applyPlan(planKey){
-  const planRow = await readPlanByKey(planKey);
-  if (!planRow){ statusEl.textContent = 'Plano não encontrado.'; statusEl.className='err'; return false; }
-  const { error } = await sb.from('profiles').update({
-    plan: planRow.plan_key,
-    plan_id: planRow.id,
-    plan_name: planRow.name,
-    plan_price_cents: planRow.price_cents,
-    plan_status: 'active',
-    subscription_status: 'active',
-    updated_at: new Date().toISOString()
-  }).eq('id', sessionUser.id);
-  if (error){ statusEl.textContent = 'Falha ao aplicar o plano no perfil.'; statusEl.className='err'; detailEl.textContent = error.message; return false; }
-  statusEl.innerHTML = `✅ Plano aplicado: <span class="ok">${ucfirstBR(planRow.plan_key)}</span>`;
-  detailEl.textContent = `Valor: ${brl(planRow.price_cents||0)} • Conta: ${sessionUser.email}`;
-  return true;
-}
+const CFG=window.CONFIG||{};
+const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+const qs=new URLSearchParams(location.search);
+const statusEl=document.getElementById('status');const det=document.getElementById('det');
 
 (async function init(){
-  const s = await ensureSession(); if (!s) return;
+  const {data:{session}}=await sb.auth.getSession(); if(!session){statusEl.textContent='Faça login novamente.';return}
+  // parâmetros que o MP manda na volta (variáveis conforme fluxo)
+  const payment_id = qs.get('payment_id') || qs.get('paymentId') || '';
+  const preference_id = qs.get('preference_id') || '';
+  const payment_status = qs.get('status') || qs.get('collection_status') || '';
 
-  // IMPORTANTE (homologação): usamos o plano salvo localmente na hora do clique
-  const planKey = localStorage.getItem('mm_selected_plan');
-  const paid    = ['success','approved','succeeded','ok'].includes(statusParam);
+  try{
+    const body={ payment_id, preference_id };
+    const { data, error } = await sb.functions.invoke('mp-verify',{ body });
+    if(error){ statusEl.textContent='Não foi possível confirmar com o provedor.'; det.textContent=error.message||JSON.stringify(error); return; }
 
-  if (!paid){
-    statusEl.textContent = 'Pagamento não confirmado (status diferente de sucesso).';
-    statusEl.className = 'err';
-    detailEl.textContent = 'Se você concluiu o pagamento, aguarde alguns instantes e tente novamente.';
-    return;
+    statusEl.textContent = (data?.final==='approved') ? '✅ Pagamento aprovado' :
+                           (data?.final==='authorized' || data?.final==='pending') ? '⏳ Pagamento em análise/pendente' :
+                           '❌ Pagamento não aprovado';
+    det.textContent = `status provedor: ${data?.status||payment_status||'desconhecido'} • preference: ${data?.preference_id||preference_id}`;
+
+    // se aprovado, atualiza o chip de plano nas páginas seguintes
+    if (data?.final==='approved'){ setTimeout(()=>location.href='planos.html', 2500); }
+  }catch(e){
+    statusEl.textContent='Erro inesperado no retorno.'; det.textContent=String(e);
+  }finally{
+    localStorage.removeItem('mm_last_preference');
   }
-  if (!planKey){
-    statusEl.textContent = 'Não foi possível identificar o plano selecionado.';
-    statusEl.className = 'err';
-    detailEl.textContent = 'Volte para a página de planos e tente novamente.';
-    return;
-  }
-  await applyPlan(planKey);
-
-  // Limpeza (opcional)
-  localStorage.removeItem('mm_selected_plan');
-  localStorage.removeItem('mm_selected_at');
 })();
 </script>
 </body>

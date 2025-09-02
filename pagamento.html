@@ -1,106 +1,60 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Pagamento</title>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pagar</title>
 <style>
-  :root { color-scheme: dark; }
-  *{ box-sizing: border-box }
-  body{ background:#121212; color:#fff; font-family: Arial, sans-serif; margin:0; padding:24px }
-  a{ color:#00b140 }
-  .container{ max-width:720px; margin:0 auto }
-  .card{ background:#0f0f0f; border:1px solid #2a2a2a; border-radius:16px; padding:20px; display:flex; flex-direction:column; gap:14px }
-  .btn{ display:inline-flex; align-items:center; gap:8px; background:#00b140; color:#fff; border:none; padding:12px 16px; border-radius:10px; cursor:pointer; font-size:16px }
-  .btn:hover{ background:#009b38 }
-  .muted{ color:#9aa0a6; font-size:13px }
-  .banner{ border:1px solid #2a2a2a; border-radius:10px; padding:10px 12px; margin-bottom:16px; background:#111; display:none }
-  .banner.ok{ border-color:#214d21; background:#0e1a0e; color:#b7fbb7; display:block }
-  .banner.err{ border-color:#5c1e1e; background:#190d0d; color:#ff9a9a; display:block }
+  :root{color-scheme:dark}body{background:#121212;color:#fff;font-family:Arial,sans-serif;margin:0;padding:24px}
+  .container{max-width:760px;margin:0 auto}.card{background:#0f0f0f;border:1px solid #2a2a2a;border-radius:14px;padding:18px}
+  .btn{display:inline-flex;align-items:center;gap:8px;background:#00b140;border:none;color:#fff;padding:10px 14px;border-radius:10px;cursor:pointer}
+  .btn:hover{background:#009b38}.muted{color:#9aa0a6}
 </style>
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="./config.js"></script>
+<script src="/config.js"></script>
 </head>
 <body>
 <main class="container">
   <h1>Pagamento</h1>
-  <div id="banner" class="banner"></div>
   <div class="card">
-    <div id="resume">Carregando…</div>
-    <div class="muted">Você será redirecionado ao Mercado Pago (link de pagamento). Na volta, confirmaremos seu plano nesta conta.</div>
-    <div style="display:flex; gap:8px; flex-wrap:wrap">
-      <button id="btnPay" class="btn">Pagar com Mercado Pago</button>
-      <a href="planos.html" class="btn" style="background:#333">← Voltar</a>
+    <div id="resume" class="muted">Carregando…</div>
+    <div style="display:flex;gap:10px;margin-top:12px">
+      <button id="btnPagar" class="btn">Pagar com Mercado Pago</button>
+      <a class="btn" style="background:#333" href="planos.html">← Voltar</a>
     </div>
+    <pre id="log" style="white-space:pre-wrap;font-size:12px;color:#bbb;margin-top:12px"></pre>
   </div>
 </main>
 
 <script>
-const CFG = window.CONFIG || {};
-const sb  = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
-  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
-});
-const bannerEl = document.getElementById('banner');
-const btnPay   = document.getElementById('btnPay');
-const resumeEl = document.getElementById('resume');
+const CFG=window.CONFIG||{};
+const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+const planKey=new URLSearchParams(location.search).get('plan')||'basico';
+const logEl=document.getElementById('log'); const resumeEl=document.getElementById('resume');
 
-let sessionUser = null;
-let planKey = new URLSearchParams(location.search).get('plan') || localStorage.getItem('mm_selected_plan') || 'basico';
-let planRow = null;
+function log(...a){logEl.textContent+=a.map(x=>typeof x==='object'?JSON.stringify(x,null,2):String(x)).join(' ')+"\n"}
 
-function showBanner(msg, type='ok'){
-  bannerEl.textContent = msg;
-  bannerEl.className = 'banner ' + (type==='err'?'err':'ok');
-  bannerEl.style.display='block';
-}
-
-async function ensureSession(){
-  const { data:{ session } } = await sb.auth.getSession();
-  if (!session){ window.location.href = CFG.SITE_URL || 'index.html'; return null; }
-  sessionUser = session.user;
-  return session;
-}
-
-function ucfirstBR(s){ const m = {trial:'Trial', basico:'Básico', intermediario:'Intermediário', premium:'Premium'}; return m[s] || s; }
-function brl(c){ return (c/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) }
-
-async function loadPlan(){
-  const { data, error } = await sb
-    .from('billing_plans')
-    .select('id,name,price_cents,plan_key,interval_unit,interval_length')
-    .eq('plan_key', planKey).maybeSingle();
-  if (error || !data){ showBanner('Plano não encontrado. Volte e tente novamente.', 'err'); return false; }
-  planRow = data;
-  resumeEl.innerHTML = `
-    <div><b>Plano:</b> ${data.name || ucfirstBR(planKey)}</div>
-    <div><b>Valor:</b> ${brl(data.price_cents||0)} (${data.interval_length||1}× / ${data.interval_unit||'month'})</div>
-    <div class="muted">Conta: ${sessionUser.email}</div>
-  `;
-  return true;
-}
-
-btnPay.addEventListener('click', ()=>{
-  const link = (CFG.MP_LINKS||{})[planKey];
-  if (!link){ showBanner('Link de pagamento não configurado para este plano (config.js).', 'err'); return; }
-
-  // Guardamos dados para uso no retorno (apenas homologação)
-  localStorage.setItem('mm_selected_plan', planKey);
-  localStorage.setItem('mm_selected_at', String(Date.now()));
-
-  // Opcional: adicionar rastreio via query string
-  const u = new URL(link);
-  u.searchParams.set('src','site');
-  u.searchParams.set('uid', sessionUser.id);
-  u.searchParams.set('plan', planKey);
-
-  // Redireciona
-  window.location.href = u.toString();
-});
-
+let plan = null, user=null;
 (async function init(){
-  const s = await ensureSession(); if (!s) return;
-  if (!(await loadPlan())) return;
+  const {data:{session}}=await sb.auth.getSession(); if(!session){location.href=CFG.SITE_URL;return}
+  user=session.user;
+  const r=await sb.from('billing_plans').select('id,name,price_cents,plan_key').eq('plan_key',planKey).maybeSingle();
+  plan=r.data; if(!plan){resumeEl.textContent='Plano não encontrado.';return}
+  resumeEl.innerHTML=`Plano: <b>${plan.name}</b> • Valor: ${(plan.price_cents/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}<br>Conta: ${user.email}`;
 })();
+
+document.getElementById('btnPagar').onclick=async()=>{
+  try{
+    const body={ plan_key: planKey, user_id: (await sb.auth.getUser()).data.user.id, return_url: CFG.RETURN_URL };
+    const { data, error } = await sb.functions.invoke('mp-create-preference',{ body });
+    if(error){ log('Erro create-preference:', error); alert('Falha ao iniciar pagamento'); return; }
+    log('Preference criada:', data);
+    const pay=data.init_point || data.sandbox_init_point || data.pay_url;
+    if(!pay){ alert('Sem URL de pagamento na resposta.'); return; }
+    // guarda para a volta
+    localStorage.setItem('mm_last_preference', JSON.stringify({preference_id:data.id, plan_key:planKey, when:Date.now()}));
+    location.href=pay;
+  }catch(e){ log('Exceção:', e); alert('Erro inesperado');}
+};
 </script>
 </body>
 </html>

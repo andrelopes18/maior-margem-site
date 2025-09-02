@@ -1,196 +1,86 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Planos</title>
 <style>
-  :root { color-scheme: dark; }
-  *{ box-sizing: border-box }
-  body{ background:#121212; color:#fff; font-family: Arial, sans-serif; margin:0; padding:24px }
-  a{ color:#00b140 }
-
-  header{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:18px }
-  h1{ color:#00b140; margin:0 }
-  .chip{ font-size:12px; background:#1e1e1e; border:1px solid #333; padding:6px 10px; border-radius:999px }
-  .chip.plan{ color:#bfffc1; border-color:#2f5a2f; background:#132313 }
-  .btn{ display:inline-flex; align-items:center; gap:8px; background:#00b140; color:#fff; border:none; padding:10px 14px; border-radius:10px; cursor:pointer }
-  .btn:hover{ background:#009b38 }
-  .btn.ghost{ background:transparent; border:1px solid #2a2a2a; color:#ddd }
-  .btn.ghost:hover{ background:#1a1a1a }
-  .btn.warn{ background:#6b2a2a }
-  .btn.warn:hover{ background:#7a2f2f }
-
-  .container{ max-width:980px; margin:0 auto }
-  .grid{ display:grid; grid-template-columns: repeat(4, 1fr); gap:16px }
-  @media (max-width: 980px){ .grid{ grid-template-columns: repeat(2, 1fr) } }
-  @media (max-width: 560px){ .grid{ grid-template-columns: 1fr } }
-
-  .card{ background:#0f0f0f; border:1px solid #2a2a2a; border-radius:16px; padding:16px; display:flex; flex-direction:column; gap:12px }
-  .price{ font-size:28px; font-weight:700 }
-  .per{ font-size:12px; color:#9aa0a6 }
-  .muted{ color:#9aa0a6; font-size:13px }
-
-  .banner{ border:1px solid #2a2a2a; border-radius:10px; padding:10px 12px; margin-bottom:16px; background:#111; display:none }
-  .banner.ok{ border-color:#214d21; background:#0e1a0e; color:#b7fbb7; display:block }
-  .banner.err{ border-color:#5c1e1e; background:#190d0d; color:#ff9a9a; display:block }
-  .banner.warn{ border-color:#5c3f00; background:#1b1300; color:#ffc966; display:block }
-
-  .row-actions{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:flex-end; margin: 6px 0 2px }
+  :root{color-scheme:dark}body{background:#121212;color:#fff;font-family:Arial,sans-serif;margin:0;padding:24px}
+  a{color:#00b140}header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+  h1{margin:0;color:#00b140}.container{max-width:980px;margin:0 auto}
+  .grid{display:grid;gap:16px;grid-template-columns:repeat(4,1fr)}@media(max-width:980px){.grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:560px){.grid{grid-template-columns:1fr}}
+  .card{background:#0f0f0f;border:1px solid #2a2a2a;border-radius:14px;padding:16px}
+  .btn{display:inline-flex;align-items:center;gap:8px;background:#00b140;border:none;color:#fff;padding:10px 14px;border-radius:10px;cursor:pointer}
+  .btn:hover{background:#009b38}.btn.ghost{background:transparent;border:1px solid #2a2a2a;color:#ddd}
+  .chip{font-size:12px;background:#1e1e1e;border:1px solid #333;padding:6px 10px;border-radius:999px}.chip.plan{color:#bfffc1;border-color:#2f5a2f;background:#132313}
+  .muted{color:#9aa0a6;font-size:13px}.price{font-size:26px;font-weight:700}
 </style>
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="./config.js"></script>
+<script src="/config.js"></script>
 </head>
 <body>
 <header class="container">
   <h1>Planos</h1>
-  <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap">
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
     <span id="planChip" class="chip plan">Plano: —</span>
-    <a href="dashboard.html" class="btn ghost">← Voltar</a>
-    <a href="meusdados.html" class="btn ghost">Meus dados</a>
+    <a class="btn ghost" href="dashboard.html">← Voltar</a>
+    <a class="btn ghost" href="meusdados.html">Meus dados</a>
     <button id="btnSair" class="btn">Sair</button>
   </div>
 </header>
-
 <main class="container">
-  <div id="banner" class="banner"></div>
-  <section id="cards" class="grid" aria-live="polite"></section>
+  <section id="cards" class="grid"></section>
 </main>
 
 <script>
-/* ========== Setup Supabase ========== */
-const CFG = window.CONFIG || {};
-const sb  = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
-  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
-});
-
-const bannerEl = document.getElementById('banner');
-const cardsEl  = document.getElementById('cards');
+const CFG = window.CONFIG||{};
+const sb  = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 const planChip = document.getElementById('planChip');
-const btnSair  = document.getElementById('btnSair');
+const cardsEl  = document.getElementById('cards');
 
-let sessionUser = null;
-let currentPlanKey = 'trial';
-let plansByKey = new Map();
+document.getElementById('btnSair').onclick = async()=>{await sb.auth.signOut();location.href=CFG.SITE_URL||'index.html'};
 
-function showBanner(msg, type='ok'){
-  bannerEl.textContent = msg;
-  bannerEl.className = 'banner ' + (type==='err'?'err': (type==='warn'?'warn':'ok'));
-  bannerEl.style.display='block';
-}
+function money(c){return (c/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
+function label(k){return (CFG.PLAN_LABELS||{})[k]||k.charAt(0).toUpperCase()+k.slice(1)}
 
-/* ------------ Sessão ------------ */
-async function ensureSession(){
-  const { data: { session } } = await sb.auth.getSession();
-  if (!session){ window.location.href = CFG.SITE_URL || 'index.html'; return null; }
-  sessionUser = session.user;
-  return session;
-}
-
-/* ------------ Plano atual ------------ */
-async function loadCurrentPlan(){
-  try{
-    const { data, error } = await sb.from('profiles').select('plan').eq('id', sessionUser.id).maybeSingle();
-    if (error) throw error;
-    currentPlanKey = (data?.plan || 'trial').toString();
-    planChip.textContent = `Plano: ${ucfirstBR(currentPlanKey)}`;
-  }catch(e){
-    showBanner('Falha ao ler seu plano atual (profiles).', 'warn');
-  }
-}
-function ucfirstBR(s){ const m = {trial:'Trial', basico:'Básico', intermediario:'Intermediário', premium:'Premium'}; return m[s] || s; }
-
-/* ------------ Carregar planos (billing_plans) ------------ */
-async function loadPlans(){
-  const { data, error } = await sb
-    .from('billing_plans')
-    .select('id,name,price_cents,interval_unit,interval_length,active,plan_key')
-    .eq('active', true)
-    .order('price_cents', { ascending: true });
-
-  if (error){ showBanner('Erro ao carregar planos. Verifique RLS/colunas.', 'err'); return; }
-  if (!data || !data.length){ showBanner('Nenhum plano ativo encontrado em billing_plans.', 'warn'); return; }
-
-  const allowed = new Set(['trial','basico','intermediario','premium']);
-  plansByKey.clear();
-  for (const row of data){
-    const k = (row.plan_key || '').toLowerCase();
-    if (allowed.has(k) && !plansByKey.has(k)) plansByKey.set(k, row);
-  }
-  renderCards();
-}
-
-/* ------------ Render ------------ */
-function brl(c){ return (c/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) }
-function renderCards(){
-  cardsEl.innerHTML = '';
-  const order = ['trial','basico','intermediario','premium'];
-  for (const k of order){
-    const p = plansByKey.get(k); if (!p) continue;
-    const card = document.createElement('div'); card.className='card';
-    card.innerHTML = `
-      <h2>${p.name || ucfirstBR(k)}</h2>
-      <div class="price">${brl(p.price_cents || 0)}</div>
-      <div class="per">Cobrança: ${p.interval_length||1}× / ${p.interval_unit||'month'}</div>
-      <div class="muted">${k==='trial' ? 'Plano gratuito para conhecer a plataforma.' : 'Acesso aos recursos do plano selecionado. Cancelamento a qualquer momento.'}</div>
-    `;
-    const actions = document.createElement('div'); actions.className='row-actions';
-
-    if (k !== 'trial' && k === currentPlanKey){
-      const cancel = document.createElement('button');
-      cancel.className = 'btn warn';
-      cancel.textContent = 'Cancelar assinatura (Trial)';
-      cancel.onclick = () => downgradeToTrial();
-      actions.appendChild(cancel);
-    }
-
-    const btn = document.createElement('button');
-    btn.className = (k===currentPlanKey) ? 'btn ghost' : 'btn';
-    btn.disabled = (k===currentPlanKey);
-    btn.textContent = (k===currentPlanKey) ? 'Plano atual' : 'Assinar / Migrar';
-    btn.onclick = () => goToPayment(k);
-    actions.appendChild(btn);
-
-    card.appendChild(actions);
-    cardsEl.appendChild(card);
-  }
-}
-
-/* ------------ Fluxos ------------ */
-function goToPayment(planKey){
-  // Guarda o plano escolhido (usamos na volta)
-  localStorage.setItem('mm_selected_plan', planKey);
-  // Abre página de pagamento (sem secrets)
-  const url = new URL('pagamento.html', location.origin);
-  url.searchParams.set('plan', planKey);
-  window.location.href = url.toString();
-}
-
-async function downgradeToTrial(){
-  if (!confirm('Confirmar cancelamento e voltar ao plano Trial?')) return;
-  await sb.from('profiles').update({
-    plan: 'trial',
-    plan_status: 'canceled',
-    subscription_status: 'canceled',
-    updated_at: new Date().toISOString()
-  }).eq('id', sessionUser.id);
-  currentPlanKey = 'trial';
-  planChip.textContent = 'Plano: Trial';
-  renderCards();
-}
-
-/* ------------ Sair ------------ */
-btnSair.addEventListener('click', async ()=>{
-  try{ await sb.auth.signOut(); }catch{}
-  window.location.href = CFG.SITE_URL || 'index.html';
-});
-
-/* ------------ Init ------------ */
+let user=null, currentPlan='trial', plans=[];
 (async function init(){
-  const session = await ensureSession(); if (!session) return;
-  await loadCurrentPlan();
-  await loadPlans();
+  const {data:{session}}=await sb.auth.getSession(); if(!session){location.href=CFG.SITE_URL||'index.html';return}
+  user=session.user;
+  const prof=await sb.from('profiles').select('plan').eq('id',user.id).maybeSingle();
+  currentPlan=(prof.data?.plan||'trial'); planChip.textContent=`Plano: ${label(currentPlan)}`;
+
+  const {data}=await sb.from('billing_plans')
+    .select('id,name,plan_key,price_cents,interval_unit,interval_length,active')
+    .eq('active',true).order('price_cents',{ascending:true});
+  plans=(data||[]).filter(p=>['trial','basico','intermediario','premium'].includes((p.plan_key||'').toLowerCase()));
+  render();
 })();
+
+function go(plan_key){
+  const u=new URL('pagamento.html', location.origin);
+  u.searchParams.set('plan', plan_key);
+  location.href=u.toString();
+}
+
+function render(){
+  cardsEl.innerHTML='';
+  const order=['trial','basico','intermediario','premium'];
+  for(const k of order){
+    const p=plans.find(x=>x.plan_key===k); if(!p) continue;
+    const el=document.createElement('div');el.className='card';
+    el.innerHTML=`
+      <h3>${p.name||label(k)}</h3>
+      <div class="price">${money(p.price_cents||0)}</div>
+      <div class="muted">Cobrança: ${p.interval_length||1}× / ${p.interval_unit||'month'}</div>
+      <div class="muted">${k==='trial'?'Plano gratuito para conhecer a plataforma.':'Acesso aos recursos do plano selecionado.'}</div>
+    `;
+    const btn=document.createElement('button'); btn.className=(k===currentPlan)?'btn ghost':'btn';
+    btn.textContent=(k===currentPlan)?'Plano atual':'Assinar / Migrar';
+    btn.disabled=(k===currentPlan); btn.onclick=()=>go(k);
+    el.appendChild(btn);
+    cardsEl.appendChild(el);
+  }
+}
 </script>
 </body>
 </html>
