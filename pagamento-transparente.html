@@ -4,34 +4,38 @@
   <meta charset="utf-8" />
   <title>Pagamento (Transparente • Sandbox)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- libs -->
   <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://unpkg.com/imask"></script>
+  <!-- suas configs públicas -->
   <script src="./config.js"></script>
+
   <style>
     :root{color-scheme:dark}
-    body{background:#0f1115;color:#ddd;font:14px/1.4 system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;padding:32px}
-    .container{max-width:880px;margin:0 auto}
-    .card{background:#151923;border:1px solid #22283a;border-radius:12px;padding:20px}
-    h1{font-weight:700;letter-spacing:.2px;margin:0 0 16px}
+    body{background:#0f1115;color:#e5e7eb;font:14px/1.4 system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;padding:32px}
+    .container{max-width:980px;margin:0 auto}
+    .card{background:#141823;border:1px solid #232a3d;border-radius:14px;padding:20px}
+    h1{font-weight:700;margin:0 0 16px}
     label{font-size:12px;opacity:.9}
-    input,select{width:100%;padding:10px 12px;margin:6px 0 14px;border-radius:8px;border:1px solid #2b3246;background:#0e1220;color:#e5e7eb}
-    input[disabled]{opacity:.7}
+    input,select{width:100%;padding:10px 12px;margin:6px 0 14px;border-radius:10px;border:1px solid #2a3350;background:#0e1322;color:#e5e7eb}
+    input[disabled]{opacity:.75}
     .row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-    .btn{display:inline-flex;gap:8px;align-items:center;border:1px solid #2b3246;background:#0e1322;color:#e5e7eb;padding:10px 14px;border-radius:10px;cursor:pointer}
+    .btn{display:inline-flex;gap:8px;align-items:center;border:1px solid #2a3350;background:#0f1428;color:#e5e7eb;padding:10px 14px;border-radius:10px;cursor:pointer}
     .btn.primary{background:#0d6efd;border-color:#0d6efd}
-    .btn.warning{background:#44463a}
+    .btn.warning{background:#473f22}
     .btn:disabled{opacity:.5;cursor:not-allowed}
-    .log{white-space:pre-wrap;background:#0b0f1a;border:1px solid #1b2133;padding:12px;border-radius:8px;min-height:120px;max-height:260px;overflow:auto}
-    .header{margin-bottom:12px}
     .stack{display:flex;gap:8px;flex-wrap:wrap}
-    .badge{font-size:12px;border:1px solid #2b3246;background:#0e1220;padding:4px 8px;border-radius:999px}
+    .badge{font-size:12px;border:1px solid #2a3350;background:#0e1322;padding:4px 8px;border-radius:999px}
     .ok{color:#6ef06e}
-    .err{color:#ff8080}
-    .sep{height:1px;background:#22283a;margin:18px 0}
+    .err{color:#ff8b8b}
+    .sep{height:1px;background:#232a3d;margin:18px 0}
+    .log{white-space:pre-wrap;background:#0b0f1a;border:1px solid #1b2133;padding:12px;border-radius:8px;min-height:140px;max-height:300px;overflow:auto}
     .banner{border:1px solid #2a2a2a;border-radius:10px;padding:10px 12px;margin-bottom:14px;background:#111}
     .banner.warn{border-color:#5c3f00;background:#1b1300;color:#ffc966}
     .banner.ok{border-color:#214d21;background:#0e1a0e;color:#b7fbb7}
     .banner.err{border-color:#5c1e1e;background:#190d0d;color:#ff9a9a}
+    .buttons{display:flex;flex-wrap:wrap;gap:8px}
+    small.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;opacity:.85}
   </style>
 </head>
 <body>
@@ -41,11 +45,10 @@
   <div class="card">
     <div id="banner" class="banner" style="display:none"></div>
 
-    <div class="header">
+    <div class="stack" style="justify-content:space-between;align-items:center">
       <div>
-        <b>Plano:</b> <span id="planoNome">—</span> •
-        <b>Valor:</b> R$ <span id="planoValor">—</span><br/>
-        <b>Conta:</b> <span id="contaEmail">—</span>
+        <div><b>Plano:</b> <span id="planoNome">—</span> • <b>Valor:</b> R$ <span id="planoValor">—</span></div>
+        <div><b>Conta:</b> <span id="contaEmail">—</span></div>
       </div>
       <div class="stack" id="badges"></div>
     </div>
@@ -94,13 +97,19 @@
         <label>CVV</label>
         <input id="cardCVV" value="123" disabled />
       </div>
-      <div style="display:flex;align-items:end;gap:8px;flex-wrap:wrap">
-        <button id="btnPagar" class="btn primary">Pagar (teste)</button>
-        <button id="btnUnlock" class="btn">Desbloquear campos</button>
-        <button id="btnPing" class="btn warning">Ping função (invoke)</button>
-        <button id="btnPingRaw" class="btn">Ping direto (fetch)</button>
-        <button id="btnPingAuthorized" class="btn">Ping direto (com Authorization)</button>
-        <a class="btn" href="./planos.html">↩ Voltar</a>
+      <div>
+        <div class="buttons" style="margin-top:6px">
+          <button id="btnPagar" class="btn primary">Pagar (fetch + Authorization)</button>
+          <button id="btnUnlock" class="btn">Desbloquear campos</button>
+          <!-- TESTES DE FUNÇÃO (todos juntos) -->
+          <button id="btnPingInvoke" class="btn warning">Ping (invoke)</button>
+          <button id="btnPingRaw" class="btn">Ping (fetch sem auth)</button>
+          <button id="btnPingAuth" class="btn">Ping (fetch com auth)</button>
+        </div>
+        <div style="margin-top:6px">
+          <small class="mono">EDGE_FUNCTION_NAME: <span id="fnName">—</span></small><br/>
+          <small class="mono">FUNCTIONS_URL: <span id="fnUrl">—</span></small>
+        </div>
       </div>
     </div>
 
@@ -117,114 +126,201 @@
 </div>
 
 <script>
+/* ===================== CONFIG ===================== */
 const CFG = (window.CONFIG || {});
 if (!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY || !CFG.MP_PUBLIC_KEY || !CFG.EDGE_FUNCTION_NAME) {
-  alert("Erro de configuração: verifique SUPABASE_URL, SUPABASE_ANON_KEY, MP_PUBLIC_KEY e EDGE_FUNCTION_NAME no config.js");
-  throw new Error("CONFIG ausente/incompleta");
+  alert("Config incompleta: SUPABASE_URL, SUPABASE_ANON_KEY, MP_PUBLIC_KEY e EDGE_FUNCTION_NAME são obrigatórios no config.js");
 }
 let FUNCTIONS_URL = CFG.FUNCTIONS_URL;
 if (!FUNCTIONS_URL) {
-  try { const ref = new URL(CFG.SUPABASE_URL).host.split(".")[0]; FUNCTIONS_URL = `https://${ref}.functions.supabase.co`; }
-  catch { console.warn("Não foi possível deduzir FUNCTIONS_URL; informe FUNCTIONS_URL no config.js"); }
+  try {
+    const ref = new URL(CFG.SUPABASE_URL).host.split(".")[0];
+    FUNCTIONS_URL = `https://${ref}.functions.supabase.co`;
+  } catch { /* se falhar, segue null e mostramos badge */ }
 }
 
-const $ = (sel)=>document.querySelector(sel);
+/* ===================== UI HELPERS ===================== */
+const $ = s=>document.querySelector(s);
 const logs = $("#logs");
 const resp = $("#resp");
-const bannerEl = document.getElementById('banner');
-
-function showBanner(text, type = 'ok') {
-  bannerEl.textContent = text;
-  bannerEl.className = 'banner ' + (type === 'warn' ? 'warn' : (type === 'err' ? 'err' : 'ok'));
-  bannerEl.style.display = 'block';
-  setTimeout(() => { bannerEl.style.display = 'none'; }, 4200);
+const banner = $("#banner");
+function addBadge(text, ok=false){ const b=document.createElement('span'); b.className='badge '+(ok?'ok':''); b.textContent=text; $("#badges").appendChild(b); }
+function showBanner(text, type='ok'){
+  banner.textContent = text;
+  banner.className = 'banner ' + (type==='warn'?'warn':type==='err'?'err':'ok');
+  banner.style.display = 'block';
+  setTimeout(()=> banner.style.display='none', 4200);
 }
 function log(...args){
-  const line = args.map(a=>{ try{ return typeof a==='string'? a : JSON.stringify(a,null,2);}catch(_){return String(a);} }).join(" ");
-  logs.textContent += (logs.textContent? "\n" : "") + line; logs.scrollTop = logs.scrollHeight;
+  const line = args.map(a=>{try{return typeof a==='string'?a:JSON.stringify(a,null,2);}catch{ return String(a);}}).join(" ");
+  logs.textContent += (logs.textContent? "\n":"") + line;
+  logs.scrollTop = logs.scrollHeight;
 }
-function showResp(obj){ try{ resp.textContent = JSON.stringify(obj,null,2); } catch(_){ resp.textContent = String(obj); } }
-function addBadge(text, ok=false){ const b = document.createElement('span'); b.className='badge '+(ok?'ok':''); b.textContent=text; $("#badges").appendChild(b); }
+function showResp(obj){ try{ resp.textContent = JSON.stringify(obj,null,2);}catch{ resp.textContent = String(obj); } }
 function digitsOnly(s){ return (s||'').replace(/\D+/g,""); }
-function detectBrand(num){ const n=digitsOnly(num); if(n.startsWith('4')) return 'visa'; if(n.startsWith('5')) return 'master'; if(n.startsWith('34')||n.startsWith('37')) return 'amex'; return null; }
+function detectBrand(num){ const n=digitsOnly(num); if(n.startsWith('4'))return'visa'; if(n.startsWith('5'))return'master'; if(n.startsWith('34')||n.startsWith('37'))return'amex'; return undefined; }
 
-IMask($("#cardExp"), { mask: '00/0000' }); IMask($("#cardNumber"), { mask: '0000 0000 0000 0000' }); IMask($("#cardCVV"), { mask: '000[0]' });
+IMask($("#cardExp"), { mask: '00/0000' });
+IMask($("#cardNumber"), { mask: '0000 0000 0000 0000' });
+IMask($("#cardCVV"), { mask: '000[0]' });
 
-const supabaseClient = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { functions: FUNCTIONS_URL ? { url: FUNCTIONS_URL } : undefined });
+/* ===================== SUPABASE ===================== */
+const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
+  functions: FUNCTIONS_URL ? { url: FUNCTIONS_URL } : undefined
+});
 
+/* ===================== INIT ===================== */
 (async function init(){
   const cents = Number(CFG.PLANO_AMOUNT_CENTS || 0);
   $("#planoNome").textContent = CFG.PLANO_NAME || "—";
   $("#planoValor").textContent = cents>0 ? (cents/100).toFixed(2) : "—";
-  if (!cents || cents<=0){ addBadge("Valor do plano inválido (0)", false); showBanner("Defina PLANO_AMOUNT_CENTS > 0 no config.js (ex.: 2990).","warn"); $("#btnPagar").disabled=true; }
-  const { data: { session } } = await supabaseClient.auth.getSession();
-  const user = session?.user || null;
-  $("#contaEmail").textContent = user?.email || "—";
-  addBadge("Sessão supabase: " + (user? "ON" : "OFF"), !!user);
-  addBadge("MP_PUBLIC_KEY: " + (CFG.MP_PUBLIC_KEY?.startsWith("TEST-") ? "OK (teste)" : "⚠ verifique"), !!CFG.MP_PUBLIC_KEY);
-  if (FUNCTIONS_URL) addBadge("Functions URL: OK", true);
+  $("#fnName").textContent = CFG.EDGE_FUNCTION_NAME || "—";
+  $("#fnUrl").textContent = FUNCTIONS_URL || "(não deduzida)";
+
+  const { data: { session } } = await sb.auth.getSession();
+  $("#contaEmail").textContent = session?.user?.email || "—";
+  addBadge("Sessão: " + (session?.user ? "ON" : "OFF"), !!session?.user);
+  addBadge("MP_PUBLIC_KEY: " + (CFG.MP_PUBLIC_KEY?.startsWith("TEST-")?"OK (teste)":"⚠ verifique"), !!CFG.MP_PUBLIC_KEY);
+  addBadge("Functions URL: " + (FUNCTIONS_URL ? "OK" : "ausente"), !!FUNCTIONS_URL);
+
+  if (!cents || cents<=0){
+    addBadge("PLANO_AMOUNT_CENTS = 0", false);
+    showBanner("Aviso: PLANO_AMOUNT_CENTS está 0. Você ainda pode clicar em Pagar para ver o erro 400 da função.", "warn");
+  }
 })();
 
-$("#btnUnlock").onclick = ()=>{ for (const id of ["cardholder","payerEmail","payerCPF","installments","cardNumber","cardExp","cardCVV"]) { $(("#"+id)).disabled = false; } };
-$("#btnPing").onclick = async ()=>{
-  logs.textContent = ""; resp.textContent = "";
-  const { data, error } = await supabaseClient.functions.invoke(CFG.EDGE_FUNCTION_NAME, { body: { ping: true } });
-  showResp(error || data);
-};
-$("#btnPingRaw").onclick = async ()=>{
-  logs.textContent = ""; resp.textContent = "";
-  const r = await fetch(`${FUNCTIONS_URL}/${CFG.EDGE_FUNCTION_NAME}`, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ ping:true }) });
-  const t = await r.text(); let j=null; try{ j=JSON.parse(t)}catch{ j={raw:t} } showResp({ status:r.status, data:j });
-};
-$("#btnPingAuthorized").onclick = async ()=>{
-  logs.textContent = ""; resp.textContent = "";
-  const { data: { session } } = await supabaseClient.auth.getSession();
-  if (!session){ showResp({error:"Sem sessão"}); return; }
-  const r = await fetch(`${FUNCTIONS_URL}/${CFG.EDGE_FUNCTION_NAME}`, { method:"POST", headers:{ "Content-Type":"application/json","Authorization":`Bearer ${session.access_token}`,"apikey":CFG.SUPABASE_ANON_KEY }, body: JSON.stringify({ ping:true }) });
-  const t = await r.text(); let j=null; try{ j=JSON.parse(t)}catch{ j={raw:t} } showResp({ status:r.status, data:j });
+/* ===================== BOTÕES ===================== */
+$("#btnUnlock").onclick = ()=>{
+  for (const id of ["cardholder","payerEmail","payerCPF","installments","cardNumber","cardExp","cardCVV"]) {
+    $("#"+id).disabled = false;
+  }
+  showBanner("Campos desbloqueados.", "ok");
 };
 
+/* ---- PING (invoke) ---- */
+$("#btnPingInvoke").onclick = async ()=>{
+  logs.textContent = ""; resp.textContent = "";
+  log("Ping (invoke) →", CFG.EDGE_FUNCTION_NAME);
+  const { data, error } = await sb.functions.invoke(CFG.EDGE_FUNCTION_NAME, {
+    body: { ping: true },
+    // manda headers de config público (opcional) para a função
+    headers: CFG.DEV_SEND_CONFIG_TO_FUNCTION ? {
+      "x-supabase-url": CFG.SUPABASE_URL,
+      "x-supabase-anon-key": CFG.SUPABASE_ANON_KEY
+    } : undefined
+  });
+  if (error){ addBadge("invoke: ERRO", false); showResp(error); }
+  else { addBadge("invoke: OK", true); showResp(data); }
+};
+
+/* ---- PING (fetch sem Authorization) ---- */
+$("#btnPingRaw").onclick = async ()=>{
+  logs.textContent = ""; resp.textContent = "";
+  const url = `${FUNCTIONS_URL}/${CFG.EDGE_FUNCTION_NAME}`;
+  log("Ping (fetch sem auth) →", url);
+  try{
+    const r = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type":"application/json",
+        ...(CFG.DEV_SEND_CONFIG_TO_FUNCTION ? {
+          "x-supabase-url": CFG.SUPABASE_URL,
+          "x-supabase-anon-key": CFG.SUPABASE_ANON_KEY
+        }:{})
+      },
+      body: JSON.stringify({ ping: true })
+    });
+    const t = await r.text(); let j=null; try{ j=JSON.parse(t);}catch{ j={raw:t}; }
+    showResp({ status:r.status, data:j });
+  }catch(e){ showResp({ name:e.name, message:e.message, stack:e.stack }); }
+};
+
+/* ---- PING (fetch com Authorization) ---- */
+$("#btnPingAuth").onclick = async ()=>{
+  logs.textContent = ""; resp.textContent = "";
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session){ addBadge("Sem sessão", false); showResp({error:"Sem sessão"}); return; }
+  const url = `${FUNCTIONS_URL}/${CFG.EDGE_FUNCTION_NAME}`;
+  log("Ping (fetch com auth) →", url);
+  try{
+    const r = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type":"application/json",
+        "Authorization": `Bearer ${session.access_token}`,
+        "apikey": CFG.SUPABASE_ANON_KEY,
+        ...(CFG.DEV_SEND_CONFIG_TO_FUNCTION ? {
+          "x-supabase-url": CFG.SUPABASE_URL,
+          "x-supabase-anon-key": CFG.SUPABASE_ANON_KEY
+        }:{})
+      },
+      body: JSON.stringify({ ping: true })
+    });
+    const t = await r.text(); let j=null; try{ j=JSON.parse(t);}catch{ j={raw:t}; }
+    showResp({ status:r.status, data:j });
+  }catch(e){ showResp({ name:e.name, message:e.message, stack:e.stack }); }
+};
+
+/* ---- PAGAR (fetch com Authorization) ---- */
 $("#btnPagar").onclick = async ()=>{
   logs.textContent = ""; resp.textContent = "";
   const cents = Number(CFG.PLANO_AMOUNT_CENTS || 0);
-  if (!cents || cents<=0){ showBanner("Defina PLANO_AMOUNT_CENTS > 0 no config.js (ex.: 2990).","warn"); return; }
+  if (!cents || cents<=0){
+    showBanner("Você está pagando com amount_cents=0 (a função deve retornar 400). Isso é útil só para teste.", "warn");
+  }
+
   try{
     const cardData = collectCardData();
     const brand = detectBrand($("#cardNumber").value);
     log("Tokenizando cartão via API card_tokens…");
     const token = await tokenizeCard(cardData, $("#payerCPF").value.trim());
-    addBadge("Card token OK", true); log("Card token:", token);
-    if (token?.live_mode && CFG.MP_PUBLIC_KEY?.startsWith("TEST-")) {
-      showBanner("Aviso: token retornou live_mode=true com PUBLIC_KEY de teste. Verifique se a PUBLIC_KEY e o ACCESS_TOKEN são da MESMA conta no Mercado Pago.", "warn");
-    }
+    addBadge("Card token OK", true);
+    log("Card token:", token);
 
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    if (!session){ showBanner("Faça login antes de pagar.", "warn"); return; }
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session){ addBadge("Sem sessão", false); showBanner("Faça login antes de pagar.", "warn"); return; }
 
     const body = {
       mode: "card",
       plan_key: CFG.PLANO_KEY || "basic",
       amount_cents: cents,
       card_token: token.id || token,
-      payer: { name: $("#cardholder").value.trim(), email: $("#payerEmail").value.trim(), cpf: $("#payerCPF").value.trim() },
+      payer: {
+        name: $("#cardholder").value.trim(),
+        email: $("#payerEmail").value.trim(),
+        cpf: $("#payerCPF").value.trim()
+      },
       installments: Number($("#installments").value || 1),
-      // >>> novo: envia bandeira quando conhecida
-      payment_method_id: brand || undefined
+      payment_method_id: brand
     };
 
-    log("Enviando para Edge Function (fetch + Authorization):", body);
-
-    const r = await fetch(`${FUNCTIONS_URL}/${CFG.EDGE_FUNCTION_NAME}`, {
+    log("Enviando pagamento (fetch + Authorization)…");
+    const url = `${FUNCTIONS_URL}/${CFG.EDGE_FUNCTION_NAME}`;
+    const r = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type":"application/json","Authorization":`Bearer ${session.access_token}`,"apikey":CFG.SUPABASE_ANON_KEY },
+      headers: {
+        "Content-Type":"application/json",
+        "Authorization": `Bearer ${session.access_token}`,
+        "apikey": CFG.SUPABASE_ANON_KEY,
+        ...(CFG.DEV_SEND_CONFIG_TO_FUNCTION ? {
+          "x-supabase-url": CFG.SUPABASE_URL,
+          "x-supabase-anon-key": CFG.SUPABASE_ANON_KEY
+        }:{})
+      },
       body: JSON.stringify(body)
     });
 
-    const t = await r.text(); let j=null; try{ j=JSON.parse(t)}catch{ j={raw:t} }
+    const t = await r.text(); let j=null; try{ j=JSON.parse(t);}catch{ j={raw:t}; }
+    if (!r.ok){ addBadge("Pagamento: ERRO", false); }
+    else { addBadge("Pagamento criado", true); }
     showResp({ status:r.status, data:j });
-  }catch(err){ showResp(safeErr(err)); }
+  }catch(e){
+    addBadge("Falha geral", false);
+    showResp(safeErr(e));
+  }
 };
 
+/* ===================== AUX ===================== */
 function collectCardData(){
   const [mm,yyyy] = ($("#cardExp").value||"").split("/");
   return {
@@ -245,9 +341,13 @@ async function tokenizeCard(cardData, cpf){
     security_code: cardData.securityCode,
     cardholder: { name: cardData.cardholderName, identification: { type: "CPF", number: digitsOnly(cpf) } }
   };
-  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-  const text = await res.text(); let data=null; try{ data = text ? JSON.parse(text) : null; }catch{ data={raw:text}; }
-  if (!res.ok || !data?.id){ const err=new Error("Erro tokenização"); err.response={ status:res.status, body:data}; throw err; }
+  const res = await fetch(url, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payload) });
+  const text = await res.text(); let data=null; try{ data=text?JSON.parse(text):null; }catch{ data={raw:text}; }
+  if (!res.ok || !data?.id){
+    const err = new Error("Erro tokenização"); err.name="TokenizationError";
+    (err).status = res.status; (err).response = {status:res.status, body:data};
+    throw err;
+  }
   return data;
 }
 
@@ -255,7 +355,8 @@ function safeErr(e){
   const out = { name: e?.name || 'Error' };
   if ('message' in e) out.message = e.message;
   if ('status' in e) out.status = e.status;
-  if (e?.response) out.response = e.response; else if (e?.context) out.context = e.context;
+  if (e?.response) out.response = e.response;
+  else if (e?.context) out.context = e.context;
   return out;
 }
 </script>
