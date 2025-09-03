@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pagamento (Checkout Transparente)</title>
+<style>
+  :root{color-scheme:dark}
+  body{background:#121212;color:#fff;font-family:Arial,sans-serif;margin:0;padding:24px}
+  .container{max-width:860px;margin:0 auto}
+  .card{background:#0f0f0f;border:1px solid #2a2a2a;border-radius:14px;padding:18px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  label{font-size:13px;color:#cfcfcf}
+  input,select{width:100%;padding:10px;border-radius:10px;border:1px solid #2a2a2a;background:#0b0b0b;color:#fff}
+  .btn{display:inline-flex;align-items:center;gap:8px;background:#00b140;border:none;color:#fff;padding:10px 14px;border-radius:10px;cursor:pointer}
+  .btn:hover{background:#009b38}.muted{color:#9aa0a6}
+  .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+  pre{background:#0b0b0b;border:1px solid #2a2a2a;border-radius:10px;padding:10px;max-height:300px;overflow:auto}
+</style>
+<script src="https://sdk.mercadopago.com/js/v2"></script>
+<script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="/config.js?v=px1"></script>
+</head>
+<body>
+<main class="container">
+  <h1>Pagamento (Transparente)</h1>
+  <div class="card">
+    <div id="resume" class="muted">Carregando…</div>
+
+    <form id="form">
+      <div class="grid" style="margin-top:12px">
+        <div>
+          <label>Nome impresso no cartão</label>
+          <input id="holderName" placeholder="APRO" value="APRO" required>
+        </div>
+        <div>
+          <label>E-mail do pagador</label>
+          <input id="payerEmail" placeholder="comprador@sandbox.local" value="comprador@sandbox.local" required>
+        </div>
+
+        <div>
+          <label>CPF</label>
+          <input id="payerDoc" placeholder="19119119100" value="19119119100" required>
+        </div>
+        <div>
+          <label>Parcelas</label>
+          <select id="installments"><option value="1">1x</option></select>
+        </div>
+
+        <!-- Campos do MP (iframes) -->
+        <div>
+          <label>Número do cartão</label>
+          <div id="form-card-number"></div>
+        </div>
+        <div>
+          <label>Validade (MM/AA)</label>
+          <div id="form-expiration-date"></div>
+        </div>
+        <div>
+          <label>CVV</label>
+          <div id="form-security-code"></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <button id="pay" class="btn" type="submit">Pagar</button>
+        <a class="btn" style="background:#333" href="planos.html" type="button">← Voltar</a>
+      </div>
+    </form>
+
+    <h3 style="margin:14px 0 6px">Logs</h3>
+    <pre id="log"></pre>
+    <h3 style="margin:14px 0 6px">Resposta da função</h3>
+    <pre id="raw"></pre>
+  </div>
+</main>
+
+<script>
+const CFG = window.CONFIG || {};
+const sb  = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true} });
+const planKey = new URLSearchParams(location.search).get('plan') || 'basico';
+
+const logEl = document.getElementById('log'), rawEl = document.getElementById('raw'), resume = document.getElementById('resume');
+function log(...a){ logEl.textContent += a.map(x=>typeof x==='object'?JSON.stringify(x,null,2):String(x)).join(' ')+"\n"; logEl.scrollTop=logEl.scrollHeight; }
+function money(c){ return (c/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) }
+
+let user=null, plan=null, cardForm=null;
+
+(async function init(){
+  const {data:{session}} = await sb.auth.getSession(); if(!session){ location.href=CFG.SITE_URL; return; }
+  user = session.user;
+
+  const r = await sb.from('billing_plans')
+    .select('id,name,price_cents,plan_key,active,created_at')
+    .eq('plan_key', planKey).eq('active', true)
+    .order('created_at', {ascending:false}).limit(1);
+  if(r.error || !r.data?.length){ resume.textContent='Plano não encontrado.'; log('Erro buscar plano:', r.error||'0 linhas'); return; }
+  plan = r.data[0];
+  resume.innerHTML = `Plano: <b>${plan.name}</b> • Valor: ${money(plan.price_cents)}<br>Conta: ${user.email}`;
+
+  // MP SDK
+  const mp = new MercadoPago(CFG.MP_PUBLIC_KEY, { locale: 'pt-BR' });
+
+  cardForm = mp.cardForm({
+    amount: (plan.price_cents/100).toFixed(2),
+    iframe: true,
+    form: {
+      id: 'form',
+      cardNumber: { id: 'form-card-number', placeholder: '5031 4332 1540 6351' },
+      expirationDate: { id: 'form-expiration-date', placeholder: '11/29' },
+      securityCode: { id: 'form-security-code', placeholder: '123' },
+      cardholderName: { id: 'holderName' },
+      identificationType: { id: 'docType', placeholder: 'CPF' }, // oculto, fixaremos CPF
+      identificationNumber: { id: 'payerDoc' },
+      installments: { id: 'installments' },
+    },
+    callbacks: {
+      onFormMounted: error => { if(error) log('onFormMounted error', error); },
+      onCardTokenReceived: (error, data) => {
+        if(error) log('onCardTokenReceived error', error);
+        else log('Token recebido', { firstSix: data.bin, lastFour: data.lastFourDigits });
+      },
+      onSubmit: async e => {
+        e.preventDefault();
+        try{
+          const formData = cardForm.getCardFormData();
+          // dados obrigatórios (teste)
+          const card_token = formData.token;
+          const payment_method_id = formData.paymentMethodId || 'master';
+          const installments = Number(document.getElementById('installments').value||1);
+          const payer_email = document.getElementById('payerEmail').value.trim();
+          const id_number = document.getElementById('payerDoc').value.trim();
+          const holder_name = document.getElementById('holderName').value.trim();
+
+          if(!card_token){ alert('Não foi possível tokenizar o cartão.'); return; }
+
+          const body = {
+            srk: CFG.SERVICE_ROLE_KEY,
+            mp_token: CFG.MP_ACCESS_TOKEN,
+            user_id: (await sb.auth.getUser()).data.user.id,
+            plan_key: planKey,
+            card_token,
+            payment_method_id,
+            installments,
+            payer_email,
+            id_type: 'CPF',
+            id_number,
+            holder_name
+          };
+
+          const { data, error } = await sb.functions.invoke('mp-card-pay', { body });
+          if(error){ log('invoke error:', error); rawEl.textContent = JSON.stringify(error, null, 2); alert('Falha ao processar o pagamento.'); return; }
+
+          rawEl.textContent = JSON.stringify(data, null, 2);
+          if(data?.final === 'approved'){
+            alert('Pagamento aprovado! Vamos voltar aos planos.');
+            location.href = 'planos.html';
+          }else if(data?.final === 'pending'){
+            alert('Pagamento pendente/análise. Você pode conferir em Planos depois.');
+            location.href = 'planos.html';
+          }else{
+            alert('Pagamento não aprovado: '+ (data?.status_detail||data?.status||'ver detalhes abaixo'));
+          }
+        }catch(ex){
+          log('submit exception', ex);
+          alert('Erro inesperado no pagamento.');
+        }
+      }
+    }
+  });
+
+  log('Dica: use cartão de teste APROVADO: 5031 4332 1540 6351 • 11/29 • 123 • CPF 19119119100 • Nome APRO');
+})();
+</script>
+</body>
+</html>
