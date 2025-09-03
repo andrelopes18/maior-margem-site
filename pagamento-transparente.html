@@ -32,6 +32,10 @@
     .ok{color:#6ef06e}
     .err{color:#ff8080}
     .sep{height:1px;background:#22283a;margin:18px 0}
+    .banner{border:1px solid #2a2a2a;border-radius:10px;padding:10px 12px;margin-bottom:14px;background:#111}
+    .banner.warn{border-color:#5c3f00;background:#1b1300;color:#ffc966}
+    .banner.ok{border-color:#214d21;background:#0e1a0e;color:#b7fbb7}
+    .banner.err{border-color:#5c1e1e;background:#190d0d;color:#ff9a9a}
   </style>
 </head>
 <body>
@@ -39,6 +43,8 @@
   <h1>Pagamento (Transparente • Sandbox)</h1>
 
   <div class="card">
+    <div id="banner" class="banner" style="display:none"></div>
+
     <div class="header">
       <div>
         <b>Plano:</b> <span id="planoNome">—</span> •
@@ -117,17 +123,16 @@
 <script>
 /* ================= Config (lendo tudo do config.js) ================= */
 const CFG = (window.CONFIG || {});
-// Valida existência do config
 if (!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY || !CFG.MP_PUBLIC_KEY || !CFG.EDGE_FUNCTION_NAME) {
   alert("Erro de configuração: verifique SUPABASE_URL, SUPABASE_ANON_KEY, MP_PUBLIC_KEY e EDGE_FUNCTION_NAME no config.js");
   throw new Error("CONFIG ausente/incompleta");
 }
 
-// Deduz URL de funções a partir do SUPABASE_URL, se não vier pronta no config
+// FUNCTIONS_URL explícito (recomendado). Se não tiver no config.js, tenta deduzir:
 let FUNCTIONS_URL = CFG.FUNCTIONS_URL;
 if (!FUNCTIONS_URL) {
   try {
-    const host = new URL(CFG.SUPABASE_URL).host; // ex.: maprezivxfitqyifmepq.supabase.co
+    const host = new URL(CFG.SUPABASE_URL).host; // ex.: SEU_REF.supabase.co
     const ref = host.split(".")[0];
     FUNCTIONS_URL = `https://${ref}.functions.supabase.co`;
   } catch {
@@ -139,7 +144,14 @@ if (!FUNCTIONS_URL) {
 const $ = (sel)=>document.querySelector(sel);
 const logs = $("#logs");
 const resp = $("#resp");
+const bannerEl = document.getElementById('banner');
 
+function showBanner(text, type = 'ok') {
+  bannerEl.textContent = text;
+  bannerEl.className = 'banner ' + (type === 'warn' ? 'warn' : (type === 'err' ? 'err' : 'ok'));
+  bannerEl.style.display = 'block';
+  setTimeout(() => { bannerEl.style.display = 'none'; }, 4200);
+}
 function log(...args){
   const line = args.map(a=>{
     try{ return typeof a==='string'? a : JSON.stringify(a,null,2); }
@@ -164,7 +176,7 @@ IMask($("#cardExp"), { mask: '00/0000' });
 IMask($("#cardNumber"), { mask: '0000 0000 0000 0000' });
 IMask($("#cardCVV"), { mask: '000[0]' });
 
-/* ================= Supabase client (forçando URL de funções) ================= */
+/* ================= Supabase client (p/ auth) ================= */
 const supabaseClient = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
   functions: FUNCTIONS_URL ? { url: FUNCTIONS_URL } : undefined
 });
@@ -175,6 +187,13 @@ const supabaseClient = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON
   const planoCents = Number(CFG.PLANO_AMOUNT_CENTS || 0);
   $("#planoNome").textContent = planoName;
   $("#planoValor").textContent = planoCents > 0 ? (planoCents/100).toFixed(2) : "—";
+
+  // Se amount_cents <= 0, avisa e bloqueia o botão pagar (foi o seu caso no log)
+  if (!planoCents || planoCents <= 0) {
+    addBadge("Valor do plano inválido (0)", false);
+    showBanner("Defina PLANO_AMOUNT_CENTS > 0 no config.js (ex.: 2990 para R$ 29,90).", "warn");
+    document.getElementById('btnPagar').disabled = true;
+  }
 
   // Sessão
   try{
@@ -188,7 +207,7 @@ const supabaseClient = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON
 
   addBadge("MP_PUBLIC_KEY: " + (CFG.MP_PUBLIC_KEY?.startsWith("TEST-") ? "OK (teste)" : "⚠ verifique"), !!CFG.MP_PUBLIC_KEY);
   if (FUNCTIONS_URL) addBadge("Functions URL: OK", true);
-  else addBadge("Functions URL: dedução falhou (defina em config.js)", false);
+  else addBadge("Functions URL: ausente (defina em config.js)", false);
 })();
 
 /* ================= Botões ================= */
@@ -202,6 +221,7 @@ $("#btnPing").onclick = async ()=>{
   logs.textContent = ""; resp.textContent = "";
   log("Pingando (invoke):", CFG.EDGE_FUNCTION_NAME);
 
+  // Mesmo que o invoke falhe em alguns cenários, deixei para diagnóstico
   const { data, error } = await supabaseClient.functions.invoke(CFG.EDGE_FUNCTION_NAME, {
     body: { ping: true }
   });
@@ -246,7 +266,6 @@ $("#btnPingAuthorized").onclick = async ()=>{
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        // >>> ESTE É O HEADER QUE FALTAVA QUANDO DEU 401 <<<
         "Authorization": `Bearer ${session.access_token}`,
         "apikey": CFG.SUPABASE_ANON_KEY
       },
@@ -262,7 +281,14 @@ $("#btnPingAuthorized").onclick = async ()=>{
 
 $("#btnPagar").onclick = async ()=>{
   logs.textContent = ""; resp.textContent = "";
-  addBadge("Plano " + (CFG.PLANO_NAME||"") + " R$ " + (Number(CFG.PLANO_AMOUNT_CENTS||0)/100).toFixed(2), true);
+
+  const cents = Number(CFG.PLANO_AMOUNT_CENTS || 0);
+  if (!cents || cents <= 0) {
+    showBanner("Defina PLANO_AMOUNT_CENTS > 0 no config.js (ex.: 2990).", "warn");
+    return;
+  }
+
+  addBadge("Plano " + (CFG.PLANO_NAME||"") + " R$ " + (cents/100).toFixed(2), true);
 
   try{
     const cardData = collectCardData();
@@ -271,13 +297,19 @@ $("#btnPagar").onclick = async ()=>{
     addBadge("Card token OK", true);
     log("Card token:", token);
 
+    // Sessão obrigatória p/ Authorization
     const { data: { session } } = await supabaseClient.auth.getSession();
-    addBadge("Sessão supabase: " + (session? "ON" : "OFF"), !!session);
+    if (!session) {
+      addBadge("Sessão supabase: OFF", false);
+      showBanner("Faça login antes de pagar (Authorization é obrigatório).", "warn");
+      return;
+    }
+    addBadge("Sessão supabase: ON", true);
 
     const body = {
       mode: "card",
       plan_key: CFG.PLANO_KEY || "basic",
-      amount_cents: Number(CFG.PLANO_AMOUNT_CENTS || 0),
+      amount_cents: cents,
       card_token: token.id || token,
       payer: {
         name: $("#cardholder").value.trim(),
@@ -287,23 +319,30 @@ $("#btnPagar").onclick = async ()=>{
       installments: Number($("#installments").value || 1)
     };
 
-    log("Enviando para Edge Function:", body);
+    log("Enviando para Edge Function (fetch + Authorization):", body);
 
-    // invoke envia Authorization + apikey automaticamente (se logado)
-    const { data, error } = await supabaseClient.functions.invoke(CFG.EDGE_FUNCTION_NAME, {
-      body,
-      headers: { 'Content-Type': 'application/json' }
+    const url = `${FUNCTIONS_URL}/${CFG.EDGE_FUNCTION_NAME}`;
+    const r = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type":"application/json",
+        "Authorization": `Bearer ${session.access_token}`,
+        "apikey": CFG.SUPABASE_ANON_KEY
+      },
+      body: JSON.stringify(body)
     });
 
-    if (error){
-      addBadge("invoke: ERRO", false);
-      log("invoke error:", safeErr(error));
-      showResp(error);
+    const t = await r.text();
+    let j = null; try{ j = JSON.parse(t) }catch{ j = { raw:t } }
+
+    if (!r.ok){
+      addBadge("Pagamento: ERRO", false);
+      showResp({ status:r.status, data:j });
       return;
     }
 
     addBadge("Pagamento criado", true);
-    showResp(data);
+    showResp({ status:r.status, data:j });
   }catch(err){
     addBadge("Falha geral", false);
     log("catch:", safeErr(err));
