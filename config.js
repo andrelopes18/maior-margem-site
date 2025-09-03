@@ -12,7 +12,10 @@ window.CONFIG = {
   MP_ACCESS_TOKEN:"TEST-2191939829806436-090219-aa0436ab9ff7132ce2044654d4bbb832-82995267",
   
   EDGE_FUNCTION_NAME: "mercado-pago-transparent",
-
+  
+  // (DEV-ONLY) Enviar headers de config para a função
+  DEV_SEND_CONFIG_TO_FUNCTION: true,
+  
   // === URLs do site
   SITE_URL:   "https://maior-margem-site.vercel.app",
   RETURN_URL: "https://maior-margem-site.vercel.app/retorno.html",
