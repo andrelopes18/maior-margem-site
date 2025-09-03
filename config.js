@@ -18,7 +18,7 @@ window.CONFIG = {
   RETURN_URL: "https://maior-margem-site.vercel.app/retorno.html",
 
   // Rótulos
-  PLAN_LABELS: { trial:"Trial", basico:"Básico", intermediario:"Intermediário", premium:"Premium", 
+  PLAN_LABELS: { trial:"Trial", basico:"Básico", intermediario:"Intermediário", premium:"Premium" }
   
   // Plano em REAIS x100 (sem vírgula). Ex.: R$ 29,90 => 2990
   PLANO_KEY: "basic",
