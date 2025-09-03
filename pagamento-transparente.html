@@ -59,7 +59,7 @@
       </div>
       <div>
         <label>E-mail do pagador</label>
-        <input id="payerEmail" value="comprador@sandbox.local" disabled />
+        <input id="payerEmail" value="comprador@test.com" disabled />
       </div>
     </div>
 
@@ -120,13 +120,8 @@
 
 <script>
 const CFG = (window.CONFIG || {});
-if (!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY || !CFG.MP_PUBLIC_KEY || !CFG.EDGE_FUNCTION_NAME) {
-  alert("Config incompleta: SUPABASE_URL, SUPABASE_ANON_KEY, MP_PUBLIC_KEY e EDGE_FUNCTION_NAME são obrigatórios no config.js");
-}
 let FUNCTIONS_URL = CFG.FUNCTIONS_URL;
-if (!FUNCTIONS_URL) {
-  try { const ref = new URL(CFG.SUPABASE_URL).host.split(".")[0]; FUNCTIONS_URL = `https://${ref}.functions.supabase.co`; } catch {}
-}
+if (!FUNCTIONS_URL) { try { const ref = new URL(CFG.SUPABASE_URL).host.split(".")[0]; FUNCTIONS_URL = `https://${ref}.functions.supabase.co`; } catch {} }
 
 const $ = s=>document.querySelector(s);
 const logs = $("#logs");
@@ -155,8 +150,10 @@ const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
   $("#fnUrl").textContent = FUNCTIONS_URL || "(não deduzida)";
 
   const { data: { session } } = await sb.auth.getSession();
-  $("#contaEmail").textContent = session?.user?.email || "—";
-  addBadge("Sessão: " + (session?.user ? "ON" : "OFF"), !!session?.user);
+  const emailSessao = session?.user?.email || "";
+  $("#contaEmail").textContent = emailSessao || "—";
+  if (emailSessao) { document.getElementById('payerEmail').value = emailSessao; }
+  addBadge("Sessão: " + (emailSessao ? "ON" : "OFF"), !!emailSessao);
   addBadge("MP_PUBLIC_KEY: " + (CFG.MP_PUBLIC_KEY?.startsWith("TEST-") ? "OK (teste)" : "⚠ verifique"), !!CFG.MP_PUBLIC_KEY);
   addBadge("Functions URL: " + (FUNCTIONS_URL ? "OK" : "ausente"), !!FUNCTIONS_URL);
 
@@ -167,77 +164,73 @@ function buildHeaders(sessionAccessToken){
   const h = {
     "Content-Type":"application/json",
     "apikey": CFG.SUPABASE_ANON_KEY,
-    // envia config pública para a função (centraliza no config.js)
     "x-supabase-url": CFG.SUPABASE_URL,
     "x-supabase-anon-key": CFG.SUPABASE_ANON_KEY
   };
   if (sessionAccessToken) h["Authorization"] = `Bearer ${sessionAccessToken}`;
-  // >>> DEV: envia SEMPRE o token do MP do config.js
-  if (CFG.DEV_MP_ACCESS_TOKEN) h["x-mp-token"] = CFG.DEV_MP_ACCESS_TOKEN;
+  if (CFG.DEV_MP_ACCESS_TOKEN) h["x-mp-token"] = CFG.DEV_MP_ACCESS_TOKEN; // DEV: passa o token do MP
   return h;
 }
 
 /* ---- Botões ---- */
-$("#btnUnlock").onclick = ()=>{ for (const id of ["cardholder","payerEmail","payerCPF","installments","cardNumber","cardExp","cardCVV"]) $("#"+id).disabled=false; showBanner("Campos desbloqueados.","ok"); };
+document.getElementById('btnUnlock').onclick = ()=>{
+  for (const id of ["cardholder","payerEmail","payerCPF","installments","cardNumber","cardExp","cardCVV"])
+    document.getElementById(id).disabled = false;
+  showBanner("Campos desbloqueados.", "ok");
+};
 
-$("#btnPingInvoke").onclick = async ()=>{
+document.getElementById('btnPingInvoke').onclick = async ()=>{
   logs.textContent = ""; resp.textContent = "";
-  log("Ping (invoke) →", CFG.EDGE_FUNCTION_NAME);
   const { data, error } = await sb.functions.invoke(CFG.EDGE_FUNCTION_NAME, {
     body: { ping: true },
-    headers: buildHeaders(null) // envia x-mp-token também no invoke (ok no DEV)
+    headers: buildHeaders(null)
   });
   showResp(error || data);
 };
 
-$("#btnPingRaw").onclick = async ()=>{
+document.getElementById('btnPingRaw').onclick = async ()=>{
   logs.textContent = ""; resp.textContent = "";
   const url = `${FUNCTIONS_URL}/${CFG.EDGE_FUNCTION_NAME}`;
-  log("Ping (fetch sem auth) →", url);
   const r = await fetch(url, { method:"POST", headers: buildHeaders(null), body: JSON.stringify({ ping:true }) });
   const t = await r.text(); let j=null; try{ j=JSON.parse(t)}catch{ j={raw:t} } ; showResp({ status:r.status, data:j });
 };
 
-$("#btnPingAuth").onclick = async ()=>{
+document.getElementById('btnPingAuth').onclick = async ()=>{
   logs.textContent = ""; resp.textContent = "";
   const { data: { session } } = await sb.auth.getSession();
   if (!session){ showResp({error:"Sem sessão"}); return; }
   const url = `${FUNCTIONS_URL}/${CFG.EDGE_FUNCTION_NAME}`;
-  log("Ping (fetch com auth) →", url);
   const r = await fetch(url, { method:"POST", headers: buildHeaders(session.access_token), body: JSON.stringify({ ping:true }) });
   const t = await r.text(); let j=null; try{ j=JSON.parse(t)}catch{ j={raw:t} } ; showResp({ status:r.status, data:j });
 };
 
-$("#btnPagar").onclick = async ()=>{
+document.getElementById('btnPagar').onclick = async ()=>{
   logs.textContent = ""; resp.textContent = "";
   const cents = Number(CFG.PLANO_AMOUNT_CENTS || 0);
-  if (!cents || cents<=0){ showBanner("amount_cents=0 — a função deve responder 400. (ok para teste)","warn"); }
+  if (!cents || cents<=0) showBanner("amount_cents=0 — a função deve responder 400. (ok para teste)","warn");
 
   try{
-    const [mm,yyyy] = ($("#cardExp").value||"").split("/");
-    const cardData = {
-      cardNumber: digitsOnly($("#cardNumber").value),
-      cardholderName: $("#cardholder").value.trim(),
-      cardExpirationMonth: (mm||"").padStart(2,"0"),
-      cardExpirationYear: yyyy,
-      securityCode: $("#cardCVV").value.trim()
-    };
-
     // Tokenização
-    log("Tokenizando cartão via API card_tokens…");
-    const tokUrl = "https://api.mercadopago.com/v1/card_tokens?public_key=" + encodeURIComponent(CFG.MP_PUBLIC_KEY);
-    const payload = {
-      card_number: cardData.cardNumber,
-      expiration_month: Number(cardData.cardExpirationMonth),
-      expiration_year: Number(cardData.cardExpirationYear),
-      security_code: cardData.securityCode,
-      cardholder: { name: cardData.cardholderName, identification: { type: "CPF", number: digitsOnly($("#payerCPF").value) } }
+    const [mm,yyyy] = (document.getElementById('cardExp').value||"").split("/");
+    const payloadToken = {
+      card_number: digitsOnly(document.getElementById('cardNumber').value),
+      expiration_month: Number((mm||"").padStart(2,"0")),
+      expiration_year: Number(yyyy),
+      security_code: document.getElementById('cardCVV').value.trim(),
+      cardholder: {
+        name: document.getElementById('cardholder').value.trim(),
+        identification: { type: "CPF", number: digitsOnly(document.getElementById('payerCPF').value) }
+      }
     };
-    const tokRes = await fetch(tokUrl, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payload) });
+    log("Tokenizando cartão via API card_tokens…");
+    const tokRes = await fetch("https://api.mercadopago.com/v1/card_tokens?public_key=" + encodeURIComponent(CFG.MP_PUBLIC_KEY), {
+      method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payloadToken)
+    });
     const tokTxt = await tokRes.text(); let token=null; try{ token = tokTxt?JSON.parse(tokTxt):null; }catch{ token={raw:tokTxt}; }
     if (!tokRes.ok || !token?.id){ showResp({ status: tokRes.status, data: token }); return; }
     log("Card token:", token);
 
+    // Chamada à função
     const { data: { session } } = await sb.auth.getSession();
     if (!session){ showBanner("Faça login antes de pagar.", "warn"); return; }
 
@@ -245,14 +238,21 @@ $("#btnPagar").onclick = async ()=>{
       mode: "card",
       plan_key: CFG.PLANO_KEY || "basic",
       amount_cents: cents,
-      card_token: token.id || token,
-      payer: { name: $("#cardholder").value.trim(), email: $("#payerEmail").value.trim(), cpf: $("#payerCPF").value.trim() },
-      installments: Number($("#installments").value || 1),
-      payment_method_id: detectBrand($("#cardNumber").value)
+      card_token: token.id,
+      payer: {
+        name: document.getElementById('cardholder').value.trim(),
+        email: document.getElementById('payerEmail').value.trim(), // <- agora default válido
+        cpf: document.getElementById('payerCPF').value.trim()
+      },
+      installments: Number(document.getElementById('installments').value || 1),
+      payment_method_id: detectBrand(document.getElementById('cardNumber').value)
     };
 
-    const url = `${FUNCTIONS_URL}/${CFG.EDGE_FUNCTION_NAME}`;
-    const r = await fetch(url, { method:"POST", headers: buildHeaders(session.access_token), body: JSON.stringify(body) });
+    const r = await fetch(`${FUNCTIONS_URL}/${CFG.EDGE_FUNCTION_NAME}`, {
+      method:"POST",
+      headers: buildHeaders(session.access_token),
+      body: JSON.stringify(body)
+    });
     const t = await r.text(); let j=null; try{ j=JSON.parse(t)}catch{ j={raw:t} };
     showResp({ status:r.status, data:j });
   }catch(e){ showResp({ name:e.name, message:e.message, stack:e.stack }); }
