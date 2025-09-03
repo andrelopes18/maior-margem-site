@@ -1,181 +1,222 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Pagamento (Transparente • Sandbox)</title>
-<style>
-  :root{color-scheme:dark}
-  body{background:#121212;color:#fff;font-family:Arial,sans-serif;margin:0;padding:24px}
-  .container{max-width:860px;margin:0 auto}
-  .card{background:#0f0f0f;border:1px solid #2a2a2a;border-radius:14px;padding:18px}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-  label{font-size:13px;color:#cfcfcf}
-  input,select{width:100%;padding:10px;border-radius:10px;border:1px solid #2a2a2a;background:#0b0b0b;color:#fff}
-  input[readonly]{opacity:.75}
-  .btn{display:inline-flex;align-items:center;gap:8px;background:#00b140;border:none;color:#fff;padding:10px 14px;border-radius:10px;cursor:pointer}
-  .btn:hover{background:#009b38}
-  .btn.gray{background:#333}
-  .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
-  pre{background:#0b0b0b;border:1px solid #2a2a2a;border-radius:10px;padding:10px;max-height:320px;overflow:auto}
-</style>
-<script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="/config.js?v=px3"></script>
+  <meta charset="utf-8" />
+  <title>Pagamento (Transparente • Sandbox)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+  <script src="https://unpkg.com/imask"></script>
+  <!-- Mercado Pago JS v2 -->
+  <script src="https://sdk.mercadopago.com/js/v2"></script>
+  <!-- Supabase JS -->
+  <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+  <style>
+    :root{color-scheme:dark}
+    body{background:#0f1115;color:#ddd;font:14px/1.4 system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;padding:32px}
+    .container{max-width:820px;margin:0 auto}
+    .card{background:#151923;border:1px solid #22283a;border-radius:12px;padding:20px}
+    h1{font-weight:700;letter-spacing:.2px;margin:0 0 16px}
+    label{font-size:12px;opacity:.9}
+    input,select{width:100%;padding:10px 12px;margin:6px 0 14px;border-radius:8px;border:1px solid #2b3246;background:#0e1220;color:#e5e7eb}
+    input[disabled]{opacity:.7}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .btn{display:inline-flex;gap:8px;align-items:center;border:1px solid #2b3246;background:#0e1322;color:#e5e7eb;padding:10px 14px;border-radius:10px;cursor:pointer}
+    .btn.primary{background:#0d6efd;border-color:#0d6efd}
+    .btn.warning{background:#44463a}
+    .btn:disabled{opacity:.5;cursor:not-allowed}
+    .muted{opacity:.85}
+    .log{white-space:pre-wrap;background:#0b0f1a;border:1px solid #1b2133;padding:12px;border-radius:8px;min-height:120px;max-height:260px;overflow:auto}
+    .header{margin-bottom:12px}
+    .stack{display:flex;gap:8px;flex-wrap:wrap}
+    .badge{font-size:12px;border:1px solid #2b3246;background:#0e1220;padding:4px 8px;border-radius:999px}
+    .ok{color:#6ef06e}
+    .err{color:#ff8080}
+    .sep{height:1px;background:#22283a;margin:18px 0}
+  </style>
 </head>
 <body>
-<main class="container">
+<div class="container">
   <h1>Pagamento (Transparente • Sandbox)</h1>
+
   <div class="card">
-    <div id="resume" style="color:#9aa0a6">Carregando…</div>
-
-    <!-- Formulário com DADOS DE TESTE já preenchidos -->
-    <form id="form" style="margin-top:12px">
-      <div class="grid">
-        <div>
-          <label>Nome impresso no cartão</label>
-          <input id="holderName" value="APRO" readonly>
-        </div>
-        <div>
-          <label>E-mail do pagador</label>
-          <input id="payerEmail" value="comprador@sandbox.local" readonly>
-        </div>
-
-        <div>
-          <label>CPF</label>
-          <input id="payerDoc" value="19119119100" readonly>
-        </div>
-        <div>
-          <label>Parcelas</label>
-          <select id="installments"><option value="1" selected>1x</option></select>
-        </div>
-
-        <div>
-          <label>Número do cartão (teste aprovado)</label>
-          <input id="cardNumber" value="5031 4332 1540 6351" readonly>
-        </div>
-        <div>
-          <label>Validade (MM/AAAA)</label>
-          <input id="exp" value="11/2029" readonly>
-        </div>
-        <div>
-          <label>CVV</label>
-          <input id="cvv" value="123" readonly>
-        </div>
+    <div class="header">
+      <div class="muted">
+        <b>Plano:</b> <span id="planoNome">Básico</span> •
+        <b>Valor:</b> R$ <span id="planoValor">29,90</span><br/>
+        <b>Conta:</b> <span id="contaEmail">lopes18@gmail.com</span>
       </div>
+      <div class="stack" id="badges"></div>
+    </div>
 
-      <div class="row">
-        <button class="btn" type="submit" id="btnPay">Pagar (teste)</button>
-        <button class="btn gray" type="button" id="btnUnlock">Desbloquear campos</button>
-        <a class="btn gray" href="planos.html" type="button">← Voltar</a>
+    <div class="sep"></div>
+
+    <div class="row">
+      <div>
+        <label>Nome impresso no cartão</label>
+        <input id="cardholder" value="APRO" disabled />
       </div>
-    </form>
+      <div>
+        <label>E-mail do pagador</label>
+        <input id="payerEmail" value="comprador@sandbox.local" disabled />
+      </div>
+    </div>
 
-    <h3 style="margin:14px 0 6px">Logs</h3>
-    <pre id="log"></pre>
-    <h3 style="margin:14px 0 6px">Resposta da função</h3>
-    <pre id="raw"></pre>
+    <div class="row">
+      <div>
+        <label>CPF</label>
+        <input id="payerCPF" value="19119119100" disabled />
+      </div>
+      <div>
+        <label>Parcelas</label>
+        <select id="installments" disabled>
+          <option value="1" selected>1x</option>
+          <option value="2">2x</option>
+          <option value="3">3x</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Número do cartão (teste aprovado)</label>
+        <input id="cardNumber" value="5031 4332 1540 6351" disabled />
+      </div>
+      <div>
+        <label>Validade (MM/AAAA)</label>
+        <input id="cardExp" value="11/2029" disabled />
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>CVV</label>
+        <input id="cardCVV" value="123" disabled />
+      </div>
+      <div style="display:flex;align-items:end;gap:8px">
+        <button id="btnPagar" class="btn primary">Pagar (teste)</button>
+        <button id="btnUnlock" class="btn">Desbloquear campos</button>
+        <button id="btnPing" class="btn warning">Ping função</button>
+        <a class="btn" href="/planos.html">↩ Voltar</a>
+      </div>
+    </div>
+
+    <div class="sep"></div>
+
+    <h3>Logs</h3>
+    <div class="log" id="logs"></div>
+
+    <div class="sep"></div>
+
+    <h3>Resposta da função</h3>
+    <div class="log" id="resp"></div>
   </div>
-</main>
+</div>
 
 <script>
-const CFG = window.CONFIG || {};
-const sb  = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true} });
-const planKey = new URLSearchParams(location.search).get('plan') || 'basico';
+/** ============================
+ *  CONFIG — TROQUE PARA O TEU PROJETO
+ *  ============================ */
+window.CONFIG = {
+  // Supabase
+  SUPABASE_URL: "https://maprezivxfitqyifmepq.supabase.co",
+  SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hcHJleml2eGZpdHF5aWZtZXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM2MTc4OTcsImV4cCI6MjA2OTE5Mzg5N30.qz8iMEZY0mkh5QgeBKh8lYLITRjcAADb",
 
-const logEl = document.getElementById('log'), rawEl = document.getElementById('raw'), resume = document.getElementById('resume');
-function log(...a){ logEl.textContent += a.map(x=>typeof x==='object'?JSON.stringify(x,null,2):String(x)).join(' ')+"\n"; logEl.scrollTop=logEl.scrollHeight; }
-function money(c){ return (c/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) }
+  // Mercado Pago (SANDBOX)
+  MP_PUBLIC_KEY:  "TEST-COLE_SUA_PUBLIC_KEY_AQUI",
+  MP_ACCESS_TOKEN:"TEST-COLE_SEU_ACCESS_TOKEN_AQUI", // usado só no backend
 
-// Desbloquear campos se quiser editar
-document.getElementById('btnUnlock').onclick = () => {
-  ['holderName','payerEmail','payerDoc','cardNumber','exp','cvv'].forEach(id=>{
-    const el=document.getElementById(id); el.readOnly=false;
-  });
+  // Nome da Edge Function que processa o pagamento transparente
+  EDGE_FUNCTION_NAME: "mercado-pago-transparent",
+
+  // Plano atual da tela
+  PLANO_KEY: "basic",
+  PLANO_NAME: "Básico",
+  PLANO_AMOUNT_CENTS: 2990
 };
+</script>
 
-// Cria Card Token na API pública usando a PUBLIC_KEY (somente sandbox!)
-async function createCardToken({cardNumber, exp, cvv, holderName, cpf}) {
-  const [mm,yyyy] = exp.split('/').map(s=>s.trim());
-  const payload = {
-    card_number: cardNumber.replace(/\s+/g,''),
-    expiration_month: Number(mm),
-    expiration_year: Number(yyyy),
-    security_code: cvv,
-    cardholder: { name: holderName, identification: { type: "CPF", number: cpf } }
-  };
-  const url = `https://api.mercadopago.com/v1/card_tokens?public_key=${encodeURIComponent(CFG.MP_PUBLIC_KEY)}`;
-  const r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-  const data = await r.json().catch(()=> ({}));
-  if(!r.ok){ throw new Error(`tokenização falhou: ${JSON.stringify(data)}`); }
-  return data.id;
+<script>
+/* ========= Helpers ========= */
+const $ = (sel)=>document.querySelector(sel);
+const logs = $("#logs");
+const resp = $("#resp");
+function log(...args){
+  const line = args.map(a=>{
+    try{ return typeof a==='string'? a : JSON.stringify(a,null,2); }
+    catch(_){ return String(a); }
+  }).join(" ");
+  logs.textContent += (logs.textContent? "\n" : "") + line;
+  logs.scrollTop = logs.scrollHeight;
+}
+function showResp(obj){
+  try{ resp.textContent = JSON.stringify(obj,null,2); }
+  catch(_){ resp.textContent = String(obj); }
 }
 
-let user=null, plan=null;
+function addBadge(text, ok=false){
+  const b = document.createElement('span');
+  b.className = 'badge ' + (ok?'ok':'');
+  b.textContent = text;
+  $("#badges").appendChild(b);
+}
 
-(async function init(){
-  log('Config carregado?', !!window.CONFIG, ' • MP_PUBLIC_KEY:', (CFG.MP_PUBLIC_KEY||'').slice(0,6)+'…', ' • SRK?', !!CFG.SERVICE_ROLE_KEY);
-  const {data:{session}} = await sb.auth.getSession(); if(!session){ location.href=CFG.SITE_URL; return; }
-  user = session.user;
+/* ========= Máscaras/validação básica ========= */
+IMask($("#cardExp"), { mask: '00/0000' });
+IMask($("#cardNumber"), { mask: '0000 0000 0000 0000' });
+IMask($("#cardCVV"), { mask: '000[0]' });
+IMask($("#payerCPF"), { mask: '00000000000' });
 
-  const r = await sb.from('billing_plans')
-    .select('id,name,price_cents,plan_key,active,created_at')
-    .eq('plan_key', planKey).eq('active', true)
-    .order('created_at', {ascending:false}).limit(1);
-  if(r.error || !r.data?.length){ resume.textContent='Plano não encontrado.'; log('Erro buscar plano:', r.error||'0 linhas'); return; }
-  plan = r.data[0];
-  resume.innerHTML = `Plano: <b>${plan.name}</b> • Valor: ${money(plan.price_cents)}<br>Conta: ${user.email}`;
-})();
+/* ========= Supabase client ========= */
+const supabaseClient = supabase.createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_ANON_KEY);
 
-document.getElementById('form').addEventListener('submit', async (e)=>{
-  e.preventDefault();
-  rawEl.textContent='';
-  try{
-    // coleta dos campos (já vêm preenchidos)
-    const holderName = document.getElementById('holderName').value.trim();
-    const payerEmail = document.getElementById('payerEmail').value.trim();
-    const payerDoc   = document.getElementById('payerDoc').value.trim();
-    const cardNumber = document.getElementById('cardNumber').value.trim();
-    const exp        = document.getElementById('exp').value.trim(); // MM/AAAA
-    const cvv        = document.getElementById('cvv').value.trim();
-    const installments = Number(document.getElementById('installments').value || 1);
+/* ========= Mercado Pago ========= */
+let mp;
+try{
+  mp = new MercadoPago(window.CONFIG.MP_PUBLIC_KEY, { locale: 'pt-BR' });
+  addBadge("MP_PUBLIC_KEY: OK", true);
+}catch(e){
+  addBadge("MP_PUBLIC_KEY: FALHOU", false);
+  log("Erro MP init:", e);
+}
 
-    // 1) Tokenizar o cartão usando a PUBLIC_KEY
-    log('Tokenizando cartão…');
-    const card_token = await createCardToken({cardNumber, exp, cvv, holderName, cpf: payerDoc});
-    log('Card token OK:', card_token);
-
-    // 2) Chamar a Edge Function que cria o pagamento
-    const body = {
-      srk: CFG.SERVICE_ROLE_KEY,
-      mp_token: CFG.MP_ACCESS_TOKEN,
-      user_id: (await sb.auth.getUser()).data.user.id,
-      plan_key: planKey,
-      card_token,
-      payment_method_id: 'master',
-      installments,
-      payer_email: payerEmail,
-      id_type: 'CPF',
-      id_number: payerDoc,
-      holder_name: holderName
-    };
-
-    const { data, error } = await sb.functions.invoke('mp-card-pay', { body });
-    if(error){ log('invoke error:', error); rawEl.textContent = JSON.stringify(error, null, 2); alert('Falha ao processar o pagamento.'); return; }
-
-    rawEl.textContent = JSON.stringify(data, null, 2);
-    if (data?.final === 'approved'){
-      alert('Pagamento aprovado! Voltando aos planos.');
-      location.href = 'planos.html';
-    }else if (data?.final === 'pending'){
-      alert('Pagamento pendente/analise.');
-      location.href = 'planos.html';
-    }else{
-      alert('Pagamento não aprovado: ' + (data?.status_detail || data?.status || 'ver detalhes abaixo'));
-    }
-  }catch(ex){
-    log('Erro no submit:', ex?.message || String(ex));
-    alert('Erro ao pagar: ' + (ex?.message || String(ex)));
+/* ========= UI ========= */
+$("#btnUnlock").onclick = ()=>{
+  for (const id of ["cardholder","payerEmail","payerCPF","installments","cardNumber","cardExp","cardCVV"]) {
+    $(("#"+id)).disabled = false;
   }
-});
-</script>
-</body>
-</html>
+}
+
+$("#btnPing").onclick = async ()=>{
+  logs.textContent = ""; resp.textContent = "";
+  log("Pingando função:", window.CONFIG.EDGE_FUNCTION_NAME);
+
+  const { data, error } = await supabaseClient.functions.invoke(window.CONFIG.EDGE_FUNCTION_NAME, {
+    body: { ping: true }
+  });
+
+  if (error){
+    addBadge("invoke: ERRO", false);
+    log("invoke error:", safeErr(error));
+    showResp(error);
+  } else {
+    addBadge("invoke: OK", true);
+    showResp(data);
+  }
+};
+
+$("#btnPagar").onclick = async ()=>{
+  logs.textContent = ""; resp.textContent = "";
+  addBadge("Config carregado? " + (!!window.CONFIG), true);
+  addBadge("SRX? " + (!!mp), !!mp);
+  addBadge("Plano " + window.CONFIG.PLANO_NAME + " R$ " + (window.CONFIG.PLANO_AMOUNT_CENTS/100).toFixed(2), true);
+
+  try{
+    const cardData = collectCardData();
+    log("Tokenizando cartão…");
+    const token = await tokenizeCard(cardData);
+    addBadge("Card token OK", true);
+    log("Card token OK:", token);
+
+    const session = await supabaseClient.auth.getSession();
+    const accessToken
