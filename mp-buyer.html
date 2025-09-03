@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Criar Buyer de Teste (MP)</title>
+<style>
+  :root{color-scheme:dark}body{background:#121212;color:#fff;font-family:Arial,sans-serif;margin:0;padding:24px}
+  .card{background:#0f0f0f;border:1px solid #2a2a2a;border-radius:12px;padding:16px;max-width:820px}
+  .btn{display:inline-flex;align-items:center;gap:8px;background:#00b140;border:none;color:#fff;padding:10px 14px;border-radius:10px;cursor:pointer}
+  .btn:hover{background:#009b38}.muted{color:#9aa0a6}pre{background:#0b0b0b;border:1px solid #2a2a2a;border-radius:8px;padding:10px;overflow:auto}
+  .kv{display:grid;grid-template-columns:180px 1fr;gap:6px 12px}
+</style>
+<script src="/config.js?v=mpbuyer1"></script>
+<script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+</head>
+<body>
+<h1>Criar usuário de teste (buyer) — Mercado Pago</h1>
+<div class="card">
+  <p>Use este usuário para <b>entrar</b> no Checkout Pro em sandbox.</p>
+  <button id="btn" class="btn">Criar buyer de teste</button>
+  <div id="out" class="muted" style="margin-top:12px">—</div>
+  <pre id="raw"></pre>
+  <p class="muted">Depois de criar, abra o checkout em <b>janela anônima</b> e faça login com esse e-mail/senha.</p>
+</div>
+
+<script>
+const CFG = window.CONFIG || {};
+const sb  = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
+const out = document.getElementById('out'), raw = document.getElementById('raw');
+
+document.getElementById('btn').onclick = async () => {
+  out.textContent = 'Criando…'; raw.textContent = '';
+  try{
+    const { data, error } = await sb.functions.invoke('mp-create-test-buyer', { body: { mp_token: CFG.MP_ACCESS_TOKEN, site_id: 'MLB' } });
+    if (error) { out.textContent = 'Erro: ' + (error.message||'invoke'); return; }
+    raw.textContent = JSON.stringify(data, null, 2);
+    if (data?.test_user){
+      out.innerHTML = `
+        ✅ Buyer criado:<br>
+        <div class="kv">
+          <div>e-mail</div><div><b>${data.test_user.email}</b></div>
+          <div>senha</div><div><b>${data.test_user.password}</b></div>
+          <div>apelido</div><div>${data.test_user.nickname}</div>
+        </div>`;
+    } else {
+      out.textContent = 'Resposta inesperada do provedor.';
+    }
+  }catch(e){
+    out.textContent = 'Exceção: ' + (e?.message || e);
+  }
+};
+</script>
+</body>
+</html>
