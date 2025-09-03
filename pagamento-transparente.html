@@ -219,4 +219,102 @@ $("#btnPagar").onclick = async ()=>{
     log("Card token OK:", token);
 
     const session = await supabaseClient.auth.getSession();
-    const accessToken
+    const accessToken = session?.data?.session?.access_token || null;
+    addBadge("Sessão supabase: " + (accessToken? "ON" : "OFF"), !!accessToken);
+
+    const body = {
+      mode: "card",
+      plan_key: window.CONFIG.PLANO_KEY,
+      amount_cents: window.CONFIG.PLANO_AMOUNT_CENTS,
+      card_token: token.id || token, // dependendo do mp-js
+      payer: {
+        name: $("#cardholder").value.trim(),
+        email: $("#payerEmail").value.trim(),
+        cpf: $("#payerCPF").value.trim()
+      },
+      installments: Number($("#installments").value || 1)
+    };
+
+    log("Enviando para Edge Function:", body);
+
+    // IMPORTANTE: usando supabase.functions.invoke (injeta apikey + Authorization da sessão)
+    const { data, error } = await supabaseClient.functions.invoke(window.CONFIG.EDGE_FUNCTION_NAME, {
+      body,
+      headers: {
+        'Content-Type': 'application/json'
+        // NUNCA coloque a service-role aqui no front!
+      }
+    });
+
+    if (error){
+      addBadge("invoke: ERRO", false);
+      log("invoke error:", safeErr(error));
+      showResp(error);
+      return;
+    }
+
+    addBadge("Pagamento criado", true);
+    showResp(data);
+  }catch(err){
+    addBadge("Falha geral", false);
+    log("catch:", safeErr(err));
+    showResp(err);
+  }
+};
+
+/* ========= Funções auxiliares ========= */
+
+function safeErr(e){
+  const out = { name: e?.name || 'Error' };
+  if ('message' in e) out.message = e.message;
+  if ('status' in e) out.status = e.status;
+  if ('context' in e) out.context = e.context;
+  if ('cause' in e && e.cause) out.cause = e.cause;
+  try{
+    if (e && e.__isfuncerror && e.response){
+      out.response = {
+        status: e.response.status,
+        statusText: e.response.statusText,
+        headers: Object.fromEntries(e.response.headers || []),
+        bodyText: e.responseBodyText || null
+      };
+    }
+  }catch(_){}
+  return out;
+}
+
+function collectCardData(){
+  const [mm,yyyy] = ($("#cardExp").value||"").split("/");
+  return {
+    cardNumber: $("#cardNumber").value.replace(/\s+/g,""),
+    cardholderName: $("#cardholder").value.trim(),
+    cardExpirationMonth: (mm||"").padStart(2,"0"),
+    cardExpirationYear: yyyy,
+    securityCode: $("#cardCVV").value
+  };
+}
+
+async function tokenizeCard({cardNumber, cardholderName, cardExpirationMonth, cardExpirationYear, securityCode}){
+  // Mercado Pago JS v2 — tokenize manual
+  // 1) setar bin
+  const bin = cardNumber.slice(0,6);
+  await mp.fields.create('cardNumber', { placeholder:'', mode: 'manual' }).update({ value: cardNumber });
+  await mp.fields.create('expirationDate', { placeholder:'', mode: 'manual' }).update({ value: `${cardExpirationMonth}/${cardExpirationYear}` });
+  await mp.fields.create('securityCode', { placeholder:'', mode: 'manual' }).update({ value: securityCode });
+
+  const res = await mp.fields.createCardToken({
+    cardNumber,
+    cardholderName,
+    cardExpirationMonth,
+    cardExpirationYear,
+    securityCode
+  });
+
+  if (res?.error || !res?.id){
+    throw new Error("Falha ao tokenizar cartão: " + JSON.stringify(res));
+  }
+  return res;
+}
+</script>
+</body>
+</html>
