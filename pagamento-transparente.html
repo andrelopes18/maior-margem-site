@@ -2,14 +2,11 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
-  <title>Pagamento (Transparente • Sandbox)</title>
+  <title>Pagamento (Transparente • DEV)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- libs -->
   <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://unpkg.com/imask"></script>
-  <!-- suas configs públicas -->
   <script src="./config.js"></script>
-
   <style>
     :root{color-scheme:dark}
     body{background:#0f1115;color:#e5e7eb;font:14px/1.4 system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;padding:32px}
@@ -17,10 +14,10 @@
     .card{background:#141823;border:1px solid #232a3d;border-radius:14px;padding:20px}
     h1{font-weight:700;margin:0 0 16px}
     label{font-size:12px;opacity:.9}
-    input,select{width:100%;padding:10px 12px;margin:6px 0 14px;border-radius:10px;border:1px solid #2a3350;background:#0e1322;color:#e5e7eb}
+    input,select{width:100%;padding:10px 12px;margin:6px 0 14px;border-radius:10px;border:1px solid #2a3350;background:#0f1428;color:#e5e7eb}
     input[disabled]{opacity:.75}
     .row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-    .btn{display:inline-flex;gap:8px;align-items:center;border:1px solid #2a3350;background:#0f1428;color:#e5e7eb;padding:10px 14px;border-radius:10px;cursor:pointer}
+    .btn{display:inline-flex;gap:8px;align-items:center;border:1px solid #2a3350;background:#111a33;color:#e5e7eb;padding:10px 14px;border-radius:10px;cursor:pointer}
     .btn.primary{background:#0d6efd;border-color:#0d6efd}
     .btn.warning{background:#473f22}
     .btn:disabled{opacity:.5;cursor:not-allowed}
@@ -40,7 +37,7 @@
 </head>
 <body>
 <div class="container">
-  <h1>Pagamento (Transparente • Sandbox)</h1>
+  <h1>Pagamento (Transparente • DEV)</h1>
 
   <div class="card">
     <div id="banner" class="banner" style="display:none"></div>
@@ -101,7 +98,6 @@
         <div class="buttons" style="margin-top:6px">
           <button id="btnPagar" class="btn primary">Pagar (fetch + Authorization)</button>
           <button id="btnUnlock" class="btn">Desbloquear campos</button>
-          <!-- TESTES DE FUNÇÃO (todos juntos) -->
           <button id="btnPingInvoke" class="btn warning">Ping (invoke)</button>
           <button id="btnPingRaw" class="btn">Ping (fetch sem auth)</button>
           <button id="btnPingAuth" class="btn">Ping (fetch com auth)</button>
@@ -114,49 +110,32 @@
     </div>
 
     <div class="sep"></div>
-
     <h3>Logs</h3>
     <div class="log" id="logs"></div>
-
     <div class="sep"></div>
-
     <h3>Resposta da função</h3>
     <div class="log" id="resp"></div>
   </div>
 </div>
 
 <script>
-/* ===================== CONFIG ===================== */
 const CFG = (window.CONFIG || {});
 if (!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY || !CFG.MP_PUBLIC_KEY || !CFG.EDGE_FUNCTION_NAME) {
   alert("Config incompleta: SUPABASE_URL, SUPABASE_ANON_KEY, MP_PUBLIC_KEY e EDGE_FUNCTION_NAME são obrigatórios no config.js");
 }
 let FUNCTIONS_URL = CFG.FUNCTIONS_URL;
 if (!FUNCTIONS_URL) {
-  try {
-    const ref = new URL(CFG.SUPABASE_URL).host.split(".")[0];
-    FUNCTIONS_URL = `https://${ref}.functions.supabase.co`;
-  } catch { /* se falhar, segue null e mostramos badge */ }
+  try { const ref = new URL(CFG.SUPABASE_URL).host.split(".")[0]; FUNCTIONS_URL = `https://${ref}.functions.supabase.co`; } catch {}
 }
 
-/* ===================== UI HELPERS ===================== */
 const $ = s=>document.querySelector(s);
 const logs = $("#logs");
 const resp = $("#resp");
 const banner = $("#banner");
 function addBadge(text, ok=false){ const b=document.createElement('span'); b.className='badge '+(ok?'ok':''); b.textContent=text; $("#badges").appendChild(b); }
-function showBanner(text, type='ok'){
-  banner.textContent = text;
-  banner.className = 'banner ' + (type==='warn'?'warn':type==='err'?'err':'ok');
-  banner.style.display = 'block';
-  setTimeout(()=> banner.style.display='none', 4200);
-}
-function log(...args){
-  const line = args.map(a=>{try{return typeof a==='string'?a:JSON.stringify(a,null,2);}catch{ return String(a);}}).join(" ");
-  logs.textContent += (logs.textContent? "\n":"") + line;
-  logs.scrollTop = logs.scrollHeight;
-}
-function showResp(obj){ try{ resp.textContent = JSON.stringify(obj,null,2);}catch{ resp.textContent = String(obj); } }
+function showBanner(text, type='ok'){ banner.textContent=text; banner.className='banner '+(type==='warn'?'warn':type==='err'?'err':'ok'); banner.style.display='block'; setTimeout(()=>banner.style.display='none',4200); }
+function log(...args){ const line=args.map(a=>{try{return typeof a==='string'?a:JSON.stringify(a,null,2);}catch{ return String(a);}}).join(" "); logs.textContent+=(logs.textContent? "\n":"")+line; logs.scrollTop=logs.scrollHeight; }
+function showResp(obj){ try{ resp.textContent=JSON.stringify(obj,null,2);}catch{ resp.textContent=String(obj);} }
 function digitsOnly(s){ return (s||'').replace(/\D+/g,""); }
 function detectBrand(num){ const n=digitsOnly(num); if(n.startsWith('4'))return'visa'; if(n.startsWith('5'))return'master'; if(n.startsWith('34')||n.startsWith('37'))return'amex'; return undefined; }
 
@@ -164,12 +143,10 @@ IMask($("#cardExp"), { mask: '00/0000' });
 IMask($("#cardNumber"), { mask: '0000 0000 0000 0000' });
 IMask($("#cardCVV"), { mask: '000[0]' });
 
-/* ===================== SUPABASE ===================== */
 const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
   functions: FUNCTIONS_URL ? { url: FUNCTIONS_URL } : undefined
 });
 
-/* ===================== INIT ===================== */
 (async function init(){
   const cents = Number(CFG.PLANO_AMOUNT_CENTS || 0);
   $("#planoNome").textContent = CFG.PLANO_NAME || "—";
@@ -180,185 +157,106 @@ const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
   const { data: { session } } = await sb.auth.getSession();
   $("#contaEmail").textContent = session?.user?.email || "—";
   addBadge("Sessão: " + (session?.user ? "ON" : "OFF"), !!session?.user);
-  addBadge("MP_PUBLIC_KEY: " + (CFG.MP_PUBLIC_KEY?.startsWith("TEST-")?"OK (teste)":"⚠ verifique"), !!CFG.MP_PUBLIC_KEY);
+  addBadge("MP_PUBLIC_KEY: " + (CFG.MP_PUBLIC_KEY?.startsWith("TEST-") ? "OK (teste)" : "⚠ verifique"), !!CFG.MP_PUBLIC_KEY);
   addBadge("Functions URL: " + (FUNCTIONS_URL ? "OK" : "ausente"), !!FUNCTIONS_URL);
 
-  if (!cents || cents<=0){
-    addBadge("PLANO_AMOUNT_CENTS = 0", false);
-    showBanner("Aviso: PLANO_AMOUNT_CENTS está 0. Você ainda pode clicar em Pagar para ver o erro 400 da função.", "warn");
-  }
+  if (!cents || cents<=0){ addBadge("PLANO_AMOUNT_CENTS = 0", false); showBanner("Você pode clicar em Pagar mesmo com 0 p/ ver o retorno da função.", "warn"); }
 })();
 
-/* ===================== BOTÕES ===================== */
-$("#btnUnlock").onclick = ()=>{
-  for (const id of ["cardholder","payerEmail","payerCPF","installments","cardNumber","cardExp","cardCVV"]) {
-    $("#"+id).disabled = false;
-  }
-  showBanner("Campos desbloqueados.", "ok");
-};
+function buildHeaders(sessionAccessToken){
+  const h = {
+    "Content-Type":"application/json",
+    "apikey": CFG.SUPABASE_ANON_KEY,
+    // envia config pública para a função (centraliza no config.js)
+    "x-supabase-url": CFG.SUPABASE_URL,
+    "x-supabase-anon-key": CFG.SUPABASE_ANON_KEY
+  };
+  if (sessionAccessToken) h["Authorization"] = `Bearer ${sessionAccessToken}`;
+  // >>> DEV: envia SEMPRE o token do MP do config.js
+  if (CFG.DEV_MP_ACCESS_TOKEN) h["x-mp-token"] = CFG.DEV_MP_ACCESS_TOKEN;
+  return h;
+}
 
-/* ---- PING (invoke) ---- */
+/* ---- Botões ---- */
+$("#btnUnlock").onclick = ()=>{ for (const id of ["cardholder","payerEmail","payerCPF","installments","cardNumber","cardExp","cardCVV"]) $("#"+id).disabled=false; showBanner("Campos desbloqueados.","ok"); };
+
 $("#btnPingInvoke").onclick = async ()=>{
   logs.textContent = ""; resp.textContent = "";
   log("Ping (invoke) →", CFG.EDGE_FUNCTION_NAME);
   const { data, error } = await sb.functions.invoke(CFG.EDGE_FUNCTION_NAME, {
     body: { ping: true },
-    // manda headers de config público (opcional) para a função
-    headers: CFG.DEV_SEND_CONFIG_TO_FUNCTION ? {
-      "x-supabase-url": CFG.SUPABASE_URL,
-      "x-supabase-anon-key": CFG.SUPABASE_ANON_KEY
-    } : undefined
+    headers: buildHeaders(null) // envia x-mp-token também no invoke (ok no DEV)
   });
-  if (error){ addBadge("invoke: ERRO", false); showResp(error); }
-  else { addBadge("invoke: OK", true); showResp(data); }
+  showResp(error || data);
 };
 
-/* ---- PING (fetch sem Authorization) ---- */
 $("#btnPingRaw").onclick = async ()=>{
   logs.textContent = ""; resp.textContent = "";
   const url = `${FUNCTIONS_URL}/${CFG.EDGE_FUNCTION_NAME}`;
   log("Ping (fetch sem auth) →", url);
-  try{
-    const r = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type":"application/json",
-        ...(CFG.DEV_SEND_CONFIG_TO_FUNCTION ? {
-          "x-supabase-url": CFG.SUPABASE_URL,
-          "x-supabase-anon-key": CFG.SUPABASE_ANON_KEY
-        }:{})
-      },
-      body: JSON.stringify({ ping: true })
-    });
-    const t = await r.text(); let j=null; try{ j=JSON.parse(t);}catch{ j={raw:t}; }
-    showResp({ status:r.status, data:j });
-  }catch(e){ showResp({ name:e.name, message:e.message, stack:e.stack }); }
+  const r = await fetch(url, { method:"POST", headers: buildHeaders(null), body: JSON.stringify({ ping:true }) });
+  const t = await r.text(); let j=null; try{ j=JSON.parse(t)}catch{ j={raw:t} } ; showResp({ status:r.status, data:j });
 };
 
-/* ---- PING (fetch com Authorization) ---- */
 $("#btnPingAuth").onclick = async ()=>{
   logs.textContent = ""; resp.textContent = "";
   const { data: { session } } = await sb.auth.getSession();
-  if (!session){ addBadge("Sem sessão", false); showResp({error:"Sem sessão"}); return; }
+  if (!session){ showResp({error:"Sem sessão"}); return; }
   const url = `${FUNCTIONS_URL}/${CFG.EDGE_FUNCTION_NAME}`;
   log("Ping (fetch com auth) →", url);
-  try{
-    const r = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type":"application/json",
-        "Authorization": `Bearer ${session.access_token}`,
-        "apikey": CFG.SUPABASE_ANON_KEY,
-        ...(CFG.DEV_SEND_CONFIG_TO_FUNCTION ? {
-          "x-supabase-url": CFG.SUPABASE_URL,
-          "x-supabase-anon-key": CFG.SUPABASE_ANON_KEY
-        }:{})
-      },
-      body: JSON.stringify({ ping: true })
-    });
-    const t = await r.text(); let j=null; try{ j=JSON.parse(t);}catch{ j={raw:t}; }
-    showResp({ status:r.status, data:j });
-  }catch(e){ showResp({ name:e.name, message:e.message, stack:e.stack }); }
+  const r = await fetch(url, { method:"POST", headers: buildHeaders(session.access_token), body: JSON.stringify({ ping:true }) });
+  const t = await r.text(); let j=null; try{ j=JSON.parse(t)}catch{ j={raw:t} } ; showResp({ status:r.status, data:j });
 };
 
-/* ---- PAGAR (fetch com Authorization) ---- */
 $("#btnPagar").onclick = async ()=>{
   logs.textContent = ""; resp.textContent = "";
   const cents = Number(CFG.PLANO_AMOUNT_CENTS || 0);
-  if (!cents || cents<=0){
-    showBanner("Você está pagando com amount_cents=0 (a função deve retornar 400). Isso é útil só para teste.", "warn");
-  }
+  if (!cents || cents<=0){ showBanner("amount_cents=0 — a função deve responder 400. (ok para teste)","warn"); }
 
   try{
-    const cardData = collectCardData();
-    const brand = detectBrand($("#cardNumber").value);
+    const [mm,yyyy] = ($("#cardExp").value||"").split("/");
+    const cardData = {
+      cardNumber: digitsOnly($("#cardNumber").value),
+      cardholderName: $("#cardholder").value.trim(),
+      cardExpirationMonth: (mm||"").padStart(2,"0"),
+      cardExpirationYear: yyyy,
+      securityCode: $("#cardCVV").value.trim()
+    };
+
+    // Tokenização
     log("Tokenizando cartão via API card_tokens…");
-    const token = await tokenizeCard(cardData, $("#payerCPF").value.trim());
-    addBadge("Card token OK", true);
+    const tokUrl = "https://api.mercadopago.com/v1/card_tokens?public_key=" + encodeURIComponent(CFG.MP_PUBLIC_KEY);
+    const payload = {
+      card_number: cardData.cardNumber,
+      expiration_month: Number(cardData.cardExpirationMonth),
+      expiration_year: Number(cardData.cardExpirationYear),
+      security_code: cardData.securityCode,
+      cardholder: { name: cardData.cardholderName, identification: { type: "CPF", number: digitsOnly($("#payerCPF").value) } }
+    };
+    const tokRes = await fetch(tokUrl, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payload) });
+    const tokTxt = await tokRes.text(); let token=null; try{ token = tokTxt?JSON.parse(tokTxt):null; }catch{ token={raw:tokTxt}; }
+    if (!tokRes.ok || !token?.id){ showResp({ status: tokRes.status, data: token }); return; }
     log("Card token:", token);
 
     const { data: { session } } = await sb.auth.getSession();
-    if (!session){ addBadge("Sem sessão", false); showBanner("Faça login antes de pagar.", "warn"); return; }
+    if (!session){ showBanner("Faça login antes de pagar.", "warn"); return; }
 
     const body = {
       mode: "card",
       plan_key: CFG.PLANO_KEY || "basic",
       amount_cents: cents,
       card_token: token.id || token,
-      payer: {
-        name: $("#cardholder").value.trim(),
-        email: $("#payerEmail").value.trim(),
-        cpf: $("#payerCPF").value.trim()
-      },
+      payer: { name: $("#cardholder").value.trim(), email: $("#payerEmail").value.trim(), cpf: $("#payerCPF").value.trim() },
       installments: Number($("#installments").value || 1),
-      payment_method_id: brand
+      payment_method_id: detectBrand($("#cardNumber").value)
     };
 
-    log("Enviando pagamento (fetch + Authorization)…");
     const url = `${FUNCTIONS_URL}/${CFG.EDGE_FUNCTION_NAME}`;
-    const r = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type":"application/json",
-        "Authorization": `Bearer ${session.access_token}`,
-        "apikey": CFG.SUPABASE_ANON_KEY,
-        ...(CFG.DEV_SEND_CONFIG_TO_FUNCTION ? {
-          "x-supabase-url": CFG.SUPABASE_URL,
-          "x-supabase-anon-key": CFG.SUPABASE_ANON_KEY
-        }:{})
-      },
-      body: JSON.stringify(body)
-    });
-
-    const t = await r.text(); let j=null; try{ j=JSON.parse(t);}catch{ j={raw:t}; }
-    if (!r.ok){ addBadge("Pagamento: ERRO", false); }
-    else { addBadge("Pagamento criado", true); }
+    const r = await fetch(url, { method:"POST", headers: buildHeaders(session.access_token), body: JSON.stringify(body) });
+    const t = await r.text(); let j=null; try{ j=JSON.parse(t)}catch{ j={raw:t} };
     showResp({ status:r.status, data:j });
-  }catch(e){
-    addBadge("Falha geral", false);
-    showResp(safeErr(e));
-  }
+  }catch(e){ showResp({ name:e.name, message:e.message, stack:e.stack }); }
 };
-
-/* ===================== AUX ===================== */
-function collectCardData(){
-  const [mm,yyyy] = ($("#cardExp").value||"").split("/");
-  return {
-    cardNumber: digitsOnly($("#cardNumber").value),
-    cardholderName: $("#cardholder").value.trim(),
-    cardExpirationMonth: (mm||"").padStart(2,"0"),
-    cardExpirationYear: yyyy,
-    securityCode: $("#cardCVV").value.trim()
-  };
-}
-
-async function tokenizeCard(cardData, cpf){
-  const url = "https://api.mercadopago.com/v1/card_tokens?public_key=" + encodeURIComponent(CFG.MP_PUBLIC_KEY);
-  const payload = {
-    card_number: cardData.cardNumber,
-    expiration_month: Number(cardData.cardExpirationMonth),
-    expiration_year: Number(cardData.cardExpirationYear),
-    security_code: cardData.securityCode,
-    cardholder: { name: cardData.cardholderName, identification: { type: "CPF", number: digitsOnly(cpf) } }
-  };
-  const res = await fetch(url, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payload) });
-  const text = await res.text(); let data=null; try{ data=text?JSON.parse(text):null; }catch{ data={raw:text}; }
-  if (!res.ok || !data?.id){
-    const err = new Error("Erro tokenização"); err.name="TokenizationError";
-    (err).status = res.status; (err).response = {status:res.status, body:data};
-    throw err;
-  }
-  return data;
-}
-
-function safeErr(e){
-  const out = { name: e?.name || 'Error' };
-  if ('message' in e) out.message = e.message;
-  if ('status' in e) out.status = e.status;
-  if (e?.response) out.response = e.response;
-  else if (e?.context) out.context = e.context;
-  return out;
-}
 </script>
 </body>
 </html>
