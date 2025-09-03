@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Teste Service Role Key</title>
+<style>
+  :root{color-scheme:dark}body{background:#121212;color:#fff;font-family:Arial,sans-serif;margin:0;padding:24px}
+  .card{background:#0f0f0f;border:1px solid #2a2a2a;border-radius:12px;padding:16px;max-width:900px}
+  .ok{color:#b7fbb7}.err{color:#ff9a9a}.muted{color:#9aa0a6}pre{background:#0b0b0b;border:1px solid #2a2a2a;border-radius:8px;padding:10px;overflow:auto}
+  .kv{display:grid;grid-template-columns:180px 1fr;gap:6px 12px}
+</style>
+<script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="/config.js?v=srkcheck1"></script>
+</head>
+<body>
+<h1>Diagnóstico da Service Role Key</h1>
+<div class="card">
+  <div class="kv">
+    <div class="muted">Project URL</div><div id="kvUrl">—</div>
+    <div class="muted">Token (mask)</div><div id="kvTok">—</div>
+    <div class="muted">Token ref</div><div id="kvRef">—</div>
+    <div class="muted">URL ref esperado</div><div id="kvRefExp">—</div>
+  </div>
+  <h3>Resultado do SELECT em billing_plans</h3>
+  <div id="res" class="muted">Executando…</div>
+  <pre id="dump"></pre>
+</div>
+
+<script>
+function b64uDecode(s){ return atob(s.replace(/-/g,'+').replace(/_/g,'/')); }
+function decodeJwtRef(tok){
+  try{
+    const payload = JSON.parse(b64uDecode(tok.split('.')[1]||''));
+    return payload?.ref || '(sem ref)';
+  }catch(e){ return '(inválido)'; }
+}
+function mask(s){ return s ? (s.slice(0,8)+'…'+s.slice(-6)) : '(vazio)'; }
+
+(async function(){
+  const C = window.CONFIG||{};
+  const url = C.SUPABASE_URL;
+  const srk = (C.SERVICE_ROLE_KEY||'').trim(); // TRIM
+
+  document.getElementById('kvUrl').textContent = url || '(vazio)';
+  document.getElementById('kvTok').textContent = mask(srk);
+  const expectedRef = (url.match(/^https:\/\/([a-z0-9]+)\.supabase\.co/i)||[])[1] || '(?)';
+  document.getElementById('kvRefExp').textContent = expectedRef;
+  document.getElementById('kvRef').textContent = decodeJwtRef(srk);
+
+  const sb = supabase.createClient(url, srk);
+  const { data, error } = await sb.from('billing_plans').select('id,plan_key,name,price_cents').limit(5);
+
+  const resEl = document.getElementById('res'), dump = document.getElementById('dump');
+  if (error){
+    resEl.className='err';
+    resEl.textContent = 'Erro: ' + (error.message||JSON.stringify(error));
+  }else{
+    resEl.className='ok';
+    resEl.textContent = 'OK: consulta executada com Service Role.';
+    dump.textContent = JSON.stringify(data, null, 2);
+  }
+})();
+</script>
+</body>
+</html>
