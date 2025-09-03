@@ -97,9 +97,7 @@
       <div style="display:flex;align-items:end;gap:8px;flex-wrap:wrap">
         <button id="btnPagar" class="btn primary">Pagar (teste)</button>
         <button id="btnUnlock" class="btn">Desbloquear campos</button>
-        <button id="btnPing" class="btn warning">Ping função (invoke)</button>
-        <button id="btnPingRaw" class="btn">Ping direto (fetch)</button>
-        <button id="btnPingAuthorized" class="btn">Ping direto (com Authorization)</button>
+        <button id="btnPingAuthorized" class="btn">Ping função</button>
         <a class="btn" href="./planos.html">↩ Voltar</a>
       </div>
     </div>
@@ -119,13 +117,13 @@
 <script>
 const CFG = (window.CONFIG || {});
 if (!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY || !CFG.MP_PUBLIC_KEY || !CFG.EDGE_FUNCTION_NAME) {
-  alert("Erro de configuração: verifique SUPABASE_URL, SUPABASE_ANON_KEY, MP_PUBLIC_KEY e EDGE_FUNCTION_NAME no config.js");
+  alert("Config incompleta: verifique SUPABASE_URL, SUPABASE_ANON_KEY, MP_PUBLIC_KEY e EDGE_FUNCTION_NAME.");
   throw new Error("CONFIG ausente/incompleta");
 }
 let FUNCTIONS_URL = CFG.FUNCTIONS_URL;
 if (!FUNCTIONS_URL) {
   try { const ref = new URL(CFG.SUPABASE_URL).host.split(".")[0]; FUNCTIONS_URL = `https://${ref}.functions.supabase.co`; }
-  catch { console.warn("Não foi possível deduzir FUNCTIONS_URL; informe FUNCTIONS_URL no config.js"); }
+  catch { }
 }
 
 const $ = (sel)=>document.querySelector(sel);
@@ -133,24 +131,18 @@ const logs = $("#logs");
 const resp = $("#resp");
 const bannerEl = document.getElementById('banner');
 
-function showBanner(text, type = 'ok') {
-  bannerEl.textContent = text;
-  bannerEl.className = 'banner ' + (type === 'warn' ? 'warn' : (type === 'err' ? 'err' : 'ok'));
-  bannerEl.style.display = 'block';
-  setTimeout(() => { bannerEl.style.display = 'none'; }, 4200);
-}
-function log(...args){
-  const line = args.map(a=>{ try{ return typeof a==='string'? a : JSON.stringify(a,null,2);}catch(_){return String(a);} }).join(" ");
-  logs.textContent += (logs.textContent? "\n" : "") + line; logs.scrollTop = logs.scrollHeight;
-}
-function showResp(obj){ try{ resp.textContent = JSON.stringify(obj,null,2); } catch(_){ resp.textContent = String(obj); } }
-function addBadge(text, ok=false){ const b = document.createElement('span'); b.className='badge '+(ok?'ok':''); b.textContent=text; $("#badges").appendChild(b); }
+function showBanner(text, type='ok'){ bannerEl.textContent=text; bannerEl.className='banner '+(type==='warn'?'warn':(type==='err'?'err':'ok')); bannerEl.style.display='block'; setTimeout(()=>bannerEl.style.display='none',4200); }
+function log(...args){ const line=args.map(a=>{try{return typeof a==='string'?a:JSON.stringify(a,null,2);}catch(_){return String(a);}}).join(" "); logs.textContent+=(logs.textContent?"\n":"")+line; logs.scrollTop=logs.scrollHeight; }
+function showResp(obj){ try{ resp.textContent=JSON.stringify(obj,null,2);}catch(_){ resp.textContent=String(obj);} }
+function addBadge(text, ok=false){ const b=document.createElement('span'); b.className='badge '+(ok?'ok':''); b.textContent=text; $("#badges").appendChild(b); }
 function digitsOnly(s){ return (s||'').replace(/\D+/g,""); }
-function detectBrand(num){ const n=digitsOnly(num); if(n.startsWith('4')) return 'visa'; if(n.startsWith('5')) return 'master'; if(n.startsWith('34')||n.startsWith('37')) return 'amex'; return null; }
+function detectBrand(num){ const n=digitsOnly(num); if(n.startsWith('4'))return'visa'; if(n.startsWith('5'))return'master'; if(n.startsWith('34')||n.startsWith('37'))return'amex'; return undefined; }
 
 IMask($("#cardExp"), { mask: '00/0000' }); IMask($("#cardNumber"), { mask: '0000 0000 0000 0000' }); IMask($("#cardCVV"), { mask: '000[0]' });
 
-const supabaseClient = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { functions: FUNCTIONS_URL ? { url: FUNCTIONS_URL } : undefined });
+const supabaseClient = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
+  functions: FUNCTIONS_URL ? { url: FUNCTIONS_URL } : undefined
+});
 
 (async function init(){
   const cents = Number(CFG.PLANO_AMOUNT_CENTS || 0);
@@ -158,29 +150,30 @@ const supabaseClient = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON
   $("#planoValor").textContent = cents>0 ? (cents/100).toFixed(2) : "—";
   if (!cents || cents<=0){ addBadge("Valor do plano inválido (0)", false); showBanner("Defina PLANO_AMOUNT_CENTS > 0 no config.js (ex.: 2990).","warn"); $("#btnPagar").disabled=true; }
   const { data: { session } } = await supabaseClient.auth.getSession();
-  const user = session?.user || null;
-  $("#contaEmail").textContent = user?.email || "—";
-  addBadge("Sessão supabase: " + (user? "ON" : "OFF"), !!user);
+  $("#contaEmail").textContent = session?.user?.email || "—";
+  addBadge("Sessão supabase: " + (session?.user? "ON" : "OFF"), !!session?.user);
   addBadge("MP_PUBLIC_KEY: " + (CFG.MP_PUBLIC_KEY?.startsWith("TEST-") ? "OK (teste)" : "⚠ verifique"), !!CFG.MP_PUBLIC_KEY);
   if (FUNCTIONS_URL) addBadge("Functions URL: OK", true);
 })();
 
 $("#btnUnlock").onclick = ()=>{ for (const id of ["cardholder","payerEmail","payerCPF","installments","cardNumber","cardExp","cardCVV"]) { $(("#"+id)).disabled = false; } };
-$("#btnPing").onclick = async ()=>{
-  logs.textContent = ""; resp.textContent = "";
-  const { data, error } = await supabaseClient.functions.invoke(CFG.EDGE_FUNCTION_NAME, { body: { ping: true } });
-  showResp(error || data);
-};
-$("#btnPingRaw").onclick = async ()=>{
-  logs.textContent = ""; resp.textContent = "";
-  const r = await fetch(`${FUNCTIONS_URL}/${CFG.EDGE_FUNCTION_NAME}`, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ ping:true }) });
-  const t = await r.text(); let j=null; try{ j=JSON.parse(t)}catch{ j={raw:t} } showResp({ status:r.status, data:j });
-};
+
 $("#btnPingAuthorized").onclick = async ()=>{
   logs.textContent = ""; resp.textContent = "";
   const { data: { session } } = await supabaseClient.auth.getSession();
   if (!session){ showResp({error:"Sem sessão"}); return; }
-  const r = await fetch(`${FUNCTIONS_URL}/${CFG.EDGE_FUNCTION_NAME}`, { method:"POST", headers:{ "Content-Type":"application/json","Authorization":`Bearer ${session.access_token}`,"apikey":CFG.SUPABASE_ANON_KEY }, body: JSON.stringify({ ping:true }) });
+  const headers = {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${session.access_token}`,
+    "apikey": CFG.SUPABASE_ANON_KEY,
+    // >>> Envia config público para a função ler (opcional)
+    ...(CFG.DEV_SEND_CONFIG_TO_FUNCTION ? {
+      "x-supabase-url": CFG.SUPABASE_URL,
+      "x-supabase-anon-key": CFG.SUPABASE_ANON_KEY
+      // "x-mp-token": CFG.DEV_MP_ACCESS_TOKEN // DEV SOMENTE se ALLOW_DEV_MP_OVERRIDE=1
+    } : {})
+  };
+  const r = await fetch(`${FUNCTIONS_URL}/${CFG.EDGE_FUNCTION_NAME}`, { method:"POST", headers, body: JSON.stringify({ ping:true }) });
   const t = await r.text(); let j=null; try{ j=JSON.parse(t)}catch{ j={raw:t} } showResp({ status:r.status, data:j });
 };
 
@@ -188,15 +181,13 @@ $("#btnPagar").onclick = async ()=>{
   logs.textContent = ""; resp.textContent = "";
   const cents = Number(CFG.PLANO_AMOUNT_CENTS || 0);
   if (!cents || cents<=0){ showBanner("Defina PLANO_AMOUNT_CENTS > 0 no config.js (ex.: 2990).","warn"); return; }
+
   try{
     const cardData = collectCardData();
     const brand = detectBrand($("#cardNumber").value);
     log("Tokenizando cartão via API card_tokens…");
     const token = await tokenizeCard(cardData, $("#payerCPF").value.trim());
     addBadge("Card token OK", true); log("Card token:", token);
-    if (token?.live_mode && CFG.MP_PUBLIC_KEY?.startsWith("TEST-")) {
-      showBanner("Aviso: token retornou live_mode=true com PUBLIC_KEY de teste. Verifique se a PUBLIC_KEY e o ACCESS_TOKEN são da MESMA conta no Mercado Pago.", "warn");
-    }
 
     const { data: { session } } = await supabaseClient.auth.getSession();
     if (!session){ showBanner("Faça login antes de pagar.", "warn"); return; }
@@ -208,18 +199,21 @@ $("#btnPagar").onclick = async ()=>{
       card_token: token.id || token,
       payer: { name: $("#cardholder").value.trim(), email: $("#payerEmail").value.trim(), cpf: $("#payerCPF").value.trim() },
       installments: Number($("#installments").value || 1),
-      // >>> novo: envia bandeira quando conhecida
-      payment_method_id: brand || undefined
+      payment_method_id: brand
     };
 
-    log("Enviando para Edge Function (fetch + Authorization):", body);
+    const headers = {
+      "Content-Type":"application/json",
+      "Authorization": `Bearer ${session.access_token}`,
+      "apikey": CFG.SUPABASE_ANON_KEY,
+      ...(CFG.DEV_SEND_CONFIG_TO_FUNCTION ? {
+        "x-supabase-url": CFG.SUPABASE_URL,
+        "x-supabase-anon-key": CFG.SUPABASE_ANON_KEY
+        // "x-mp-token": CFG.DEV_MP_ACCESS_TOKEN // DEV SOMENTE se ALLOW_DEV_MP_OVERRIDE=1
+      } : {})
+    };
 
-    const r = await fetch(`${FUNCTIONS_URL}/${CFG.EDGE_FUNCTION_NAME}`, {
-      method: "POST",
-      headers: { "Content-Type":"application/json","Authorization":`Bearer ${session.access_token}`,"apikey":CFG.SUPABASE_ANON_KEY },
-      body: JSON.stringify(body)
-    });
-
+    const r = await fetch(`${FUNCTIONS_URL}/${CFG.EDGE_FUNCTION_NAME}`, { method: "POST", headers, body: JSON.stringify(body) });
     const t = await r.text(); let j=null; try{ j=JSON.parse(t)}catch{ j={raw:t} }
     showResp({ status:r.status, data:j });
   }catch(err){ showResp(safeErr(err)); }
@@ -235,7 +229,6 @@ function collectCardData(){
     securityCode: $("#cardCVV").value.trim()
   };
 }
-
 async function tokenizeCard(cardData, cpf){
   const url = "https://api.mercadopago.com/v1/card_tokens?public_key=" + encodeURIComponent(CFG.MP_PUBLIC_KEY);
   const payload = {
@@ -245,19 +238,12 @@ async function tokenizeCard(cardData, cpf){
     security_code: cardData.securityCode,
     cardholder: { name: cardData.cardholderName, identification: { type: "CPF", number: digitsOnly(cpf) } }
   };
-  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-  const text = await res.text(); let data=null; try{ data = text ? JSON.parse(text) : null; }catch{ data={raw:text}; }
+  const res = await fetch(url, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payload) });
+  const text = await res.text(); let data=null; try{ data=text?JSON.parse(text):null;}catch{ data={raw:text}; }
   if (!res.ok || !data?.id){ const err=new Error("Erro tokenização"); err.response={ status:res.status, body:data}; throw err; }
   return data;
 }
-
-function safeErr(e){
-  const out = { name: e?.name || 'Error' };
-  if ('message' in e) out.message = e.message;
-  if ('status' in e) out.status = e.status;
-  if (e?.response) out.response = e.response; else if (e?.context) out.context = e.context;
-  return out;
-}
+function safeErr(e){ const out:any={ name:e?.name||'Error' }; if('message'in e) out.message=e.message; if('status'in e) out.status=e.status; if(e?.response) out.response=e.response; else if(e?.context) out.context=e.context; return out; }
 </script>
 </body>
 </html>
