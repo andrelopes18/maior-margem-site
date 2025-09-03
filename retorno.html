@@ -10,7 +10,7 @@
   .btn:hover{background:#009b38}.muted{color:#9aa0a6}
 </style>
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="/config.js"></script>
+<script src="/config.js?v=1"></script>
 </head>
 <body>
 <main class="container">
@@ -33,22 +33,17 @@ const statusEl=document.getElementById('status');const det=document.getElementBy
 
 (async function init(){
   const {data:{session}}=await sb.auth.getSession(); if(!session){statusEl.textContent='Faça login novamente.';return}
-  // parâmetros que o MP manda na volta (variáveis conforme fluxo)
-  const payment_id = qs.get('payment_id') || qs.get('paymentId') || '';
-  const preference_id = qs.get('preference_id') || '';
-  const payment_status = qs.get('status') || qs.get('collection_status') || '';
 
+  const payment_id   = qs.get('payment_id') || qs.get('paymentId') || '';
+  const preference_id= qs.get('preference_id') || '';
   try{
-    const body={ payment_id, preference_id };
+    const body={ payment_id, preference_id, srk: CFG.SERVICE_ROLE_KEY, mp_token: CFG.MP_ACCESS_TOKEN };
     const { data, error } = await sb.functions.invoke('mp-verify',{ body });
-    if(error){ statusEl.textContent='Não foi possível confirmar com o provedor.'; det.textContent=error.message||JSON.stringify(error); return; }
-
+    if(error){ statusEl.textContent='Não foi possível confirmar.'; det.textContent=error.message||JSON.stringify(error); return; }
     statusEl.textContent = (data?.final==='approved') ? '✅ Pagamento aprovado' :
-                           (data?.final==='authorized' || data?.final==='pending') ? '⏳ Pagamento em análise/pendente' :
+                           (data?.final==='pending')  ? '⏳ Pagamento em análise/pendente' :
                            '❌ Pagamento não aprovado';
-    det.textContent = `status provedor: ${data?.status||payment_status||'desconhecido'} • preference: ${data?.preference_id||preference_id}`;
-
-    // se aprovado, atualiza o chip de plano nas páginas seguintes
+    det.textContent = `status: ${data?.status||'—'} • preference: ${data?.preference_id||preference_id}`;
     if (data?.final==='approved'){ setTimeout(()=>location.href='planos.html', 2500); }
   }catch(e){
     statusEl.textContent='Erro inesperado no retorno.'; det.textContent=String(e);
