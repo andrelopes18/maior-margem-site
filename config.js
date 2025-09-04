@@ -8,14 +8,14 @@ window.CONFIG = {
 
   // === Mercado Pago (TESTE)
   MP_PUBLIC_KEY:  "TEST-bb9637c6-36a6-46f4-8856-e9f1f050fdaa",
-  MP_ACCESS_TOKEN:"TEST-2191939829806436-090219-aa0436ab9ff7132ce2044654d4bbb832-82995267",
+  //MP_ACCESS_TOKEN:"TEST-2191939829806436-090219-aa0436ab9ff7132ce2044654d4bbb832-82995267",
   
   EDGE_FUNCTION_NAME: "mercado-pago-transparent",
   
   // (DEV-ONLY) Enviar headers de config para a função
   DEV_SEND_CONFIG_TO_FUNCTION: true,
   // >>> DEV: Access Token do Mercado Pago (da MESMA conta da PUBLIC KEY)
-  DEV_MP_ACCESS_TOKEN: "TEST-2191939829806436-090219-aa0436ab9ff7132ce2044654d4bbb832-82995267", // DEV APENAS
+  //DEV_MP_ACCESS_TOKEN: "TEST-2191939829806436-090219-aa0436ab9ff7132ce2044654d4bbb832-82995267", // DEV APENAS
   
   // === URLs do site
   SITE_URL:   "https://maior-margem-site.vercel.app",
