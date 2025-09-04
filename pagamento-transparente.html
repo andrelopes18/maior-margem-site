@@ -96,7 +96,7 @@
       </div>
       <div>
         <div class="buttons" style="margin-top:6px">
-          <button id="btnPagar" class="btn primary">Pagar (fetch + Authorization)</button>
+          <button id="btnPagar" class="btn primary" disabled>Pagar (fetch + Authorization)</button>
           <button id="btnUnlock" class="btn">Desbloquear campos</button>
           <button id="btnPingInvoke" class="btn warning">Ping (invoke)</button>
           <button id="btnPingRaw" class="btn">Ping (fetch sem auth)</button>
@@ -142,10 +142,36 @@ const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
   functions: FUNCTIONS_URL ? { url: FUNCTIONS_URL } : undefined
 });
 
+// Plano carregado do banco
+let CURRENT_PLAN = null;
+
+async function fetchPlan() {
+  const qp = new URLSearchParams(location.search);
+  const planKeyParam = qp.get('plan') || qp.get('plan_key');
+
+  // 1) tenta por plan_key específico
+  if (planKeyParam) {
+    const { data, error } = await sb
+      .from('billing_plans')
+      .select('id,plan_key,name,price_cents,currency,active,sort_order')
+      .eq('plan_key', planKeyParam)
+      .eq('active', true)
+      .maybeSingle();
+    if (!error && data) return data;
+  }
+
+  // 2) fallback: primeiro ativo por sort_order
+  const { data, error } = await sb
+    .from('billing_plans')
+    .select('id,plan_key,name,price_cents,currency,active,sort_order')
+    .eq('active', true)
+    .order('sort_order', { ascending: true })
+    .limit(1);
+  if (error || !data?.length) return null;
+  return data[0];
+}
+
 (async function init(){
-  const cents = Number(CFG.PLANO_AMOUNT_CENTS || 0);
-  $("#planoNome").textContent = CFG.PLANO_NAME || "—";
-  $("#planoValor").textContent = cents>0 ? (cents/100).toFixed(2) : "—";
   $("#fnName").textContent = CFG.EDGE_FUNCTION_NAME || "—";
   $("#fnUrl").textContent = FUNCTIONS_URL || "(não deduzida)";
 
@@ -157,7 +183,22 @@ const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
   addBadge("MP_PUBLIC_KEY: " + (CFG.MP_PUBLIC_KEY?.startsWith("TEST-") ? "OK (teste)" : "⚠ verifique"), !!CFG.MP_PUBLIC_KEY);
   addBadge("Functions URL: " + (FUNCTIONS_URL ? "OK" : "ausente"), !!FUNCTIONS_URL);
 
-  if (!cents || cents<=0){ addBadge("PLANO_AMOUNT_CENTS = 0", false); showBanner("Você pode clicar em Pagar mesmo com 0 p/ ver o retorno da função.", "warn"); }
+  // Busca plano no DB
+  try {
+    CURRENT_PLAN = await fetchPlan();
+    if (!CURRENT_PLAN) {
+      showBanner("Plano não encontrado ou inativo.", "err");
+      addBadge("Plano: N/A", false);
+      return; // mantém botão pagar desabilitado
+    }
+    $("#planoNome").textContent = CURRENT_PLAN.name || CURRENT_PLAN.plan_key;
+    $("#planoValor").textContent = (Number(CURRENT_PLAN.price_cents || 0)/100).toFixed(2);
+    addBadge("Plano: " + (CURRENT_PLAN.plan_key || "?"), true);
+    document.getElementById('btnPagar').disabled = false;
+  } catch (e) {
+    console.error(e);
+    showBanner("Erro ao carregar planos (verifique RLS da tabela billing_plans).", "err");
+  }
 })();
 
 function buildHeaders(sessionAccessToken){
@@ -168,7 +209,7 @@ function buildHeaders(sessionAccessToken){
     "x-supabase-anon-key": CFG.SUPABASE_ANON_KEY
   };
   if (sessionAccessToken) h["Authorization"] = `Bearer ${sessionAccessToken}`;
-  if (CFG.DEV_MP_ACCESS_TOKEN) h["x-mp-token"] = CFG.DEV_MP_ACCESS_TOKEN; // DEV: passa o token do MP
+  if (CFG.DEV_SEND_CONFIG_TO_FUNCTION && CFG.DEV_MP_ACCESS_TOKEN) h["x-mp-token"] = CFG.DEV_MP_ACCESS_TOKEN; // DEV
   return h;
 }
 
@@ -206,7 +247,9 @@ document.getElementById('btnPingAuth').onclick = async ()=>{
 
 document.getElementById('btnPagar').onclick = async ()=>{
   logs.textContent = ""; resp.textContent = "";
-  const cents = Number(CFG.PLANO_AMOUNT_CENTS || 0);
+  if (!CURRENT_PLAN){ showBanner("Plano não carregado.", "warn"); return; }
+
+  const cents = Number(CURRENT_PLAN.price_cents || 0);
   if (!cents || cents<=0) showBanner("amount_cents=0 — a função deve responder 400. (ok para teste)","warn");
 
   try{
@@ -236,12 +279,12 @@ document.getElementById('btnPagar').onclick = async ()=>{
 
     const body = {
       mode: "card",
-      plan_key: CFG.PLANO_KEY || "basic",
+      plan_key: CURRENT_PLAN.plan_key,
       amount_cents: cents,
       card_token: token.id,
       payer: {
         name: document.getElementById('cardholder').value.trim(),
-        email: document.getElementById('payerEmail').value.trim(), // <- agora default válido
+        email: document.getElementById('payerEmail').value.trim(),
         cpf: document.getElementById('payerCPF').value.trim()
       },
       installments: Number(document.getElementById('installments').value || 1),
