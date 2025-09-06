@@ -173,6 +173,7 @@ IMask($('#cardCVV'), { mask: '000[0]' });
 let user=null, currentPlanKey='trial', plans=[];
 let CURRENT_PLAN=null;
 let LAST_CARD_TOKEN=null;
+let LAST_TOKEN_TS=0;
 
 document.getElementById('btnSair').onclick = async()=>{ await sb.auth.signOut(); location.href=CFG.SITE_URL||'index.html'; };
 document.getElementById('btnDiag').onclick = ()=>{ document.body.classList.toggle('show-diag'); };
@@ -234,7 +235,18 @@ document.getElementById('btnUnlock').onclick = ()=>{
   showBanner("Campos desbloqueados.", "ok");
 };
 
-/* ==== Diagnóstico extra ==== */
+/* ==== util: inspecionar token no backend ==== */
+async function inspectToken(tokenId){
+  const { data: { session } } = await sb.auth.getSession();
+  const r = await fetch(`${FUNCTIONS_URL}/mercado-pago-subscription`, {
+    method:"POST", headers: buildHeaders(session?.access_token),
+    body: JSON.stringify({ inspect_card_token: true, card_token: tokenId })
+  });
+  const txt = await r.text(); let j=null; try{ j = JSON.parse(txt) }catch{ j = { raw: txt } }
+  return { status: r.status, data: j };
+}
+
+/* ==== botões de diagnóstico ==== */
 document.getElementById('btnHealthSubs')?.addEventListener('click', async ()=>{
   if (logs) logs.textContent = ""; if (resp) resp.textContent = "";
   try{
@@ -265,19 +277,16 @@ document.getElementById('btnTestPost')?.addEventListener('click', async ()=>{
 });
 document.getElementById('btnInspectToken')?.addEventListener('click', async ()=>{
   if (!LAST_CARD_TOKEN){ showBanner("Gere o token primeiro (clique Pagar até a etapa de tokenizar).", "warn"); return; }
-  const { data: { session } } = await sb.auth.getSession(); if (!session) { showBanner("Sem sessão.", "warn"); return; }
-  const r = await fetch(`${FUNCTIONS_URL}/mercado-pago-subscription`, {
-    method:"POST",
-    headers: buildHeaders(session.access_token),
-    body: JSON.stringify({ inspect_card_token: true, card_token: LAST_CARD_TOKEN })
-  });
-  const t = await r.text(); let j=null; try{ j=JSON.parse(t)}catch{ j={raw:t} };
-  showResp({ inspect: j });
-  if (j?.status === 404) showBanner("Token não encontrado pelo backend (mismatch/expirado).", "err");
-  if (j?.status === 200) showBanner("Token OK no backend (200).", "ok");
+  const res = await inspectToken(LAST_CARD_TOKEN);
+  showResp({ inspect: res });
+  if (res?.data?.status === 404 || res?.data?.token_lookup?.message?.includes("could not get")) {
+    showBanner("Token não encontrado pelo backend (mismatch/expirado).", "err");
+  } else if (res?.data?.status === 200) {
+    showBanner("Token OK no backend (200).", "ok");
+  }
 });
 
-/* ==== Pagar ==== */
+/* ==== pagamento ==== */
 document.getElementById('btnPagar').onclick = async ()=>{
   if (logs) logs.textContent = ""; if (resp) resp.textContent = "";
   if (!CURRENT_PLAN){ showBanner("Escolha um plano antes de pagar.", "warn"); return; }
@@ -285,6 +294,7 @@ document.getElementById('btnPagar').onclick = async ()=>{
   if (!cents || cents<=0){ showBanner("Este plano não requer pagamento.", "warn"); return; }
 
   try{
+    // tokenizar SEMPRE que for pagar
     const [mm,yyyy] = ($('#cardExp').value||"").split("/");
     const payloadToken = {
       card_number: digitsOnly($('#cardNumber').value),
@@ -298,48 +308,94 @@ document.getElementById('btnPagar').onclick = async ()=>{
     });
     const tokTxt = await tokRes.text(); let token=null; try{ token = tokTxt?JSON.parse(tokTxt):null; }catch{ token={raw:tokTxt}; }
     if (!tokRes.ok || !token?.id){ showResp({ status: tokRes.status, data: token }); showBanner("Falha ao tokenizar cartão.", "err"); return; }
-    LAST_CARD_TOKEN = token.id; // guarda para o botão "Inspecionar token"
+    LAST_CARD_TOKEN = token.id; LAST_TOKEN_TS = Date.now();
 
     const { data: { session } } = await sb.auth.getSession();
     if (!session){ showBanner("Faça login antes de pagar.", "warn"); return; }
     const isRecurring = document.getElementById('recorrente').checked;
 
-    if (isRecurring) {
-      const recur = { frequency: CURRENT_PLAN.interval_length || 1, frequency_type: "months" };
-      const body = {
+    // helper: chama assinatura com auto-retry de token 1x
+    const trySubscription = async (cardToken) => {
+      const bodyBase = {
         plan_key: CURRENT_PLAN.plan_key,
-        card_token: token.id,
+        card_token: cardToken,
         payer: { email: $('#payerEmail').value.trim(), cpf: $('#payerCPF').value.trim(), name: $('#cardholder').value.trim() },
-        recur
+        recur: { frequency: CURRENT_PLAN.interval_length || 1, frequency_type: "months" }
       };
-      try {
-        const r = await fetch(`${FUNCTIONS_URL}/mercado-pago-subscription`, {
-          method:"POST", headers: buildHeaders(session.access_token), body: JSON.stringify(body)
+      const r = await fetch(`${FUNCTIONS_URL}/mercado-pago-subscription`, {
+        method:"POST", headers: buildHeaders(session.access_token), body: JSON.stringify(bodyBase)
+      });
+      const t = await r.text(); let j=null; try{ j=JSON.parse(t)}catch{ j={raw:t} };
+      return { ok: r.ok, status: r.status, data: j };
+    };
+
+    if (isRecurring) {
+      // 1) checa “idade” do token
+      const age = (Date.now() - LAST_TOKEN_TS)/1000;
+      if (age > 60) {
+        showBanner("Token antigo, gerando novamente…", "warn");
+        // re-tokeniza:
+        const tokRes2 = await fetch("https://api.mercadopago.com/v1/card_tokens?public_key=" + encodeURIComponent(CFG.MP_PUBLIC_KEY), {
+          method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payloadToken)
         });
-        const t = await r.text(); let j=null; try{ j=JSON.parse(t)}catch{ j={raw:t} };
-        showResp({ status:r.status, data:j });
-        if (r.ok && (j?.ok)) {
+        const tokTxt2 = await tokRes2.text(); let token2=null; try{ token2 = tokTxt2?JSON.parse(tokTxt2):null; }catch{ token2={raw:tokTxt2}; }
+        if (!tokRes2.ok || !token2?.id){ showResp({ status: tokRes2.status, data: token2 }); showBanner("Falha ao tokenizar novamente.", "err"); return; }
+        LAST_CARD_TOKEN = token2.id; LAST_TOKEN_TS = Date.now();
+      }
+
+      // 2) diagnostica o token AGORA
+      const diag = await inspectToken(LAST_CARD_TOKEN);
+      if (diag?.data?.status === 404 || diag?.data?.token_lookup?.message?.includes("could not get")) {
+        // token invisível pro backend: re-tokeniza UMA VEZ e tenta
+        showBanner("Atualizando token do cartão…", "warn");
+        const tokRes3 = await fetch("https://api.mercadopago.com/v1/card_tokens?public_key=" + encodeURIComponent(CFG.MP_PUBLIC_KEY), {
+          method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payloadToken)
+        });
+        const tokTxt3 = await tokRes3.text(); let token3=null; try{ token3 = tokTxt3?JSON.parse(tokTxt3):null; }catch{ token3={raw:tokTxt3}; }
+        if (!tokRes3.ok || !token3?.id){ showResp({ status: tokRes3.status, data: token3 }); showBanner("Falha ao atualizar token.", "err"); return; }
+        LAST_CARD_TOKEN = token3.id; LAST_TOKEN_TS = Date.now();
+      }
+
+      // 3) chama assinatura (pode já ser o token 3)
+      const r1 = await trySubscription(LAST_CARD_TOKEN);
+      showResp({ sub_try_1: r1 });
+      if (r1.ok && (r1.data?.ok)) {
+        showBanner("Assinatura criada com sucesso! Redirecionando…", "ok", 0);
+        setTimeout(()=>{ window.location.href = "dashboard.html"; }, 1000);
+      } else if ((r1.data?.status === 404 && String(r1.data?.provider?.message||'').toLowerCase().includes('card token')) ){
+        // 4) fallback extremo: re-tokeniza de novo e tenta uma ÚNICA vez
+        showBanner("Atualizando token e tentando novamente…", "warn");
+        const tokRes4 = await fetch("https://api.mercadopago.com/v1/card_tokens?public_key=" + encodeURIComponent(CFG.MP_PUBLIC_KEY), {
+          method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payloadToken)
+        });
+        const tokTxt4 = await tokRes4.text(); let token4=null; try{ token4 = tokTxt4?JSON.parse(tokTxt4):null; }catch{ token4={raw:tokTxt4}; }
+        if (!tokRes4.ok || !token4?.id){ showResp({ status: tokRes4.status, data: token4 }); showBanner("Falha ao gerar novo token.", "err"); return; }
+        LAST_CARD_TOKEN = token4.id; LAST_TOKEN_TS = Date.now();
+        const r2 = await trySubscription(LAST_CARD_TOKEN);
+        showResp({ sub_try_2: r2 });
+        if (r2.ok && (r2.data?.ok)) {
           showBanner("Assinatura criada com sucesso! Redirecionando…", "ok", 0);
           setTimeout(()=>{ window.location.href = "dashboard.html"; }, 1000);
         } else {
           showBanner("Não foi possível criar a assinatura.", "err");
         }
-      } catch (err) {
-        showResp({ network_error: true, message: String(err) });
-        showBanner("Falha de rede ao chamar a função.", "err");
+      } else {
+        // outro erro qualquer
+        showBanner("Não foi possível criar a assinatura.", "err");
       }
     } else {
+      // pagamento 1x (sem mudanças)
       const body = {
         mode: "card",
         plan_key: CURRENT_PLAN.plan_key,
         amount_cents: cents,
-        card_token: token.id,
+        card_token: LAST_CARD_TOKEN,
         payer: { name: $('#cardholder').value.trim(), email: $('#payerEmail').value.trim(), cpf: $('#payerCPF').value.trim() },
         installments: Number($('#installments').value || 1),
         payment_method_id: detectBrand($('#cardNumber').value)
       };
       const r = await fetch(`${FUNCTIONS_URL}/${CFG.EDGE_FUNCTION_NAME}`, {
-        method:"POST", headers: buildHeaders(session.access_token), body: JSON.stringify(body)
+        method:"POST", headers: buildHeaders((await sb.auth.getSession()).data.session.access_token), body: JSON.stringify(body)
       });
       const t = await r.text(); let j=null; try{ j=JSON.parse(t)}catch{ j={raw:t} };
       showResp({ status:r.status, data:j });
