@@ -20,6 +20,7 @@ window.CONFIG = {
   // === URLs do site
   SITE_URL:   "https://maior-margem-site.vercel.app",
   RETURN_URL: "https://maior-margem-site.vercel.app/retorno.html",
+  PUBLIC_SITE_URL: "https://maior-margem-site.vercel.app",
   
   // Plano em REAIS x100 (sem vírgula). Ex.: R$ 29,90 => 2990
   PLANO_KEY: "basic",
