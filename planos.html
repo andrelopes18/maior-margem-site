@@ -43,6 +43,8 @@
   .badge{font-size:12px;border:1px solid #2a3350;background:#0e1322;padding:4px 8px;border-radius:999px}
   .ok{color:#6ef06e}
   .sep{height:1px;background:#2a2a2a;margin:18px 0}
+
+  /* banners */
   .banner{border:1px solid #2a2a2a;border-radius:10px;padding:10px 12px;margin-bottom:14px;background:#111;display:none}
   .banner.warn{border-color:#5c3f00;background:#1b1300;color:#ffc966;display:block}
   .banner.ok{border-color:#214d21;background:#0e1a0e;color:#b7fbb7;display:block}
@@ -173,9 +175,16 @@
 /* ===== helpers base ===== */
 const CFG = window.CONFIG||{};
 let FUNCTIONS_URL = CFG.FUNCTIONS_URL;
-if (!FUNCTIONS_URL) { try { const ref = new URL(CFG.SUPABASE_URL).host.split(".")[0]; FUNCTIONS_URL = `https://${ref}.functions.supabase.co`; } catch {} }
+if (!FUNCTIONS_URL) {
+  try {
+    const ref = new URL(CFG.SUPABASE_URL).host.split(".")[0];
+    FUNCTIONS_URL = `https://${ref}.functions.supabase.co`;
+  } catch {}
+}
 
-const sb  = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+const sb  = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY,{
+  auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}
+});
 
 const $ = s=>document.querySelector(s);
 const planChip = $('#planChip'), cardsEl = $('#cards');
@@ -183,8 +192,20 @@ const checkoutEl = $('#checkout'), banner = $('#banner'), logs = $('#logs'), res
 
 function money(c){return (Number(c||0)/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
 function label(k){return (CFG.PLAN_LABELS||{})[k]||k.charAt(0).toUpperCase()+k.slice(1)}
-function addBadge(text, ok=false){ const b=document.createElement('span'); b.className='badge '+(ok?'ok':''); b.textContent=text; $('#badges').appendChild(b); }
-function showBanner(text, type='ok'){ banner.textContent=text; banner.className='banner '+(type==='warn'?'warn':type==='err'?'err':'ok'); }
+function addBadge(text, ok=false){
+  const b=document.createElement('span');
+  b.className='badge '+(ok?'ok':'');
+  b.textContent=text; $('#badges').appendChild(b);
+}
+/** Mostra banners; se autohideMs>0, some após o tempo. */
+function showBanner(text, type='ok', autohideMs=4200){
+  banner.textContent = text;
+  banner.className = 'banner ' + (type==='warn'?'warn':type==='err'?'err':'ok');
+  banner.style.display = 'block';
+  if (autohideMs>0){
+    setTimeout(()=>{ banner.style.display='none'; }, autohideMs);
+  }
+}
 function log(...args){
   if(!logs) return;
   const line=args.map(a=>{try{return typeof a==='string'?a:JSON.stringify(a,null,2);}catch{ return String(a);}}).join(" ");
@@ -196,7 +217,13 @@ function showResp(obj){
   try{ resp.textContent=JSON.stringify(obj,null,2);}catch{ resp.textContent=String(obj);}
 }
 function digitsOnly(s){ return (s||'').replace(/\D+/g,""); }
-function detectBrand(num){ const n=digitsOnly(num); if(n.startsWith('4'))return'visa'; if(n.startsWith('5'))return'master'; if(n.startsWith('34')||n.startsWith('37'))return'amex'; return undefined; }
+function detectBrand(num){
+  const n=digitsOnly(num);
+  if(n.startsWith('4'))return'visa';
+  if(n.startsWith('5'))return'master';
+  if(n.startsWith('34')||n.startsWith('37'))return'amex';
+  return undefined;
+}
 
 IMask($('#cardExp'), { mask: '00/0000' });
 IMask($('#cardNumber'), { mask: '0000 0000 0000 0000' });
@@ -220,7 +247,8 @@ document.getElementById('btnDiag').onclick = ()=>{
 /* ===== init sessão + planos ===== */
 (async function init(){
   // sessão
-  const {data:{session}}=await sb.auth.getSession(); if(!session){location.href=CFG.SITE_URL||'index.html';return}
+  const {data:{session}}=await sb.auth.getSession();
+  if(!session){location.href=CFG.SITE_URL||'index.html';return}
   user=session.user;
 
   // perfil atual
@@ -235,7 +263,7 @@ document.getElementById('btnDiag').onclick = ()=>{
   plans=(data||[]);
   renderCards();
 
-  // infos checkout (mostradas apenas se diagnóstico estiver aberto)
+  // infos checkout (diagnóstico)
   $('#fnName').textContent = CFG.EDGE_FUNCTION_NAME || "—";
   $('#fnUrl').textContent = FUNCTIONS_URL || "(não deduzida)";
   $('#contaEmail').textContent = user.email || "—";
@@ -371,13 +399,19 @@ document.getElementById('btnPagar').onclick = async ()=>{
     const t = await r.text(); let j=null; try{ j=JSON.parse(t)}catch{ j={raw:t} };
     showResp({ status:r.status, data:j });
 
+    // MUITO IMPORTANTE: parênteses para respeitar a precedência e evitar "falso positivo"
     if (r.ok && (j?.data?.ok || j?.ok)) {
-      showBanner("Pagamento processado. Atualizando seu plano…", "ok");
-      // refresh do chip com plano atual
+      // mensagem final e redirecionamento
+      showBanner("Pagamento concluído com sucesso! Redirecionando…", "ok", 0);
+
+      // refresh visual local (não depende do redirect, mas atualiza o chip caso o usuário demore a sair)
       const prof=await sb.from('profiles').select('plan').eq('id',session.user.id).maybeSingle();
       currentPlanKey=(prof.data?.plan||currentPlanKey);
       planChip.textContent=`Plano: ${label(currentPlanKey)}`;
       renderCards();
+
+      // redireciona após 1 segundo
+      setTimeout(()=>{ window.location.href = "dashboard.html"; }, 1000);
     } else {
       showBanner("Não foi possível concluir o pagamento.", "err");
     }
