@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Planos + Pagamento (Transparente)</title>
+<title>Planos</title>
 
 <!-- libs -->
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
@@ -47,8 +47,24 @@
   .banner.warn{border-color:#5c3f00;background:#1b1300;color:#ffc966;display:block}
   .banner.ok{border-color:#214d21;background:#0e1a0e;color:#b7fbb7;display:block}
   .banner.err{border-color:#5c1e1e;background:#190d0d;color:#ff9a9a;display:block}
+
+  /* Área de diagnósticos (oculta por padrão) */
+  .diag-only{display:none}
+  body.show-diag .diag-only{display:block}
+
   .log{white-space:pre-wrap;background:#0b0f1a;border:1px solid #1b2133;padding:12px;border-radius:8px;min-height:120px;max-height:240px;overflow:auto}
   small.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;opacity:.85}
+
+  /* Botão discreto de diagnóstico (flutuante) */
+  #btnDiag{
+    position:fixed;right:16px;bottom:16px;z-index:9999;
+    width:38px;height:38px;border-radius:999px;border:1px solid #2a2a2a;
+    background:#131313;color:#bdbdbd;opacity:.5;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;font-size:18px;line-height:1;
+    transition:opacity .2s, transform .1s;
+  }
+  #btnDiag:hover{opacity:.9}
+  #btnDiag:active{transform:scale(.98)}
 </style>
 </head>
 <body>
@@ -125,25 +141,33 @@
     <div class="stack" style="justify-content:space-between;align-items:center">
       <div class="stack">
         <button id="btnUnlock" class="btn">Desbloquear campos</button>
-        <button id="btnPingInvoke" class="btn ghost">Ping (invoke)</button>
-        <button id="btnPingAuth" class="btn ghost">Ping (auth)</button>
+
+        <!-- Botões de teste/diagnóstico: ficam ocultos no modo usuário -->
+        <button id="btnPingInvoke" class="btn ghost diag-only">Ping (invoke)</button>
+        <button id="btnPingAuth" class="btn ghost diag-only">Ping (auth)</button>
       </div>
-      <button id="btnPagar" class="btn" disabled>Pagar (checkout transparente)</button>
+      <button id="btnPagar" class="btn" disabled>Pagar</button>
     </div>
 
-    <div class="sep"></div>
-    <h3>Logs</h3>
-    <div id="logs" class="log"></div>
-    <div class="sep"></div>
-    <h3>Resposta</h3>
-    <div id="resp" class="log"></div>
+    <!-- Área de diagnósticos (Logs/Resposta) - oculta por padrão -->
+    <div class="diag-only">
+      <div class="sep"></div>
+      <h3>Logs</h3>
+      <div id="logs" class="log"></div>
+      <div class="sep"></div>
+      <h3>Resposta</h3>
+      <div id="resp" class="log"></div>
 
-    <div style="margin-top:6px">
-      <small class="mono">EDGE_FUNCTION_NAME: <span id="fnName">—</span></small> ·
-      <small class="mono">FUNCTIONS_URL: <span id="fnUrl">—</span></small>
+      <div style="margin-top:6px">
+        <small class="mono">EDGE_FUNCTION_NAME: <span id="fnName">—</span></small> ·
+        <small class="mono">FUNCTIONS_URL: <span id="fnUrl">—</span></small>
+      </div>
     </div>
   </section>
 </main>
+
+<!-- Botão discreto para abrir/fechar modo diagnóstico -->
+<button id="btnDiag" title="Modo diagnóstico (mostrar/ocultar)">⚙︎</button>
 
 <script>
 /* ===== helpers base ===== */
@@ -161,8 +185,16 @@ function money(c){return (Number(c||0)/100).toLocaleString('pt-BR',{style:'curre
 function label(k){return (CFG.PLAN_LABELS||{})[k]||k.charAt(0).toUpperCase()+k.slice(1)}
 function addBadge(text, ok=false){ const b=document.createElement('span'); b.className='badge '+(ok?'ok':''); b.textContent=text; $('#badges').appendChild(b); }
 function showBanner(text, type='ok'){ banner.textContent=text; banner.className='banner '+(type==='warn'?'warn':type==='err'?'err':'ok'); }
-function log(...args){ const line=args.map(a=>{try{return typeof a==='string'?a:JSON.stringify(a,null,2);}catch{ return String(a);}}).join(" "); logs.textContent+=(logs.textContent? "\n":"")+line; logs.scrollTop=logs.scrollHeight; }
-function showResp(obj){ try{ resp.textContent=JSON.stringify(obj,null,2);}catch{ resp.textContent=String(obj);} }
+function log(...args){
+  if(!logs) return;
+  const line=args.map(a=>{try{return typeof a==='string'?a:JSON.stringify(a,null,2);}catch{ return String(a);}}).join(" ");
+  logs.textContent+=(logs.textContent? "\n":"")+line;
+  logs.scrollTop=logs.scrollHeight;
+}
+function showResp(obj){
+  if(!resp) return;
+  try{ resp.textContent=JSON.stringify(obj,null,2);}catch{ resp.textContent=String(obj);}
+}
 function digitsOnly(s){ return (s||'').replace(/\D+/g,""); }
 function detectBrand(num){ const n=digitsOnly(num); if(n.startsWith('4'))return'visa'; if(n.startsWith('5'))return'master'; if(n.startsWith('34')||n.startsWith('37'))return'amex'; return undefined; }
 
@@ -174,9 +206,18 @@ IMask($('#cardCVV'), { mask: '000[0]' });
 let user=null, currentPlanKey='trial', plans=[];
 let CURRENT_PLAN=null; // plano selecionado para o checkout
 
-/* ===== init sessão + planos ===== */
-document.getElementById('btnSair').onclick = async()=>{await sb.auth.signOut();location.href=CFG.SITE_URL||'index.html'};
+/* ===== sair ===== */
+document.getElementById('btnSair').onclick = async()=>{
+  await sb.auth.signOut();
+  location.href=CFG.SITE_URL||'index.html';
+};
 
+/* ===== botão diagnóstico (toggle) ===== */
+document.getElementById('btnDiag').onclick = ()=>{
+  document.body.classList.toggle('show-diag');
+};
+
+/* ===== init sessão + planos ===== */
 (async function init(){
   // sessão
   const {data:{session}}=await sb.auth.getSession(); if(!session){location.href=CFG.SITE_URL||'index.html';return}
@@ -194,7 +235,7 @@ document.getElementById('btnSair').onclick = async()=>{await sb.auth.signOut();l
   plans=(data||[]);
   renderCards();
 
-  // badges/infos checkout
+  // infos checkout (mostradas apenas se diagnóstico estiver aberto)
   $('#fnName').textContent = CFG.EDGE_FUNCTION_NAME || "—";
   $('#fnUrl').textContent = FUNCTIONS_URL || "(não deduzida)";
   $('#contaEmail').textContent = user.email || "—";
@@ -206,7 +247,6 @@ document.getElementById('btnSair').onclick = async()=>{await sb.auth.signOut();l
 
 function renderCards(){
   cardsEl.innerHTML='';
-  // ordem canônica
   const order=['trial','basico','intermediario','premium'];
   for(const k of order){
     const p=plans.find(x=>String(x.plan_key).toLowerCase()===k); if(!p) continue;
@@ -233,10 +273,8 @@ function openCheckout(plan){
   CURRENT_PLAN = plan;
   $('#planoNome').textContent = plan?.name || plan?.plan_key || '—';
   $('#planoValor').textContent = (Number(plan?.price_cents||0)/100).toFixed(2);
-  // habilita painel
   checkoutEl.style.display = 'block';
   document.getElementById('btnPagar').disabled = false;
-  // rola até o checkout
   checkoutEl.scrollIntoView({behavior:'smooth', block:'start'});
 }
 
@@ -260,8 +298,9 @@ document.getElementById('btnUnlock').onclick = ()=>{
   showBanner("Campos desbloqueados.", "ok");
 };
 
+/* Pings (apenas visíveis no modo diagnóstico) */
 document.getElementById('btnPingInvoke').onclick = async ()=>{
-  logs.textContent = ""; resp.textContent = "";
+  if (logs) logs.textContent = ""; if (resp) resp.textContent = "";
   const { data, error } = await sb.functions.invoke(CFG.EDGE_FUNCTION_NAME, {
     body: { ping: true },
     headers: buildHeaders(null)
@@ -270,7 +309,7 @@ document.getElementById('btnPingInvoke').onclick = async ()=>{
 };
 
 document.getElementById('btnPingAuth').onclick = async ()=>{
-  logs.textContent = ""; resp.textContent = "";
+  if (logs) logs.textContent = ""; if (resp) resp.textContent = "";
   const { data: { session } } = await sb.auth.getSession();
   if (!session){ showResp({error:"Sem sessão"}); return; }
   const url = `${FUNCTIONS_URL}/${CFG.EDGE_FUNCTION_NAME}`;
@@ -279,7 +318,7 @@ document.getElementById('btnPingAuth').onclick = async ()=>{
 };
 
 document.getElementById('btnPagar').onclick = async ()=>{
-  logs.textContent = ""; resp.textContent = "";
+  if (logs) logs.textContent = ""; if (resp) resp.textContent = "";
   if (!CURRENT_PLAN){ showBanner("Escolha um plano antes de pagar.", "warn"); return; }
 
   const cents = Number(CURRENT_PLAN.price_cents || 0);
@@ -303,7 +342,7 @@ document.getElementById('btnPagar').onclick = async ()=>{
       method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payloadToken)
     });
     const tokTxt = await tokRes.text(); let token=null; try{ token = tokTxt?JSON.parse(tokTxt):null; }catch{ token={raw:tokTxt}; }
-    if (!tokRes.ok || !token?.id){ showResp({ status: tokRes.status, data: token }); return; }
+    if (!tokRes.ok || !token?.id){ showResp({ status: tokRes.status, data: token }); showBanner("Falha ao tokenizar cartão.", "err"); return; }
     log("Card token:", token);
 
     // chama função com Authorization da sessão
@@ -332,15 +371,20 @@ document.getElementById('btnPagar').onclick = async ()=>{
     const t = await r.text(); let j=null; try{ j=JSON.parse(t)}catch{ j={raw:t} };
     showResp({ status:r.status, data:j });
 
-    if (r.ok && j?.data?.ok || j?.ok) {
+    if (r.ok && (j?.data?.ok || j?.ok)) {
       showBanner("Pagamento processado. Atualizando seu plano…", "ok");
       // refresh do chip com plano atual
       const prof=await sb.from('profiles').select('plan').eq('id',session.user.id).maybeSingle();
       currentPlanKey=(prof.data?.plan||currentPlanKey);
       planChip.textContent=`Plano: ${label(currentPlanKey)}`;
       renderCards();
+    } else {
+      showBanner("Não foi possível concluir o pagamento.", "err");
     }
-  }catch(e){ showResp({ name:e.name, message:e.message, stack:e.stack }); }
+  }catch(e){
+    showResp({ name:e.name, message:e.message, stack:e.stack });
+    showBanner("Erro inesperado no pagamento.", "err");
+  }
 };
 </script>
 </body>
