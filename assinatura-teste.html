@@ -23,6 +23,9 @@
     .tag{display:inline-block;padding:2px 8px;border-radius:999px;background:#0e171f;border:1px solid var(--border);color:#9fb3c8;font-size:12px}
     .ok{color:#86efac}.bad{color:#fca5a5}
   </style>
+
+  <!-- IMPORTA EXATAMENTE COMO VOCÊ PEDIU -->
+  <script src="./config.js"></script>
 </head>
 <body>
   <header>
@@ -62,7 +65,7 @@
         <button id="btn_health_auth" class="secondary">GET /health-subscription (401 esperado)</button>
       </div>
       <div style="font-size:12px;color:#9fb3c8;margin-top:6px">
-        Se você tem <code>window.CONFIG</code> (do seu planos.html), os campos serão preenchidos automaticamente.
+        Estes campos já são preenchidos a partir do <code>window.CONFIG</code> carregado do <b>./config.js</b>.
       </div>
     </section>
 
@@ -159,9 +162,9 @@
     const money = c=> (c/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 
     // Banner de vida
-    $("#banner").innerHTML = "<b class='ok'>✅ JS carregado</b> — preencha as Configurações e teste.";
+    $("#banner").innerHTML = "<b class='ok'>✅ JS carregado</b> — config via <code>./config.js</code> e/ou campos abaixo.";
 
-    // Config
+    // Carrega config do window.CONFIG vindo do ./config.js
     function loadCfg(){
       const w = window.CONFIG || {};
       const stored = JSON.parse(localStorage.getItem("subtest_cfg")||"{}");
@@ -277,7 +280,7 @@
       wrap.querySelectorAll(".btn-sub").forEach(b=>{
         b.addEventListener("click", ()=> {
           const pk = b.getAttribute("data-plan");
-          const preId = $(`#pre_${pk}`).value.trim();
+          const preId = document.querySelector(`#pre_${pk}`).value.trim();
           createSubscription(pk, preId);
         });
       });
@@ -360,7 +363,7 @@
 
     // Boot
     (async function boot(){
-      const cfg = loadCfg();
+      const cfg = loadCfg(); // <- lê window.CONFIG de ./config.js
       // se tiver Supabase config, cria client
       if (cfg.SUPABASE_URL && cfg.SUPABASE_ANON){
         ensureSupa(cfg);
@@ -370,7 +373,7 @@
         if (!got.ok) log("Usando fallback de planos.");
         renderPlans(rows);
       } else {
-        log("Sem SUPABASE_URL/ANON: carregando fallback de planos.");
+        log("Sem SUPABASE_URL/ANON no config: carregando fallback de planos.");
         renderPlans(fallbackPlans());
       }
     })();
