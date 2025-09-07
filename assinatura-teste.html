@@ -2,175 +2,194 @@
 <html lang="pt-br">
 <head>
   <meta charset="utf-8" />
-  <title>Teste de Assinatura Mercado Pago</title>
+  <title>Teste de Assinaturas (Preapproval) — Planos</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    body { font-family: system-ui, Arial; max-width: 720px; margin: 20px auto; }
+    :root {
+      --bg:#0b0f14; --card:#10161d; --muted:#7a8a9a; --text:#e6eef6; --accent:#22c55e; --accent-2:#16a34a; --warn:#f59e0b; --danger:#ef4444; --border:#1f2a37;
+    }
+    *{ box-sizing:border-box }
+    body { margin:0; background:var(--bg); color:var(--text); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial; }
+    header { padding:20px; border-bottom:1px solid var(--border); background:linear-gradient(180deg,#0d1218,#0b0f14); position:sticky; top:0; z-index:10; }
+    h1 { margin:0 0 6px 0; font-size:20px; }
+    .subtitle { color:var(--muted); font-size:13px; }
+    main { max-width:1050px; margin:24px auto; padding:0 16px 48px; }
+    .grid { display:grid; grid-template-columns: repeat(12, 1fr); gap:16px; }
+    .col-12{ grid-column: span 12; }
+    .col-6{ grid-column: span 6; }
+    .col-4{ grid-column: span 4; }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:16px; }
+    .card h3 { margin:0 0 8px; font-size:18px; }
+    .muted { color:var(--muted); font-size:13px; }
     .row { display:flex; gap:12px; }
-    .row > div { flex:1; }
-    input, button, select { font-size:16px; padding:10px; width:100%; }
-    pre { background:#111; color:#0f0; padding:12px; overflow:auto; }
-    .hint { font-size: 14px; color: #666; }
+    .row > * { flex:1; }
+    label { display:block; font-size:13px; color:var(--muted); margin-bottom:6px; }
+    input, select, button, textarea {
+      width:100%; padding:10px 12px; font-size:15px; color:var(--text);
+      background:#0e141a; border:1px solid var(--border); border-radius:10px; outline:none;
+    }
+    input::placeholder, textarea::placeholder { color:#5f7286; }
+    button { background:var(--accent); border:none; color:#052e16; font-weight:600; cursor:pointer; transition:filter .15s ease; }
+    button:hover { filter:brightness(1.05); }
+    button.secondary { background:#11161c; color:var(--text); border:1px solid var(--border); }
+    button.warn { background:var(--warn); color:#3b2c02; }
+    button.danger { background:var(--danger); color:#3b0b0b; }
+    .plans { display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:16px; }
+    .price { font-size:28px; font-weight:800; color:#d1fae5; }
+    .small { font-size:12px; color:var(--muted); }
+    .kvs { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+    .kv { font-size:12px; background:#0d141a; border:1px solid var(--border); padding:6px 8px; border-radius:8px; color:#c3d4e5; }
+    .hl-ok { color:#86efac; }
+    .hl-bad { color:#fca5a5; }
+    .tag { display:inline-block; padding:2px 8px; border-radius:999px; background:#0e171f; border:1px solid var(--border); color:#9fb3c8; font-size:12px; }
+    .footer-note { color:var(--muted); font-size:12px; margin-top:10px; }
+    pre { background:#0a0f13; border:1px solid var(--border); border-radius:12px; padding:12px; overflow:auto; max-height:420px; }
+    .flex { display:flex; gap:10px; align-items:center; }
+    .right { text-align:right; }
+    .pill { display:inline-flex; gap:6px; align-items:center; padding:6px 10px; border-radius:999px; background:#0e171f; border:1px solid var(--border); color:#a7c0d8; font-size:12px; }
+    .sep { height:1px; background:var(--border); margin:12px 0; }
+    @media (max-width: 900px){
+      .col-6, .col-4 { grid-column: span 12; }
+    }
   </style>
 </head>
 <body>
-  <h1>Assinatura — Teste</h1>
+  <header>
+    <h1>Teste de Assinaturas — usando os dados de <span class="tag">billing_plans</span></h1>
+    <div class="subtitle">Gera <b>card_token</b> com MP_PUBLIC_KEY, cria <b>preapproval</b> na Edge Function e usa <b>external_reference</b> = <code>userId|planKey</code>.</div>
+  </header>
 
-  <!-- Substitua pela tua PUBLIC KEY de testes/produção -->
-  <label>MP_PUBLIC_KEY</label>
-  <input id="pk" placeholder="TEST-xxxxxxxxxxxxxxxxxxxxx" />
+  <main>
+    <!-- CONFIG -->
+    <section class="card">
+      <h3>Configurações</h3>
+      <div class="grid">
+        <div class="col-6">
+          <label>SUPABASE_URL</label>
+          <input id="cfg_supabase_url" placeholder="https://xxxxxx.supabase.co" />
+        </div>
+        <div class="col-6">
+          <label>SUPABASE_ANON_KEY</label>
+          <input id="cfg_supabase_key" placeholder="eyJhbGciOi..." />
+        </div>
+        <div class="col-6">
+          <label>MP_PUBLIC_KEY (mesma conta do ACCESS_TOKEN)</label>
+          <input id="cfg_mp_pk" placeholder="TEST-xxxxxxxxxxxxxxxxxxxxxxxx" />
+        </div>
+        <div class="col-6">
+          <label>URL da Edge Function (base)</label>
+          <input id="cfg_edge" placeholder="https://<PROJECT_REF>.functions.supabase.co/mercado-pago-subscription" />
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <button id="btn_save_cfg" class="secondary">Salvar config</button>
+        <button id="btn_health">GET /health</button>
+        <button id="btn_health_auth" class="secondary">GET /health-subscription (requer bearer)</button>
+      </div>
+      <div class="footer-note">
+        Se você já tem <code>window.CONFIG</code> na página (mesmo arquivo do planos.html), estes campos serão preenchidos automaticamente. Caso contrário, preencha manualmente e clique em <b>Salvar config</b>.
+      </div>
+    </section>
 
-  <div class="row">
-    <div>
-      <label>Payer e-mail</label>
-      <input id="payer_email" placeholder="email@exemplo.com" />
-    </div>
-    <div>
-      <label>Plan ID (preapproval_plan_id)</label>
-      <input id="plan_id" placeholder="PLN-xxxxxxxxxxxxxxxxxxxx" />
-    </div>
-  </div>
+    <!-- USER -->
+    <section class="card" style="margin-top:16px;">
+      <h3>Usuário</h3>
+      <div class="grid">
+        <div class="col-6">
+          <label>Usuário logado (ID)</label>
+          <input id="user_id" placeholder="Será preenchido via Supabase Auth" />
+        </div>
+        <div class="col-6">
+          <label>E-mail do pagador (payer_email)</label>
+          <input id="payer_email" placeholder="email@exemplo.com" />
+        </div>
+      </div>
+      <div class="footer-note">Autentique-se como faz no <b>planos.html</b>. Esta página usa o mesmo Supabase Auth para preencher <b>user_id</b> e <b>payer_email</b>.</div>
+    </section>
 
-  <div class="row">
-    <div>
-      <label>Número do cartão (teste)</label>
-      <input id="card_number" placeholder="5031 4332 1540 6351" />
-    </div>
-    <div>
-      <label>CVV</label>
-      <input id="cvv" placeholder="123" />
-    </div>
-  </div>
+    <!-- PLANS -->
+    <section class="card" style="margin-top:16px;">
+      <div class="flex" style="justify-content:space-between;">
+        <h3>Planos (carregados de billing_plans)</h3>
+        <div class="pill"><span id="plans_count">0</span> planos</div>
+      </div>
+      <div class="plans" id="plans"></div>
+      <div class="footer-note">Se a leitura da tabela falhar (RLS, etc.), uma lista local de fallback será carregada.</div>
+    </section>
 
-  <div class="row">
-    <div>
-      <label>Mês exp.</label>
-      <input id="exp_month" placeholder="11" />
-    </div>
-    <div>
-      <label>Ano exp. (YYYY)</label>
-      <input id="exp_year" placeholder="2030" />
-    </div>
-  </div>
+    <!-- CARD DATA -->
+    <section class="card" style="margin-top:16px;">
+      <h3>Cartão (apenas para teste — use dados de cartão de teste do MP)</h3>
+      <div class="grid">
+        <div class="col-6">
+          <label>Número do cartão</label>
+          <input id="card_number" placeholder="5031 4332 1540 6351" />
+        </div>
+        <div class="col-3">
+          <label>Mês exp.</label>
+          <input id="exp_month" placeholder="11" />
+        </div>
+        <div class="col-3">
+          <label>Ano exp. (YYYY)</label>
+          <input id="exp_year" placeholder="2030" />
+        </div>
+        <div class="col-6">
+          <label>Nome impresso</label>
+          <input id="card_name" placeholder="JOAO SILVA" />
+        </div>
+        <div class="col-3">
+          <label>CVV</label>
+          <input id="cvv" placeholder="123" />
+        </div>
+        <div class="col-3">
+          <label>Token gerado</label>
+          <input id="card_token" placeholder="Será preenchido ao gerar" />
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <button id="btn_token">Gerar card_token</button>
+        <button id="btn_inspect" class="secondary">Inspecionar token</button>
+      </div>
+      <div class="footer-note">O token expira rapidamente. Gere e crie a assinatura em seguida. O <b>MP_PUBLIC_KEY</b> deve ser da mesma conta do <b>ACCESS_TOKEN</b> no backend.</div>
+    </section>
 
-  <div class="row">
-    <div>
-      <label>Nome impresso</label>
-      <input id="card_name" placeholder="JOAO SILVA" />
-    </div>
-    <div>
-      <label>CPF (opcional p/ customer)</label>
-      <input id="cpf" placeholder="12345678901" />
-    </div>
-  </div>
+    <!-- LOGS -->
+    <section class="card" style="margin-top:16px;">
+      <div class="flex" style="justify-content:space-between;">
+        <h3>Logs</h3>
+        <div class="row" style="max-width:420px;">
+          <button id="btn_clear_log" class="secondary">Limpar</button>
+          <button id="btn_copy_log" class="secondary">Copiar</button>
+        </div>
+      </div>
+      <pre id="log"></pre>
+    </section>
+  </main>
 
-  <div class="row">
-    <div>
-      <label>External Reference (userId|planKey)</label>
-      <input id="external_reference" placeholder="00000000-0000-0000-0000-000000000000|premium" />
-    </div>
-    <div>
-      <label>Back URL (opcional)</label>
-      <input id="back_url" placeholder="https://teusite.com/retorno" />
-    </div>
-  </div>
-
-  <div class="row">
-    <div>
-      <label>URL da Edge Function</label>
-      <input id="edge_url" placeholder="https://<PROJECT_REF>.functions.supabase.co/mercado-pago-subscription" />
-    </div>
-  </div>
-
-  <p class="hint">
-    Dica: use os cartões de teste do Mercado Pago no ambiente de homologação. <br/>
-    O token expira rapidamente — gere e envie logo em seguida.
-  </p>
-
-  <button id="btn">Criar assinatura</button>
-
-  <h3>Resposta</h3>
-  <pre id="out"></pre>
-
-<script>
-async function main() {
-  const out = document.getElementById("out");
-  const btn = document.getElementById("btn");
-
-  btn.addEventListener("click", async () => {
-    out.textContent = "Gerando token...";
-    try {
-      const pk = document.getElementById("pk").value.trim();
-      if (!pk) { out.textContent = "Informe MP_PUBLIC_KEY"; return; }
-
-      // 1) Gerar card_token no front
-      // Usando a API pública REST de tokens:
-      // OBS: Em produção, prefira o CardForm/Bricks. Aqui é simples para teste.
-      const card_number = document.getElementById("card_number").value.replace(/\s+/g,'');
-      const cvv = document.getElementById("cvv").value.trim();
-      const exp_month = Number(document.getElementById("exp_month").value);
-      const exp_year  = Number(document.getElementById("exp_year").value);
-      const card_name = document.getElementById("card_name").value.trim();
-
-      // BIN (6)
-      const bin = card_number.slice(0,6);
-
-      // A API de token exige `public_key` como query
-      const tokenRes = await fetch(`https://api.mercadopago.com/v1/card_tokens?public_key=${encodeURIComponent(pk)}`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          card_number,
-          security_code: cvv,
-          expiration_month: exp_month,
-          expiration_year: exp_year,
-          cardholder: { name: card_name },
-        })
-      });
-
-      const tokenData = await tokenRes.json();
-      if (!tokenRes.ok || !tokenData?.id) {
-        out.textContent = "Falha ao gerar token:\n" + JSON.stringify({ status: tokenRes.status, tokenData }, null, 2);
-        return;
-      }
-
-      const card_token = tokenData.id;
-
-      out.textContent = "Token gerado: " + card_token + "\nCriando assinatura...";
-
-      const edgeBase = document.getElementById("edge_url").value.replace(/\/+$/,'');
-      const payer_email = document.getElementById("payer_email").value.trim();
-      const plan_id = document.getElementById("plan_id").value.trim();
-      const external_reference = document.getElementById("external_reference").value.trim();
-      const back_url = document.getElementById("back_url").value.trim();
-      const cpf = document.getElementById("cpf").value.trim();
-
-      // 2) Chamar tua Edge Function
-      const subRes = await fetch(`${edgeBase}/subscription/create`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          payer_email,
-          preapproval_plan_id: plan_id || undefined,
-          // se não tiver plan_id, você poderia mandar auto_recurring:
-          // auto_recurring: { frequency: 1, frequency_type: "months", transaction_amount: 129.90, currency_id: "BRL" },
-          card_token,
-          external_reference: external_reference || undefined,
-          back_url: back_url || undefined,
-          first_name: card_name.split(" ")[0] || undefined,
-          last_name: card_name.split(" ").slice(1).join(" ") || undefined,
-          identification: cpf ? { type: "CPF", number: cpf } : undefined
-        })
-      });
-
-      const subData = await subRes.json();
-      out.textContent = JSON.stringify({ status: subRes.status, subData }, null, 2);
-    } catch (e) {
-      out.textContent = "Erro inesperado: " + String(e);
+  <!-- libs -->
+  <script type="module" src="https://esm.sh/@supabase/supabase-js@2.45.4"></script>
+  <script>
+    // ========= Helpers UI/Log =========
+    const $ = sel => document.querySelector(sel);
+    function log(...args){ const el=$("#log"); el.textContent += args.map(a => typeof a==='string'?a:JSON.stringify(a,null,2)).join(" ") + "\n"; el.scrollTop = el.scrollHeight; }
+    function moneyBRL(cents){ return (cents/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
+    function saveCfg(){
+      const cfg = {
+        SUPABASE_URL: $("#cfg_supabase_url").value.trim(),
+        SUPABASE_ANON_KEY: $("#cfg_supabase_key").value.trim(),
+        MP_PUBLIC_KEY: $("#cfg_mp_pk").value.trim(),
+        EDGE_BASE: $("#cfg_edge").value.trim().replace(/\/+$/,'')
+      };
+      localStorage.setItem("subtest_cfg", JSON.stringify(cfg));
+      log("Config salva.");
+      return cfg;
     }
-  });
-}
-main();
-</script>
-</body>
-</html>
+    function loadCfg(){
+      const fromWindow = (window.CONFIG || {});
+      const stored = JSON.parse(localStorage.getItem("subtest_cfg")||"{}");
+      const cfg = {
+        SUPABASE_URL: stored.SUPABASE_URL || fromWindow.SUPABASE_URL || "",
+        SUPABASE_ANON_KEY: stored.SUPABASE_ANON_KEY || fromWindow.SUPABASE_ANON_KEY || fromWindow.SUPABASE_ANON || "",
+        MP_PUBLIC_KEY: stored.MP_PUBLIC_KEY || fromWindow.MP_PUBLIC_KEY || "",
+        EDGE_BASE: stored.EDGE_BASE || (fromWindow.EDGE_SUBS_BASE || "") || ""
+      };
