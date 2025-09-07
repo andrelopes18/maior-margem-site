@@ -261,66 +261,14 @@ let loadingMore = false;
 let suppressGeneralChange = false;
 const generalChkMap = new Map();
 
-/* ======== SINGLE-SESSION (sessão única por usuário) ======== */
-const SESSION_HEARTBEAT_MS = 30_000;     // 30s
-const SESSION_LIVE_WINDOW_MS = 90_000;   // 90s
-const SESSION_ID = (crypto?.randomUUID?.() || Math.random().toString(36).slice(2));
-
-async function ensureSingleSession(session) {
-  const userId = session.user.id;
-  const now = new Date();
-
-  // Lê/Cria registro
-  const { data: existing, error: selErr } = await sb
-    .from('active_sessions')
-    .select('user_id, session_id, last_seen')
-    .eq('user_id', userId)
-    .maybeSingle();
-
-  if (existing) {
-    const isLive = new Date(existing.last_seen).getTime() >= (now.getTime() - SESSION_LIVE_WINDOW_MS);
-    const isSame = existing.session_id === SESSION_ID;
-
-    if (isLive && !isSame) {
-      alert('Esta conta já está conectada em outro dispositivo/aba. Feche a outra sessão para continuar.');
-      try { await sb.auth.signOut(); } catch {}
-      window.location.href = CFG.SITE_URL || 'index.html';
-      return false;
-    }
-    const { error: upErr } = await sb
-      .from('active_sessions')
-      .update({ session_id: SESSION_ID, last_seen: new Date().toISOString() })
-      .eq('user_id', userId);
-    if (upErr) console.error('active_sessions update err:', upErr);
-  } else {
-    const { error: insErr } = await sb
-      .from('active_sessions')
-      .insert({ user_id: userId, session_id: SESSION_ID, last_seen: new Date().toISOString() });
-    if (insErr) console.error('active_sessions insert err:', insErr);
-  }
-
-  // Heartbeat
-  setInterval(async () => {
-    await sb.from('active_sessions')
-      .update({ last_seen: new Date().toISOString() })
-      .eq('user_id', userId)
-      .eq('session_id', SESSION_ID);
-  }, SESSION_HEARTBEAT_MS);
-
-  // Limpeza best-effort
-  async function cleanup() {
-    try {
-      await sb.from('active_sessions')
-        .delete()
-        .eq('user_id', userId)
-        .eq('session_id', SESSION_ID);
-    } catch {}
-  }
-  window.addEventListener('beforeunload', cleanup);
-  window.addEventListener('unload', cleanup);
-
-  return true;
-}
+/* ======== (REMOVIDO) SINGLE-SESSION ======== */
+/*  Removidos:
+    - const SESSION_HEARTBEAT_MS
+    - const SESSION_LIVE_WINDOW_MS
+    - const SESSION_ID
+    - async function ensureSingleSession(session) { ... }
+    - chamadas a ensureSingleSession e limpezas na tabela active_sessions
+*/
 
 /* ======== FUNÇÕES UTIL ======== */
 function setStatus(t){ statusEl.textContent = t || ''; }
@@ -745,11 +693,6 @@ async function loadHeaderInfo(){
 /* ======== SAIR ======== */
 btnSair.addEventListener('click', async () => {
   try {
-    const { data: { session } } = await sb.auth.getSession();
-    const uid = session?.user?.id;
-    if (uid) {
-      await sb.from('active_sessions').delete().eq('user_id', uid).eq('session_id', SESSION_ID);
-    }
     await sb.auth.signOut();
   } catch (e) {
     console.error('Erro ao sair:', e);
@@ -763,12 +706,8 @@ btnSair.addEventListener('click', async () => {
 (async function init(){
   const session = await loadHeaderInfo(); if (!session) return;
 
-  // Política de logout por virada de dia
+  // Política de logout por virada de dia (mantida)
   enforceDayBoundaryLogout();
-
-  // Sessão única
-  const ok = await ensureSingleSession(session);
-  if (!ok) return;
 
   // Filtros vazios
   currentEanQ = '';
