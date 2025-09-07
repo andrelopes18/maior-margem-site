@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <title>Teste de Assinatura Mercado Pago</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: system-ui, Arial; max-width: 720px; margin: 20px auto; }
+    .row { display:flex; gap:12px; }
+    .row > div { flex:1; }
+    input, button, select { font-size:16px; padding:10px; width:100%; }
+    pre { background:#111; color:#0f0; padding:12px; overflow:auto; }
+    .hint { font-size: 14px; color: #666; }
+  </style>
+</head>
+<body>
+  <h1>Assinatura — Teste</h1>
+
+  <!-- Substitua pela tua PUBLIC KEY de testes/produção -->
+  <label>MP_PUBLIC_KEY</label>
+  <input id="pk" placeholder="TEST-xxxxxxxxxxxxxxxxxxxxx" />
+
+  <div class="row">
+    <div>
+      <label>Payer e-mail</label>
+      <input id="payer_email" placeholder="email@exemplo.com" />
+    </div>
+    <div>
+      <label>Plan ID (preapproval_plan_id)</label>
+      <input id="plan_id" placeholder="PLN-xxxxxxxxxxxxxxxxxxxx" />
+    </div>
+  </div>
+
+  <div class="row">
+    <div>
+      <label>Número do cartão (teste)</label>
+      <input id="card_number" placeholder="5031 4332 1540 6351" />
+    </div>
+    <div>
+      <label>CVV</label>
+      <input id="cvv" placeholder="123" />
+    </div>
+  </div>
+
+  <div class="row">
+    <div>
+      <label>Mês exp.</label>
+      <input id="exp_month" placeholder="11" />
+    </div>
+    <div>
+      <label>Ano exp. (YYYY)</label>
+      <input id="exp_year" placeholder="2030" />
+    </div>
+  </div>
+
+  <div class="row">
+    <div>
+      <label>Nome impresso</label>
+      <input id="card_name" placeholder="JOAO SILVA" />
+    </div>
+    <div>
+      <label>CPF (opcional p/ customer)</label>
+      <input id="cpf" placeholder="12345678901" />
+    </div>
+  </div>
+
+  <div class="row">
+    <div>
+      <label>External Reference (userId|planKey)</label>
+      <input id="external_reference" placeholder="00000000-0000-0000-0000-000000000000|premium" />
+    </div>
+    <div>
+      <label>Back URL (opcional)</label>
+      <input id="back_url" placeholder="https://teusite.com/retorno" />
+    </div>
+  </div>
+
+  <div class="row">
+    <div>
+      <label>URL da Edge Function</label>
+      <input id="edge_url" placeholder="https://<PROJECT_REF>.functions.supabase.co/mercado-pago-subscription" />
+    </div>
+  </div>
+
+  <p class="hint">
+    Dica: use os cartões de teste do Mercado Pago no ambiente de homologação. <br/>
+    O token expira rapidamente — gere e envie logo em seguida.
+  </p>
+
+  <button id="btn">Criar assinatura</button>
+
+  <h3>Resposta</h3>
+  <pre id="out"></pre>
+
+<script>
+async function main() {
+  const out = document.getElementById("out");
+  const btn = document.getElementById("btn");
+
+  btn.addEventListener("click", async () => {
+    out.textContent = "Gerando token...";
+    try {
+      const pk = document.getElementById("pk").value.trim();
+      if (!pk) { out.textContent = "Informe MP_PUBLIC_KEY"; return; }
+
+      // 1) Gerar card_token no front
+      // Usando a API pública REST de tokens:
+      // OBS: Em produção, prefira o CardForm/Bricks. Aqui é simples para teste.
+      const card_number = document.getElementById("card_number").value.replace(/\s+/g,'');
+      const cvv = document.getElementById("cvv").value.trim();
+      const exp_month = Number(document.getElementById("exp_month").value);
+      const exp_year  = Number(document.getElementById("exp_year").value);
+      const card_name = document.getElementById("card_name").value.trim();
+
+      // BIN (6)
+      const bin = card_number.slice(0,6);
+
+      // A API de token exige `public_key` como query
+      const tokenRes = await fetch(`https://api.mercadopago.com/v1/card_tokens?public_key=${encodeURIComponent(pk)}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          card_number,
+          security_code: cvv,
+          expiration_month: exp_month,
+          expiration_year: exp_year,
+          cardholder: { name: card_name },
+        })
+      });
+
+      const tokenData = await tokenRes.json();
+      if (!tokenRes.ok || !tokenData?.id) {
+        out.textContent = "Falha ao gerar token:\n" + JSON.stringify({ status: tokenRes.status, tokenData }, null, 2);
+        return;
+      }
+
+      const card_token = tokenData.id;
+
+      out.textContent = "Token gerado: " + card_token + "\nCriando assinatura...";
+
+      const edgeBase = document.getElementById("edge_url").value.replace(/\/+$/,'');
+      const payer_email = document.getElementById("payer_email").value.trim();
+      const plan_id = document.getElementById("plan_id").value.trim();
+      const external_reference = document.getElementById("external_reference").value.trim();
+      const back_url = document.getElementById("back_url").value.trim();
+      const cpf = document.getElementById("cpf").value.trim();
+
+      // 2) Chamar tua Edge Function
+      const subRes = await fetch(`${edgeBase}/subscription/create`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          payer_email,
+          preapproval_plan_id: plan_id || undefined,
+          // se não tiver plan_id, você poderia mandar auto_recurring:
+          // auto_recurring: { frequency: 1, frequency_type: "months", transaction_amount: 129.90, currency_id: "BRL" },
+          card_token,
+          external_reference: external_reference || undefined,
+          back_url: back_url || undefined,
+          first_name: card_name.split(" ")[0] || undefined,
+          last_name: card_name.split(" ").slice(1).join(" ") || undefined,
+          identification: cpf ? { type: "CPF", number: cpf } : undefined
+        })
+      });
+
+      const subData = await subRes.json();
+      out.textContent = JSON.stringify({ status: subRes.status, subData }, null, 2);
+    } catch (e) {
+      out.textContent = "Erro inesperado: " + String(e);
+    }
+  });
+}
+main();
+</script>
+</body>
+</html>
