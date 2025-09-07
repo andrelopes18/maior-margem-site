@@ -132,8 +132,6 @@
         <button id="btnInspectToken" class="btn ghost diag-only">Inspecionar token</button>
         <button id="btnTestCors" class="btn ghost diag-only">Testar CORS/URL</button>
         <button id="btnTestPost" class="btn ghost diag-only">Testar POST assíncrono</button>
-        <!-- opcional: abrir o checkout oficial do MP para este plano -->
-        <a id="btnAbrirCheckoutMP" class="btn ghost diag-only" href="#" target="_blank" rel="noopener">Abrir checkout do MP</a>
       </div>
       <button id="btnPagar" class="btn" disabled>Pagar</button>
     </div>
@@ -168,7 +166,6 @@ const PREAPPROVAL_BY_PLAN = {
   premium:        "65aa0a173adc4eb49ce3927a0211dd9c",
   intermediario:  "e5065c5f5f5447fa94d99bf9ffbfdad2",
   basico:         "6a0f98fb23ec4fa7a9caeb72d5dd1e07",
-  // trial não precisa
 };
 function subscriptionCheckoutUrl(planKey){
   const id = PREAPPROVAL_BY_PLAN[planKey?.toLowerCase?.()] || "";
@@ -240,7 +237,7 @@ function renderCards(){
   }
 }
 
-/* ============== abre checkout (agora também ajusta link do MP) ============== */
+/* ============== abre checkout (também ajusta link do MP opcional) ============== */
 function openCheckout(plan){
   CURRENT_PLAN = plan;
   const planKey = String(plan?.plan_key||"").toLowerCase();
@@ -249,11 +246,8 @@ function openCheckout(plan){
   checkoutEl.style.display = 'block';
   document.getElementById('btnPagar').disabled = false;
 
-  // botão opcional (modo diagnóstico) para abrir o checkout oficial do MP
-  const mpLink = subscriptionCheckoutUrl(planKey);
-  const btnMP = document.getElementById('btnAbrirCheckoutMP');
-  if (mpLink && mpLink!=="#") { btnMP.href = mpLink; btnMP.style.display = 'inline-flex'; }
-  else { btnMP.removeAttribute('href'); btnMP.style.display = 'none'; }
+  // (se quiser, pode usar subscriptionCheckoutUrl(planKey) para abrir o MP oficial em outra aba)
+  // const mpLink = subscriptionCheckoutUrl(planKey);
 
   checkoutEl.scrollIntoView({behavior:'smooth', block:'start'});
 }
@@ -272,31 +266,34 @@ document.getElementById('btnUnlock').onclick = ()=>{
   showBanner("Campos desbloqueados.", "ok");
 };
 
-/* ============== util: inspecionar token no backend (inalterado) ============== */
+/* ============== util: inspecionar token no backend (rota correta) ============== */
 async function inspectToken(tokenId){
   const { data: { session } } = await sb.auth.getSession();
-  const r = await fetch(`${FUNCTIONS_URL}/mercado-pago-subscription`, {
+  const r = await fetch(`${FUNCTIONS_URL}/mercado-pago-subscription/token/inspect`, {
     method:"POST", headers: buildHeaders(session?.access_token),
-    body: JSON.stringify({ inspect_card_token: true, card_token: tokenId })
+    body: JSON.stringify({ card_token: tokenId })
   });
   const txt = await r.text(); let j=null; try{ j = JSON.parse(txt) }catch{ j = { raw: txt } }
   return { status: r.status, data: j };
 }
 
-/* ============== botões de diagnóstico (inalterados) ============== */
+/* ============== botões de diagnóstico -> rotas corretas ============== */
 document.getElementById('btnHealthSubs')?.addEventListener('click', async ()=>{
   if (logs) logs.textContent = ""; if (resp) resp.textContent = "";
   try{
-    const r = await fetch(`${FUNCTIONS_URL}/mercado-pago-subscription`, { method:"GET" });
+    const r = await fetch(`${FUNCTIONS_URL}/mercado-pago-subscription/health`, { method:"GET" });
     const t = await r.text(); let j=null; try{ j=JSON.parse(t)}catch{ j={raw:t} }
     showResp({ health_subscription: j });
   }catch(e){ showResp({ error_health: String(e) }); }
 });
 document.getElementById('btnTestCors')?.addEventListener('click', async ()=>{
   if (logs) logs.textContent = ""; if (resp) resp.textContent = "";
-  const base = `${FUNCTIONS_URL}/mercado-pago-subscription`;
-  try { const r1 = await fetch(base, { method:"GET" }); log("GET /health status:", r1.status);
-    const r2 = await fetch(base, { method:"OPTIONS" }); log("OPTIONS status:", r2.status, "ACAO:", r2.headers.get("access-control-allow-origin"));
+  const base = `${FUNCTIONS_URL}/mercado-pago-subscription/subscription/create`;
+  try {
+    const r1 = await fetch(`${FUNCTIONS_URL}/mercado-pago-subscription/health`, { method:"GET" });
+    log("GET /health status:", r1.status);
+    const r2 = await fetch(base, { method:"OPTIONS" });
+    log("OPTIONS status:", r2.status, "ACAO:", r2.headers.get("access-control-allow-origin"));
   } catch (e) { showResp({ test_cors_error: String(e) }); showBanner("Falha no teste CORS/URL.", "err"); }
 });
 document.getElementById('btnTestPost')?.addEventListener('click', async ()=>{
@@ -304,9 +301,10 @@ document.getElementById('btnTestPost')?.addEventListener('click', async ()=>{
   const { data: { session } } = await sb.auth.getSession();
   if (!session){ showBanner("Sem sessão.", "warn"); return; }
   try{
-    const r = await fetch(`${FUNCTIONS_URL}/mercado-pago-subscription`, {
+    // POST de teste na rota certa (vai falhar com dados fake, mas valida CORS/handler)
+    const r = await fetch(`${FUNCTIONS_URL}/mercado-pago-subscription/subscription/create`, {
       method:"POST", headers: buildHeaders(session.access_token),
-      body: JSON.stringify({ plan_key:"premium", card_token:"FAKE", payer:{email:"x@y.com"} })
+      body: JSON.stringify({ payer_email:"x@y.com", preapproval_plan_id:"PLN_FAKE", card_token:"FAKE", external_reference:`${session.user.id}|premium` })
     });
     const t = await r.text(); let j=null; try{ j=JSON.parse(t)}catch{ j={raw:t} }
     showResp({ status:r.status, data:j });
@@ -316,14 +314,14 @@ document.getElementById('btnInspectToken')?.addEventListener('click', async ()=>
   if (!LAST_CARD_TOKEN){ showBanner("Gere o token primeiro (clique Pagar até a etapa de tokenizar).", "warn"); return; }
   const res = await inspectToken(LAST_CARD_TOKEN);
   showResp({ inspect: res });
-  if (res?.data?.status === 404 || res?.data?.token_lookup?.message?.includes("could not get")) {
-    showBanner("Token não encontrado pelo backend (mismatch/expirado).", "err");
-  } else if (res?.data?.status === 200) {
+  if (res?.status === 200 && res?.data?.ok) {
     showBanner("Token OK no backend (200).", "ok");
+  } else {
+    showBanner("Token não encontrado pelo backend (mismatch/expirado).", "err");
   }
 });
 
-/* ============== PAGAMENTO (mantido 1x; assinatura ajustada) ============== */
+/* ============== PAGAMENTO (mantido 1x; assinatura corrigida p/ rota) ============== */
 document.getElementById('btnPagar').onclick = async ()=>{
   if (logs) logs.textContent = ""; if (resp) resp.textContent = "";
   if (!CURRENT_PLAN){ showBanner("Escolha um plano antes de pagar.", "warn"); return; }
@@ -351,7 +349,7 @@ document.getElementById('btnPagar').onclick = async ()=>{
     if (!session){ showBanner("Faça login antes de pagar.", "warn"); return; }
     const isRecurring = document.getElementById('recorrente').checked;
 
-    // helper: assinatura (ajustada p/ preapproval_plan_id + external_reference)
+    // helper: assinatura (ajustada p/ rota + preapproval_plan_id + external_reference)
     const trySubscription = async (cardToken) => {
       const planKey = String(CURRENT_PLAN.plan_key||"").toLowerCase();
       const preapproval_plan_id = PREAPPROVAL_BY_PLAN[planKey];
@@ -365,9 +363,9 @@ document.getElementById('btnPagar').onclick = async ()=>{
         external_reference: `${session.user.id}|${planKey}`,
         // dados para anexar/validar cartão + quem paga
         card_token: cardToken,
-        payer: { email: $('#payerEmail').value.trim(), cpf: $('#payerCPF').value.trim(), name: $('#cardholder').value.trim() },
+        payer_email: $('#payerEmail').value.trim()
       };
-      const r = await fetch(`${FUNCTIONS_URL}/mercado-pago-subscription`, {
+      const r = await fetch(`${FUNCTIONS_URL}/mercado-pago-subscription/subscription/create`, {
         method:"POST", headers: buildHeaders(session.access_token), body: JSON.stringify(bodyBase)
       });
       const t = await r.text(); let j=null; try{ j=JSON.parse(t)}catch{ j={raw:t} };
@@ -375,7 +373,7 @@ document.getElementById('btnPagar').onclick = async ()=>{
     };
 
     if (isRecurring) {
-      // (diagnóstico do token como antes)
+      // Diagnóstico do token + (se preciso) re-tokeniza
       const age = (Date.now() - LAST_TOKEN_TS)/1000;
       if (age > 60) {
         showBanner("Token antigo, gerando novamente…", "warn");
@@ -388,7 +386,7 @@ document.getElementById('btnPagar').onclick = async ()=>{
       }
 
       const diag = await inspectToken(LAST_CARD_TOKEN);
-      if (diag?.data?.status === 404 || String(diag?.data?.token_lookup?.message||'').includes("could not get")) {
+      if (!(diag?.status === 200 && diag?.data?.ok)) {
         showBanner("Atualizando token do cartão…", "warn");
         const tokRes3 = await fetch("https://api.mercadopago.com/v1/card_tokens?public_key=" + encodeURIComponent(CFG.MP_PUBLIC_KEY), {
           method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payloadToken)
@@ -398,7 +396,7 @@ document.getElementById('btnPagar').onclick = async ()=>{
         LAST_CARD_TOKEN = token3.id; LAST_TOKEN_TS = Date.now();
       }
 
-      // chamada principal de assinatura (já com preapproval_plan_id)
+      // chamada principal de assinatura (rota certa)
       const r1 = await trySubscription(LAST_CARD_TOKEN);
       showResp({ sub_try_1: r1 });
       if (r1.ok && (r1.data?.ok)) {
