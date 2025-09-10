@@ -46,7 +46,7 @@
   }
   .dd-item:hover { background: #1b1b1b; }
 
-  /* Painéis mais claros */
+  /* Painéis */
   .panel { background:#202020; border:1px solid #2a2a2a; border-radius:12px; padding:12px; margin-bottom:18px; }
   .panel-header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }
   .panel-header h2 { margin:0; font-size:18px; color:#d5ffd5; }
@@ -90,20 +90,21 @@
   .resizer:after { content: ""; width: 40px; height: 3px; border-radius: 3px; background: #3a3a3a; }
   body.resizing, body.resizing * { cursor: ns-resize !important; user-select: none; }
 
-  /* Botão de gráfico ao lado do preço */
+  /* Botão do gráfico – mais encorpado/visível */
   .chart-btn {
     display:inline-flex; align-items:center; justify-content:center;
-    width:22px; height:22px; margin-left:6px; border-radius:4px;
-    border:1px solid #2f2f2f; background:#151515; color:#dcdcdc;
-    cursor:pointer;
+    width:28px; height:28px; margin-left:8px; border-radius:6px;
+    border:1.5px solid #2e2e2e; background:#141414; color:#dcdcdc;
+    cursor:pointer; box-shadow: 0 2px 6px rgba(0,0,0,.35);
   }
-  .chart-btn:hover { background:#1e1e1e; border-color:#3a3a3a; }
+  .chart-btn:hover { background:#1b1b1b; border-color:#3a3a3a; }
+  .chart-btn:active { transform: translateY(1px); }
 
-  .chart-icon { width:14px; height:14px; }
+  .chart-icon { width:16px; height:16px; display:block; }
 
   /* Popover do gráfico */
   .chart-popover {
-    position:absolute; z-index:1000; width:220px; padding:10px;
+    position:absolute; z-index:1000; width:240px; padding:10px;
     background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px;
     box-shadow: 0 10px 40px rgba(0,0,0,.6);
   }
@@ -116,8 +117,9 @@
   .chart-popover .msg {
     font-size:12px; color:#bbb; padding:8px; text-align:center;
   }
+  /* Canvas um pouco menor para abrir espaço aos rótulos */
   canvas.spark {
-    width:200px; height:200px; display:block; background:#121212; border:1px solid #232323; border-radius:6px;
+    width:200px; height:180px; display:block; background:#121212; border:1px solid #232323; border-radius:6px;
   }
 </style>
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
@@ -216,7 +218,8 @@
     <span id="chartTitle">Histórico</span>
     <button class="close" id="chartClose" aria-label="Fechar">×</button>
   </header>
-  <canvas id="spark" class="spark" width="200" height="200"></canvas>
+  <!-- canvas menor para sobrar espaço aos labels -->
+  <canvas id="spark" class="spark" width="200" height="180"></canvas>
   <div id="chartMsg" class="msg" style="display:none;"></div>
 </div>
 
@@ -290,9 +293,7 @@ let favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
 
 /* Produtos agregados: Map<ean, { sku, desc, sites{} }> */
 let produtosMap = new Map();
-/* Lista para render na ordem de inserção */
 let produtosList = [];
-/* Posição de render no DOM */
 let itemsRendered = 0;
 
 /* Paginação servidor */
@@ -453,10 +454,13 @@ function upsertRowsIntoProdutos(rows){
 
 /* ======== RENDER ======== */
 function chartButtonSVG(){
+  /* Ícone personalizado – barras + linha */
   return `
-    <svg class="chart-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M4 19h16v2H4z"></path>
-      <path d="M6 17l4-6 3 4 5-8 2 1-6 10-3-4-3 5z"></path>
+    <svg class="chart-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="3" y="11" width="3" height="7" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>
+      <rect x="9" y="8"  width="3" height="10" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>
+      <rect x="15" y="5" width="3" height="13" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>
+      <path d="M3,18 L7,14 L12,15 L17,8 L21,10" fill="none" stroke="#00d084" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>`;
 }
 
@@ -509,7 +513,6 @@ function renderGeneralChunk(){
         if (Number.isFinite(d.precoNum)) {
           const display = formatBRL(d.precoNum);
           const cls = (s === minSite) ? 'min' : (s === maxSite ? 'max' : '');
-          // preço + botão gráfico
           const priceSpan = document.createElement('span');
           priceSpan.className = `price ${cls}`;
           priceSpan.title = dataStr ? `Atualizado em ${dataStr}` : '';
@@ -531,7 +534,6 @@ function renderGeneralChunk(){
           span.title = dataStr ? `Atualizado em ${dataStr}` : '';
           span.textContent = raw;
           td.appendChild(span);
-          // se não é numérico, não exibe botão
         }
       } else {
         td.innerHTML = `<span class="muted">—</span>`;
@@ -559,13 +561,11 @@ function onGeneralScroll(){
   if (loadingMore) return;
   const nearBottom = generalWrap.scrollTop + generalWrap.clientHeight >= generalWrap.scrollHeight - 100;
 
-  // Primeiro renderiza o que já temos
   if (nearBottom && itemsRendered < produtosList.length){
     loadingMore = true;
     setTimeout(()=>{ renderGeneralChunk(); loadingMore = false; }, 30);
     return;
   }
-  // Depois busca mais páginas
   if (nearBottom && !serverExhausted && !fetching){
     fetchNextPage();
   }
@@ -715,10 +715,9 @@ async function fetchNextPage(){
     } else {
       upsertRowsIntoProdutos(data);
 
-      // Render geral em lotes
       if (itemsRendered < produtosList.length) renderGeneralChunk();
 
-      // 🔸 Atualiza favoritos automaticamente a cada leva de dados
+      // Atualiza favoritos automaticamente a cada leva
       renderFavs();
       if (!favFirstAutoRenderDone) { updateFavHeight(); favFirstAutoRenderDone = true; }
 
@@ -744,7 +743,7 @@ function resetAndQuery(){
   favFirstAutoRenderDone = false;
 
   resetGeneralDom();
-  renderFavs();          // limpa visualmente
+  renderFavs();
   updateFavHeight();
   updateCounts();
 
@@ -757,7 +756,7 @@ btnReload.addEventListener('click', () => { resetAndQuery(); });
 const onFilterInput = debounce(() => {
   currentEanQ = (eanFilter.value || '').trim();
   currentDescQ = (descFilter.value || '').trim();
-  resetAndQuery(); // nova consulta na base respeitando filtros
+  resetAndQuery();
 }, 500);
 
 eanFilter.addEventListener('input', onFilterInput);
@@ -804,7 +803,7 @@ function positionPopover(x, y){
   const pad = 12;
   const vw = window.innerWidth, vh = window.innerHeight;
   let left = x + pad, top = y + pad;
-  const rectW = 220, rectH = 260; // popover total approx
+  const rectW = 240, rectH = 260;
   if (left + rectW > vw) left = x - rectW - pad;
   if (top + rectH > vh) top = y - rectH - pad;
   pop.style.left = Math.max(8, left) + 'px';
@@ -816,8 +815,8 @@ document.addEventListener('click', (ev) => {
 document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closePopover(); });
 popClose.addEventListener('click', closePopover);
 
+/* Desenha sparkline com margens maiores e textos "clampados" */
 function drawSparkline(points){
-  // points: [{x: Date, y: number}]
   const ctx = sparkCtx;
   const W = sparkCanvas.width, H = sparkCanvas.height;
   ctx.clearRect(0,0,W,H);
@@ -829,8 +828,8 @@ function drawSparkline(points){
   }
   popMsg.style.display='none';
 
-  // Margens internas
-  const m = { l: 30, r: 10, t: 10, b: 24 };
+  // Margens ampliadas para rótulos
+  const m = { l: 40, r: 14, t: 12, b: 28 };
 
   // Escalas
   const xs = points.map(p=>p.x.getTime());
@@ -838,22 +837,22 @@ function drawSparkline(points){
   const xMin = Math.min(...xs), xMax = Math.max(...xs);
   const yMin = Math.min(...ys), yMax = Math.max(...ys);
   const xScale = v => m.l + ( (v - xMin) / (xMax - xMin || 1) ) * (W - m.l - m.r);
-  const yScale = v => H - m.b - ( (v - yMin) / (yMax - yMin || 1) ) * (H - m.t - m.b);
+  const yScaleRaw = v => H - m.b - ( (v - yMin) / (yMax - yMin || 1) ) * (H - m.t - m.b);
+  const yScale = v => Math.max(m.t+6, Math.min(H - m.b - 6, yScaleRaw(v))); // clamp
 
-  // Grade leve
+  // Grade
   ctx.strokeStyle = '#232323';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  // 3 linhas horizontais
   for (let i=0;i<=3;i++){
     const yy = m.t + i*(H - m.t - m.b)/3;
     ctx.moveTo(m.l, yy); ctx.lineTo(W - m.r, yy);
   }
   ctx.stroke();
 
-  // Linha do gráfico
+  // Linha principal mais grossa
   ctx.beginPath();
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 3;
   ctx.strokeStyle = '#00d084';
   points.forEach((p, i)=>{
     const x = xScale(p.x.getTime()), y = yScale(p.y);
@@ -861,34 +860,34 @@ function drawSparkline(points){
   });
   ctx.stroke();
 
-  // Pontos
+  // Pontos maiores
   ctx.fillStyle = '#bfffc1';
   for (const p of points){
     const x = xScale(p.x.getTime()), y = yScale(p.y);
-    ctx.beginPath(); ctx.arc(x,y,2.5,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x,y,3.2,0,Math.PI*2); ctx.fill();
   }
 
-  // Eixos valores mínimos/máximos simples
+  // Eixos – valores
   ctx.fillStyle = '#9aa0a6';
   ctx.font = '11px Arial';
   ctx.textAlign = 'right';
-  ctx.fillText(formatBRL(yMax), m.l-6, yScale(yMax)-4);
-  ctx.fillText(formatBRL(yMin), m.l-6, yScale(yMin)+12);
+  // ajuste para não colar no topo/rodapé
+  const yMaxY = yScale(yMax), yMinY = yScale(yMin);
+  ctx.fillText(formatBRL(yMax), m.l-6, Math.max(m.t+10, yMaxY-6));
+  ctx.fillText(formatBRL(yMin), m.l-6, Math.min(H - m.b - 2, yMinY+12));
 
-  // Datas extremas
+  // Datas extremas (com clamp nas bordas)
   const fmt = (d)=> d.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' });
   ctx.textAlign = 'center';
-  ctx.fillText(fmt(points[0].x), m.l, H-8);
-  ctx.fillText(fmt(points[points.length-1].x), W - m.r, H-8);
+  ctx.fillText(fmt(points[0].x), Math.max(m.l, 24), H-8);
+  ctx.fillText(fmt(points[points.length-1].x), Math.min(W - m.r, W-24), H-8);
 }
 
 async function openChartFor(ev, ean, siteName, descText){
   ev.stopPropagation();
-  // Posição do popover próxima ao clique
   const rect = ev.currentTarget.getBoundingClientRect();
   positionPopover(rect.right, rect.bottom);
 
-  // Título
   popTitle.textContent = `${siteName} • ${ean}`;
   popMsg.style.display='block';
   popMsg.textContent = 'Carregando histórico…';
@@ -896,7 +895,6 @@ async function openChartFor(ev, ean, siteName, descText){
   pop.style.display='block';
 
   try{
-    // Consulta histórico desse EAN + site (preços numéricos), ordenado ASC por data
     const { data, error } = await sb
       .from(VIEW)
       .select('data, preco_num')
@@ -923,17 +921,12 @@ async function openChartFor(ev, ean, siteName, descText){
 (async function init(){
   const session = await loadHeaderInfo(); if (!session) return;
 
-  // Política de logout por virada de dia (mantida)
   enforceDayBoundaryLogout();
 
-  // Filtros vazios
   currentEanQ = '';
   currentDescQ = '';
 
-  // Primeira carga
   resetAndQuery();
-
-  // Puxa mais ao iniciar
   generalWrap.dispatchEvent(new Event('scroll'));
 })();
 </script>
