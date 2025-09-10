@@ -69,7 +69,7 @@
   .col-fav { width:40px; text-align:center; }
   .col-sku { width:160px; font-family: ui-monospace,Consolas,monospace; }
   .col-desc { min-width:260px; }
-  .price { font-weight:700; display:block; font-size:16px; }
+  .price { font-weight:700; display:inline-block; font-size:16px; vertical-align:middle; }
   @media (min-width: 1200px) { .price { font-size:18px; } }
   .price.min { color:#ff4d4f; }
   .price.max { color:#00d084; }
@@ -89,6 +89,36 @@
   }
   .resizer:after { content: ""; width: 40px; height: 3px; border-radius: 3px; background: #3a3a3a; }
   body.resizing, body.resizing * { cursor: ns-resize !important; user-select: none; }
+
+  /* Botão de gráfico ao lado do preço */
+  .chart-btn {
+    display:inline-flex; align-items:center; justify-content:center;
+    width:22px; height:22px; margin-left:6px; border-radius:4px;
+    border:1px solid #2f2f2f; background:#151515; color:#dcdcdc;
+    cursor:pointer;
+  }
+  .chart-btn:hover { background:#1e1e1e; border-color:#3a3a3a; }
+
+  .chart-icon { width:14px; height:14px; }
+
+  /* Popover do gráfico */
+  .chart-popover {
+    position:absolute; z-index:1000; width:220px; padding:10px;
+    background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px;
+    box-shadow: 0 10px 40px rgba(0,0,0,.6);
+  }
+  .chart-popover header {
+    font-size:12px; color:#b5b5b5; display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;
+  }
+  .chart-popover .close {
+    background:transparent; border:none; color:#aaa; font-size:16px; cursor:pointer;
+  }
+  .chart-popover .msg {
+    font-size:12px; color:#bbb; padding:8px; text-align:center;
+  }
+  canvas.spark {
+    width:200px; height:200px; display:block; background:#121212; border:1px solid #232323; border-radius:6px;
+  }
 </style>
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="./config.js"></script>
@@ -180,6 +210,16 @@
   </div>
 </section>
 
+<!-- Popover global para gráficos (1 instância, reusada) -->
+<div id="chartPopover" class="chart-popover" style="display:none;">
+  <header>
+    <span id="chartTitle">Histórico</span>
+    <button class="close" id="chartClose" aria-label="Fechar">×</button>
+  </header>
+  <canvas id="spark" class="spark" width="200" height="200"></canvas>
+  <div id="chartMsg" class="msg" style="display:none;"></div>
+</div>
+
 <script>
 /* ======== CONFIG / SUPABASE ======== */
 const CFG = window.CONFIG || {};
@@ -225,6 +265,14 @@ const countShown = document.getElementById('countShown');
 const countTotal = document.getElementById('countTotal');
 const countFavs  = document.getElementById('countFavs');
 
+/* Popover/Canvas */
+const pop = document.getElementById('chartPopover');
+const popTitle = document.getElementById('chartTitle');
+const popClose = document.getElementById('chartClose');
+const popMsg = document.getElementById('chartMsg');
+const sparkCanvas = document.getElementById('spark');
+const sparkCtx = sparkCanvas.getContext('2d');
+
 /* ======== ESTADO ======== */
 const siteMap = {
   "PrecoLeroyMerlin": "LeroyMerlin",
@@ -261,14 +309,8 @@ let loadingMore = false;
 let suppressGeneralChange = false;
 const generalChkMap = new Map();
 
-/* ======== (REMOVIDO) SINGLE-SESSION ======== */
-/*  Removidos:
-    - const SESSION_HEARTBEAT_MS
-    - const SESSION_LIVE_WINDOW_MS
-    - const SESSION_ID
-    - async function ensureSingleSession(session) { ... }
-    - chamadas a ensureSingleSession e limpezas na tabela active_sessions
-*/
+/* Aux para favoritos */
+let favFirstAutoRenderDone = false;
 
 /* ======== FUNÇÕES UTIL ======== */
 function setStatus(t){ statusEl.textContent = t || ''; }
@@ -410,6 +452,14 @@ function upsertRowsIntoProdutos(rows){
 }
 
 /* ======== RENDER ======== */
+function chartButtonSVG(){
+  return `
+    <svg class="chart-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M4 19h16v2H4z"></path>
+      <path d="M6 17l4-6 3 4 5-8 2 1-6 10-3-4-3 5z"></path>
+    </svg>`;
+}
+
 function renderGeneralChunk(){
   const end = Math.min(itemsRendered + RENDER_CHUNK, produtosList.length);
   const frag = document.createDocumentFragment();
@@ -449,7 +499,7 @@ function renderGeneralChunk(){
     tdDesc.innerHTML = (item.desc || '').replace(/</g,'&lt;');
     tr.appendChild(tdDesc);
 
-    // Preços
+    // Preços (com botão de gráfico)
     const { minSite, maxSite } = computeMinMaxForRow(item);
     for (const s of siteOrder) {
       const td = document.createElement('td');
@@ -459,10 +509,29 @@ function renderGeneralChunk(){
         if (Number.isFinite(d.precoNum)) {
           const display = formatBRL(d.precoNum);
           const cls = (s === minSite) ? 'min' : (s === maxSite ? 'max' : '');
-          td.innerHTML = `<span class="price ${cls}" title="Atualizado em ${dataStr}">${display}</span>`;
+          // preço + botão gráfico
+          const priceSpan = document.createElement('span');
+          priceSpan.className = `price ${cls}`;
+          priceSpan.title = dataStr ? `Atualizado em ${dataStr}` : '';
+          priceSpan.textContent = display;
+
+          const btn = document.createElement('button');
+          btn.className = 'chart-btn';
+          btn.type = 'button';
+          btn.title = 'Ver gráfico do histórico';
+          btn.innerHTML = chartButtonSVG();
+          btn.addEventListener('click', (ev) => openChartFor(ev, item.sku, s, item.desc));
+
+          td.appendChild(priceSpan);
+          td.appendChild(btn);
         } else {
           const raw = (d.precoRaw ?? '').toString().replace(/</g,'&lt;');
-          td.innerHTML = `<span class="price" title="${dataStr ? 'Atualizado em ' + dataStr : ''}">${raw}</span>`;
+          const span = document.createElement('span');
+          span.className = 'price';
+          span.title = dataStr ? `Atualizado em ${dataStr}` : '';
+          span.textContent = raw;
+          td.appendChild(span);
+          // se não é numérico, não exibe botão
         }
       } else {
         td.innerHTML = `<span class="muted">—</span>`;
@@ -478,12 +547,14 @@ function renderGeneralChunk(){
   endMarker.textContent = (serverExhausted && itemsRendered >= produtosList.length) ? 'Fim da lista' : '';
   updateCounts();
 }
+
 function resetGeneralDom(){
   generalBody.innerHTML = '';
   generalChkMap.clear();
   itemsRendered = 0;
   endMarker.textContent = '';
 }
+
 function onGeneralScroll(){
   if (loadingMore) return;
   const nearBottom = generalWrap.scrollTop + generalWrap.clientHeight >= generalWrap.scrollHeight - 100;
@@ -554,10 +625,27 @@ function renderFavs(){
         if (Number.isFinite(d.precoNum)) {
           const display = formatBRL(d.precoNum);
           const cls = (s === minSite) ? 'min' : (s === maxSite ? 'max' : '');
-          td.innerHTML = `<span class="price ${cls}" title="Atualizado em ${dataStr}">${display}</span>`;
+          const priceSpan = document.createElement('span');
+          priceSpan.className = `price ${cls}`;
+          priceSpan.title = dataStr ? `Atualizado em ${dataStr}` : '';
+          priceSpan.textContent = display;
+
+          const btnChart = document.createElement('button');
+          btnChart.className = 'chart-btn';
+          btnChart.type = 'button';
+          btnChart.title = 'Ver gráfico do histórico';
+          btnChart.innerHTML = chartButtonSVG();
+          btnChart.addEventListener('click', (ev) => openChartFor(ev, item.sku, s, item.desc));
+
+          td.appendChild(priceSpan);
+          td.appendChild(btnChart);
         } else {
           const raw = (d.precoRaw ?? '').toString().replace(/</g,'&lt;');
-          td.innerHTML = `<span class="price" title="${dataStr ? 'Atualizado em ' + dataStr : ''}">${raw}</span>`;
+          const span = document.createElement('span');
+          span.className = 'price';
+          span.title = dataStr ? `Atualizado em ${dataStr}` : '';
+          span.textContent = raw;
+          td.appendChild(span);
         }
       } else {
         td.innerHTML = `<span class="muted">—</span>`;
@@ -626,7 +714,14 @@ async function fetchNextPage(){
       if (itemsRendered >= produtosList.length) endMarker.textContent = 'Fim da lista';
     } else {
       upsertRowsIntoProdutos(data);
+
+      // Render geral em lotes
       if (itemsRendered < produtosList.length) renderGeneralChunk();
+
+      // 🔸 Atualiza favoritos automaticamente a cada leva de dados
+      renderFavs();
+      if (!favFirstAutoRenderDone) { updateFavHeight(); favFirstAutoRenderDone = true; }
+
       serverOffset += PAGE_SIZE;
       setStatus(`Carregados: ${produtosList.length} SKUs (parcial)`);
     }
@@ -646,9 +741,10 @@ function resetAndQuery(){
   produtosList = [];
   serverOffset = 0;
   serverExhausted = false;
+  favFirstAutoRenderDone = false;
 
   resetGeneralDom();
-  renderFavs();
+  renderFavs();          // limpa visualmente
   updateFavHeight();
   updateCounts();
 
@@ -701,6 +797,127 @@ btnSair.addEventListener('click', async () => {
     window.location.href = CFG.SITE_URL || 'index.html';
   }
 });
+
+/* ======== MINI-GRÁFICO (Spark) ======== */
+function closePopover(){ pop.style.display='none'; }
+function positionPopover(x, y){
+  const pad = 12;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let left = x + pad, top = y + pad;
+  const rectW = 220, rectH = 260; // popover total approx
+  if (left + rectW > vw) left = x - rectW - pad;
+  if (top + rectH > vh) top = y - rectH - pad;
+  pop.style.left = Math.max(8, left) + 'px';
+  pop.style.top = Math.max(8, top) + 'px';
+}
+document.addEventListener('click', (ev) => {
+  if (pop.style.display !== 'none' && !pop.contains(ev.target)) closePopover();
+});
+document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closePopover(); });
+popClose.addEventListener('click', closePopover);
+
+function drawSparkline(points){
+  // points: [{x: Date, y: number}]
+  const ctx = sparkCtx;
+  const W = sparkCanvas.width, H = sparkCanvas.height;
+  ctx.clearRect(0,0,W,H);
+
+  if (!points || points.length < 3){
+    popMsg.style.display='block';
+    popMsg.textContent = 'Histórico insuficiente (precisa de 3 preços).';
+    return;
+  }
+  popMsg.style.display='none';
+
+  // Margens internas
+  const m = { l: 30, r: 10, t: 10, b: 24 };
+
+  // Escalas
+  const xs = points.map(p=>p.x.getTime());
+  const ys = points.map(p=>p.y);
+  const xMin = Math.min(...xs), xMax = Math.max(...xs);
+  const yMin = Math.min(...ys), yMax = Math.max(...ys);
+  const xScale = v => m.l + ( (v - xMin) / (xMax - xMin || 1) ) * (W - m.l - m.r);
+  const yScale = v => H - m.b - ( (v - yMin) / (yMax - yMin || 1) ) * (H - m.t - m.b);
+
+  // Grade leve
+  ctx.strokeStyle = '#232323';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  // 3 linhas horizontais
+  for (let i=0;i<=3;i++){
+    const yy = m.t + i*(H - m.t - m.b)/3;
+    ctx.moveTo(m.l, yy); ctx.lineTo(W - m.r, yy);
+  }
+  ctx.stroke();
+
+  // Linha do gráfico
+  ctx.beginPath();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#00d084';
+  points.forEach((p, i)=>{
+    const x = xScale(p.x.getTime()), y = yScale(p.y);
+    if (i === 0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+
+  // Pontos
+  ctx.fillStyle = '#bfffc1';
+  for (const p of points){
+    const x = xScale(p.x.getTime()), y = yScale(p.y);
+    ctx.beginPath(); ctx.arc(x,y,2.5,0,Math.PI*2); ctx.fill();
+  }
+
+  // Eixos valores mínimos/máximos simples
+  ctx.fillStyle = '#9aa0a6';
+  ctx.font = '11px Arial';
+  ctx.textAlign = 'right';
+  ctx.fillText(formatBRL(yMax), m.l-6, yScale(yMax)-4);
+  ctx.fillText(formatBRL(yMin), m.l-6, yScale(yMin)+12);
+
+  // Datas extremas
+  const fmt = (d)=> d.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' });
+  ctx.textAlign = 'center';
+  ctx.fillText(fmt(points[0].x), m.l, H-8);
+  ctx.fillText(fmt(points[points.length-1].x), W - m.r, H-8);
+}
+
+async function openChartFor(ev, ean, siteName, descText){
+  ev.stopPropagation();
+  // Posição do popover próxima ao clique
+  const rect = ev.currentTarget.getBoundingClientRect();
+  positionPopover(rect.right, rect.bottom);
+
+  // Título
+  popTitle.textContent = `${siteName} • ${ean}`;
+  popMsg.style.display='block';
+  popMsg.textContent = 'Carregando histórico…';
+  sparkCtx.clearRect(0,0,sparkCanvas.width,sparkCanvas.height);
+  pop.style.display='block';
+
+  try{
+    // Consulta histórico desse EAN + site (preços numéricos), ordenado ASC por data
+    const { data, error } = await sb
+      .from(VIEW)
+      .select('data, preco_num')
+      .eq('ean', ean)
+      .eq('site', Object.keys(siteMap).find(k => siteMap[k] === siteName))
+      .not('preco_num', 'is', null)
+      .order('data', { ascending: true })
+      .limit(60);
+    if (error) throw error;
+
+    const points = (data||[])
+      .filter(r => typeof r.preco_num === 'number' && Number.isFinite(r.preco_num))
+      .map(r => ({ x: new Date(r.data), y: r.preco_num }));
+
+    drawSparkline(points);
+  } catch(e){
+    console.error(e);
+    popMsg.style.display='block';
+    popMsg.textContent = 'Falha ao carregar histórico.';
+  }
+}
 
 /* ======== INIT ======== */
 (async function init(){
