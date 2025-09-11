@@ -10,7 +10,9 @@
   body{background:#121212;color:#fff;font-family:Arial,sans-serif;padding:24px;margin:0}
   header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px;flex-wrap:wrap}
   h1{color:#00b140;margin:0}
-  a{color:#00b140}
+  a{color:#00b140;text-decoration:none}
+  a:hover{text-decoration:underline}
+
   .btn{display:inline-flex;align-items:center;gap:8px;background:#00b140;color:#fff;border:none;padding:10px 14px;border-radius:8px;text-decoration:none;cursor:pointer}
   .btn:hover{background:#009b38}
   .btn.outline{background:transparent;border:1px solid #2a2a2a;color:#ddd}
@@ -45,7 +47,7 @@
   .banner.ok{border-color:#214d21;background:#0e1a0e;color:#b7fbb7}
   .banner.err{border-color:#5c1e1e;background:#190d0d;color:#ff9a9a}
 
-  /* ===== Estilo específico da seção de sites ===== */
+  /* ===== Seção de sites ===== */
   .sites-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   @media (max-width: 840px){ .sites-grid{grid-template-columns:1fr} }
   .site-item{display:flex;align-items:flex-start;gap:12px;padding:12px;border:1px solid #232323;border-radius:10px;background:#121212}
@@ -74,7 +76,7 @@
 <main class="container">
   <div id="banner" class="banner"></div>
 
-  <!-- ======= Cartão original: dados do perfil ======= -->
+  <!-- ===== Cartão original: dados do perfil ===== -->
   <div class="card">
     <div class="grid">
       <div class="col-2">
@@ -126,7 +128,7 @@
     </div>
   </div>
 
-  <!-- ======= NOVA SEÇÃO: Seleção de sites para monitorar ======= -->
+  <!-- ===== NOVA SEÇÃO: Seleção de sites para monitorar ===== -->
   <div class="card" id="sitesCard">
     <h2 style="margin-top:0;margin-bottom:8px">Selecionar sites para monitorar</h2>
     <p class="muted" id="introSites">
@@ -184,14 +186,15 @@ const telHelp = document.getElementById('telHelp');
 const docHelp = document.getElementById('docHelp');
 const planChip = document.getElementById('planChip');
 
-function showBanner(text, type = 'ok') {
+function showBanner(text, type = 'ok', timeoutMs = 4200) {
   bannerEl.textContent = text;
   bannerEl.className = 'banner ' + (type === 'warn' ? 'warn' : (type === 'err' ? 'err' : 'ok'));
   bannerEl.style.display = 'block';
-  setTimeout(() => { bannerEl.style.display = 'none'; }, 4200);
+  if (timeoutMs > 0) setTimeout(() => { bannerEl.style.display = 'none'; }, timeoutMs);
 }
 function digitsOnly(s){ return (s||'').replace(/\D+/g, ''); }
 
+/* ======== CPF/CNPJ/Telefone helpers (mesmo do seu arquivo base) ======== */
 function formatCPF(d) {
   d = d.slice(0,11);
   if (d.length <= 3) return d;
@@ -250,14 +253,14 @@ function updateDocUI() {
   if (isCNPJ) {
     cpfCnpjEl.value = formatCNPJ(d);
     const ok = validateCNPJ(d);
-    docHelp.textContent = ok ? 'CNPJ válido.' : 'Digite 14 dígitos para um CNPJ válido.';
-    docHelp.className = 'help' + (ok ? '' : ' error');
+    document.getElementById('docHelp').textContent = ok ? 'CNPJ válido.' : 'Digite 14 dígitos para um CNPJ válido.';
+    document.getElementById('docHelp').className = 'help' + (ok ? '' : ' error');
     razaoWrap.style.display = 'block';
   } else {
     cpfCnpjEl.value = formatCPF(d);
     const ok = validateCPF(d);
-    docHelp.textContent = ok ? 'CPF válido.' : 'Digite 11 dígitos para um CPF válido.';
-    docHelp.className = 'help' + (ok ? '' : ' error');
+    document.getElementById('docHelp').textContent = ok ? 'CPF válido.' : 'Digite 11 dígitos para um CPF válido.';
+    document.getElementById('docHelp').className = 'help' + (ok ? '' : ' error');
     razaoWrap.style.display = 'none';
     razaoSocialEl.value = '';
   }
@@ -268,12 +271,15 @@ telefoneEl.addEventListener('input', () => {
   const d = digitsOnly(telefoneEl.value);
   telefoneEl.value = formatPhone(d);
   const ok = d.length === 0 || validatePhone(d);
-  telHelp.textContent = ok ? 'Formato BR (com DDD).' : 'Telefone inválido. Use 10 ou 11 dígitos.';
-  telHelp.className = 'help' + (ok ? '' : ' error');
+  document.getElementById('telHelp').textContent = ok ? 'Formato BR (com DDD).' : 'Telefone inválido. Use 10 ou 11 dígitos.';
+  document.getElementById('telHelp').className = 'help' + (ok ? '' : ' error');
 });
 
+/* =========================
+   Sessão + Perfil + Plano
+   ========================= */
 let sessionUser = null;
-let currentPlan = 'trial'; // usado também na seção de sites
+let currentPlan = 'trial';
 
 (async function initPerfil(){
   const { data: { session } } = await sb.auth.getSession();
@@ -281,7 +287,6 @@ let currentPlan = 'trial'; // usado também na seção de sites
   sessionUser = session.user;
   emailEl.value = session.user.email || '';
 
-  // Carrega plano e dados do perfil
   try{
     const { data: prof, error: e1 } = await sb
       .from('profiles')
@@ -297,27 +302,23 @@ let currentPlan = 'trial'; // usado também na seção de sites
         cpfCnpjEl.value = (prof.cpf_cnpj_type === 'cnpj') ? formatCNPJ(prof.cpf_cnpj) : formatCPF(prof.cpf_cnpj);
         updateDocUI();
       }
-      if (prof.razao_social) {
-        razaoSocialEl.value = prof.razao_social;
-        razaoWrap.style.display = 'block';
-      }
+      if (prof.razao_social) { razaoSocialEl.value = prof.razao_social; razaoWrap.style.display = 'block'; }
       if (prof.phone) telefoneEl.value = formatPhone(prof.phone);
 
-      const plan = (prof.plan || 'basico').toString();
-      currentPlan = plan; // guarda para a seção de sites
-      planoEl.value = plan;
-      const pretty = plan.charAt(0).toUpperCase() + plan.slice(1);
+      currentPlan = (prof.plan || 'basico').toString();
+      planoEl.value = currentPlan;
+      const pretty = currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1);
       const prettyBR = pretty.replace('Basico','Básico').replace('Intermediario','Intermediário');
       planChip.textContent = `Plano: ${prettyBR}`;
     }
 
-    // Após sabermos o plano, inicializar a seção de sites
-    initSitesSection();
+    // Depois de ler o plano, inicializa a seção de sites (carrega também a seleção salva)
+    await initSitesSection();
   }catch(e){
     console.error(e);
-    showBanner('Erro ao carregar dados (tabela "profiles" ausente?).', 'err');
+    showBanner('Erro ao carregar dados (tabela "profiles").', 'err');
     // Mesmo com erro, tenta iniciar a seção de sites com plano trial
-    initSitesSection();
+    await initSitesSection();
   }
 })();
 
@@ -362,7 +363,6 @@ btnSalvar.addEventListener('click', async ()=>{
     cpf_cnpj_type: docType,
     razao_social,
     phone: phoneDigits
-    // plan NÃO é alterado aqui; somente via compra/cancelamento
   };
 
   try {
@@ -376,7 +376,7 @@ btnSalvar.addEventListener('click', async ()=>{
 });
 
 /* =========================================================
-   SEÇÃO NOVA: Seleção de Sites (abaixo do cartão de dados)
+   SEÇÃO: Seleção de Sites (tabela: sites; vínculo: user_sites)
    ========================================================= */
 const PLAN_LIMIT = { trial: 2, basico: 4, intermediario: 6, premium: 8 };
 
@@ -393,36 +393,35 @@ let selectedIds = new Set();   // Set<number>
 function cap(s){ return (s||'').charAt(0).toUpperCase() + (s||'').slice(1); }
 
 async function initSitesSection(){
-  // Ajusta limite conforme plano já carregado
   planLimit = PLAN_LIMIT[currentPlan] ?? PLAN_LIMIT.trial;
   const pretty = cap(currentPlan).replace('Basico','Básico').replace('Intermediario','Intermediário');
   limitInfo.textContent = `Limite do plano (${pretty}): ${planLimit} site${planLimit>1?'s':''}`;
 
-  await loadSitesDisponiveis();
-  await loadUserSelection();
+  await loadSites();          // carrega todos os sites (id, nome, site)
+  await loadUserSelection();  // carrega seleção salva do usuário
   renderSites();
   updateCounter();
 }
 
-async function loadSitesDisponiveis(){
+async function loadSites(){
   try{
     const { data, error } = await sb
-      .from('sites')   // ajuste o nome da tabela se necessário
-      .select('id,nome,site')
+      .from('sites')                // <<<<<< tabela correta
+      .select('id,nome,site')       // <<<<<< busca id + colunas
       .order('nome', { ascending: true });
     if (error) throw error;
     allSites = data || [];
   }catch(e){
     console.error(e);
     allSites = [];
-    showBanner('Erro ao carregar lista de sites (tabela "sites_disponiveis").', 'err');
+    showBanner('Erro ao carregar lista de sites (tabela "sites").', 'err');
   }
 }
 
 async function loadUserSelection(){
   try{
     const { data, error } = await sb
-      .from('sites')         // (user_id uuid, site_id int)
+      .from('user_sites')           // (user_id uuid, site_id int)
       .select('site_id')
       .eq('user_id', sessionUser.id);
     if (error) throw error;
