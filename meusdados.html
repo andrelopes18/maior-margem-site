@@ -407,7 +407,7 @@ async function initSitesSection(){
 async function loadSitesDisponiveis(){
   try{
     const { data, error } = await sb
-      .from('sites_disponiveis')   // ajuste o nome da tabela se necessário
+      .from('sites')   // ajuste o nome da tabela se necessário
       .select('id,nome,site')
       .order('nome', { ascending: true });
     if (error) throw error;
