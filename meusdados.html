@@ -422,7 +422,7 @@ async function loadSitesDisponiveis(){
 async function loadUserSelection(){
   try{
     const { data, error } = await sb
-      .from('user_sites')         // (user_id uuid, site_id int)
+      .from('sites')         // (user_id uuid, site_id int)
       .select('site_id')
       .eq('user_id', sessionUser.id);
     if (error) throw error;
