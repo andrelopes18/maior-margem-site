@@ -1,119 +1,82 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Meus dados</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Seleção de Sites para Monitorar</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
-  body{background:#121212;color:#fff;font-family:Arial,sans-serif;padding:24px;margin:0}
+  body{background:#121212;color:#fff;font-family:Arial,system-ui,-apple-system,sans-serif;padding:24px;margin:0}
+  a{color:#00b140;text-decoration:none}
+  a:hover{text-decoration:underline}
   header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px;flex-wrap:wrap}
   h1{color:#00b140;margin:0}
-  a{color:#00b140}
-  .btn{display:inline-flex;align-items:center;gap:8px;background:#00b140;color:#fff;border:none;padding:10px 14px;border-radius:8px;text-decoration:none;cursor:pointer}
+  .chip{font-size:12px;background:#1e1e1e;border:1px solid #333;padding:6px 10px;border-radius:999px}
+  .chip.plan{color:#bfffc1;border-color:#2f5a2f;background:#132313}
+  .btn{display:inline-flex;align-items:center;gap:8px;background:#00b140;color:#fff;border:none;padding:10px 14px;border-radius:8px;cursor:pointer}
   .btn:hover{background:#009b38}
   .btn.outline{background:transparent;border:1px solid #2a2a2a;color:#ddd}
   .btn.outline:hover{background:#1b1b1b}
-
-  .chip{font-size:12px;background:#1e1e1e;border:1px solid #333;padding:6px 10px;border-radius:999px}
-  .chip.plan{color:#bfffc1;border-color:#2f5a2f;background:#132313}
-
-  .container{max-width:880px;margin:0 auto}
+  .container{max-width:960px;margin:0 auto}
   .card{background:#0f0f0f;border:1px solid #2a2a2a;border-radius:12px;padding:18px}
-
-  .grid{display:grid;grid-template-columns:1fr 1fr;column-gap:16px;row-gap:22px}
-  .col-1{grid-column: span 1}
-  .col-2{grid-column: span 2}
-  @media (max-width: 720px){ .grid{grid-template-columns:1fr} .col-2{grid-column:span 1} }
-
-  label{display:block;margin:4px 0 8px;color:#9aa0a6}
-
-  input,select{
-    width:100%;padding:12px 14px;border-radius:8px;border:1px solid #3a3a3a;
-    background:#242424;color:#fff;font-size:15px;line-height:1.2
-  }
-  input[disabled], select[disabled]{
-    background:#171717;border-color:#2a2a2a;color:#b5b5b5;cursor:not-allowed;
-  }
-
-  .help{font-size:12px;color:#9aa0a6;margin-top:6px}
-  .help.error{color:#ff6666}
-
-  .banner{border:1px solid #2a2a2a;border-radius:10px;padding:10px 12px;margin-bottom:14px;background:#111}
+  .row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .banner{border:1px solid #2a2a2a;border-radius:10px;padding:10px 12px;margin-bottom:14px;background:#111;display:none}
   .banner.warn{border-color:#5c3f00;background:#1b1300;color:#ffc966}
   .banner.ok{border-color:#214d21;background:#0e1a0e;color:#b7fbb7}
   .banner.err{border-color:#5c1e1e;background:#190d0d;color:#ff9a9a}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media (max-width: 840px){ .grid{grid-template-columns:1fr} }
+  .site-item{display:flex;align-items:flex-start;gap:12px;padding:12px;border:1px solid #232323;border-radius:10px;background:#121212}
+  .site-item.disabled{opacity:0.55}
+  .site-title{font-weight:bold;margin-bottom:4px}
+  .site-url{font-size:12px;color:#9aa0a6;word-break:break-all}
+  .muted{color:#9aa0a6;font-size:13px}
+  .limit-info{font-size:13px;color:#b7fbb7}
+  .footer-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-top:14px}
+  .counter{font-size:13px;color:#9aa0a6}
+  input[type="checkbox"]{width:18px;height:18px;margin-top:2px}
 </style>
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="./config.js"></script>
 </head>
 <body>
 <header class="container">
-  <h1>Meus dados</h1>
-  <div class="actions" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+  <h1>Selecionar sites para monitorar</h1>
+  <div class="row">
     <span id="planChip" class="chip plan" title="Plano atual">Plano: —</span>
     <a class="btn outline" href="dashboard.html">← Voltar ao dashboard</a>
-    <button id="btnSair" class="btn">Sair</button>
   </div>
 </header>
 
 <main class="container">
-  <div id="banner" class="banner" style="display:none"></div>
+  <div id="banner" class="banner"></div>
 
-  <div class="card">
-    <div class="grid">
-      <div class="col-2">
-        <label for="email">Email</label>
-        <input id="email" type="email" placeholder="usuario@exemplo.com" disabled>
-      </div>
+  <div class="card" id="card">
+    <p class="muted" id="intro">
+      Marque os sites que deseja monitorar. O limite depende do seu plano. 
+      <a href="planos.html">Atualize o plano</a> para liberar mais sites.
+    </p>
+    <p class="limit-info" id="limitInfo">Limite do plano: —</p>
 
-      <div class="col-1">
-        <label for="nome">Nome</label>
-        <input id="nome" type="text" placeholder="Seu nome" autocomplete="given-name">
-      </div>
+    <div id="sitesWrap" class="grid" aria-live="polite" aria-busy="true">
+      <!-- Lista de sites renderizada aqui -->
+    </div>
 
-      <div class="col-1">
-        <label for="sobrenome">Sobrenome</label>
-        <input id="sobrenome" type="text" placeholder="Seu sobrenome" autocomplete="family-name">
-      </div>
-
-      <div class="col-1">
-        <label for="cpfCnpj">CPF ou CNPJ</label>
-        <input id="cpfCnpj" type="text" inputmode="numeric" placeholder="CPF ou CNPJ">
-        <div id="docHelp" class="help">Digite apenas números; a formatação aparece sozinha.</div>
-      </div>
-
-      <div id="razaoWrap" class="col-1" style="display:none">
-        <label for="razaoSocial">Razão social</label>
-        <input id="razaoSocial" type="text" placeholder="Razão social (para CNPJ)">
-      </div>
-
-      <div class="col-1">
-        <label for="telefone">Telefone</label>
-        <input id="telefone" type="tel" inputmode="tel" placeholder="(11) 91234-5678">
-        <div id="telHelp" class="help">Formato BR (com DDD). Ex.: (11) 91234-5678</div>
-      </div>
-
-      <div class="col-1">
-        <label for="plano">Plano escolhido</label>
-        <select id="plano" disabled>
-          <option value="trial">Trial</option>
-          <option value="basico">Básico</option>
-          <option value="intermediario">Intermediário</option>
-          <option value="premium">Premium</option>
-        </select>
-        <div class="help">O plano é alterado ao adquirir/alterar a assinatura nos <a href="planos.html">Planos</a>.</div>
-      </div>
-
-      <div class="col-2">
-        <button id="btnSalvar" class="btn">💾 Salvar</button>
+    <div class="footer-actions">
+      <div class="counter" id="counter">Selecionados: 0 / —</div>
+      <div class="row">
+        <button id="btnLimpar" class="btn outline">Limpar</button>
+        <button id="btnSalvar" class="btn">💾 Salvar seleção</button>
       </div>
     </div>
   </div>
 </main>
 
 <script>
+/* =========================
+   Config / Supabase Client
+   ========================= */
 const CFG = window.CONFIG || {};
 const SUPABASE_URL = CFG.SUPABASE_URL;
 const SUPABASE_ANON_KEY = CFG.SUPABASE_ANON_KEY;
@@ -125,200 +88,246 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
 });
 
-const emailEl = document.getElementById('email');
-const nomeEl = document.getElementById('nome');
-const sobrenomeEl = document.getElementById('sobrenome');
-const cpfCnpjEl = document.getElementById('cpfCnpj');
-const telefoneEl = document.getElementById('telefone');
-const planoEl = document.getElementById('plano');
-const razaoWrap = document.getElementById('razaoWrap');
-const razaoSocialEl = document.getElementById('razaoSocial');
+/* =========================
+   Elementos
+   ========================= */
+const planChip   = document.getElementById('planChip');
+const bannerEl   = document.getElementById('banner');
+const sitesWrap  = document.getElementById('sitesWrap');
+const counterEl  = document.getElementById('counter');
+const limitInfo  = document.getElementById('limitInfo');
+const btnSalvar  = document.getElementById('btnSalvar');
+const btnLimpar  = document.getElementById('btnLimpar');
 
-const btnSalvar = document.getElementById('btnSalvar');
-const btnSair = document.getElementById('btnSair');
-
-const bannerEl = document.getElementById('banner');
-const telHelp = document.getElementById('telHelp');
-const docHelp = document.getElementById('docHelp');
-const planChip = document.getElementById('planChip');
-
-function showBanner(text, type = 'ok') {
+/* =========================
+   Utilitários
+   ========================= */
+function showBanner(text, type = 'ok', timeoutMs = 4000) {
   bannerEl.textContent = text;
   bannerEl.className = 'banner ' + (type === 'warn' ? 'warn' : (type === 'err' ? 'err' : 'ok'));
   bannerEl.style.display = 'block';
-  setTimeout(() => { bannerEl.style.display = 'none'; }, 4200);
+  if (timeoutMs > 0) setTimeout(() => { bannerEl.style.display = 'none'; }, timeoutMs);
 }
-function digitsOnly(s){ return (s||'').replace(/\D+/g, ''); }
+function capitalize(s){ return (s||'').charAt(0).toUpperCase() + (s||'').slice(1); }
 
-function formatCPF(d) {
-  d = d.slice(0,11);
-  if (d.length <= 3) return d;
-  if (d.length <= 6) return d.replace(/(\d{3})(\d+)/, "$1.$2");
-  if (d.length <= 9) return d.replace(/(\d{3})(\d{3})(\d+)/, "$1.$2.$3");
-  return d.replace(/(\d{3})(\d{3})(\d{3})(\d{0,2}).*/, "$1.$2.$3-$4");
-}
-function validateCPF(d) {
-  if (!d || d.length !== 11) return false;
-  if (/^(\d)\1{10}$/.test(d)) return false;
-  let sum = 0;
-  for (let i=0;i<9;i++) sum += parseInt(d.charAt(i))*(10-i);
-  let r = sum % 11; let dv1 = (r<2)?0:(11-r);
-  if (dv1 !== parseInt(d.charAt(9))) return false;
-  sum = 0;
-  for (let i=0;i<10;i++) sum += parseInt(d.charAt(i))*(11-i);
-  r = sum % 11; let dv2 = (r<2)?0:(11-r);
-  return dv2 === parseInt(d.charAt(10));
-}
+const PLAN_LIMIT = {
+  trial: 2,
+  basico: 4,
+  intermediario: 6,
+  premium: 8
+};
 
-function formatCNPJ(d) {
-  d = d.slice(0,14);
-  if (d.length <= 2) return d;
-  if (d.length <= 5) return d.replace(/(\d{2})(\d+)/, "$1.$2");
-  if (d.length <= 8) return d.replace(/(\d{2})(\d{3})(\d+)/, "$1.$2.$3");
-  if (d.length <= 12) return d.replace(/(\d{2})(\d{3})(\d{3})(\d+)/, "$1.$2.$3/$4");
-  return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2}).*/, "$1.$2.$3/$4-$5");
-}
-function validateCNPJ(d) {
-  if (!d || d.length !== 14) return false;
-  if (/^(\d)\1{13}$/.test(d)) return false;
-  const w1 = [5,4,3,2,9,8,7,6,5,4,3,2];
-  const w2 = [6,5,4,3,2,9,8,7,6,5,4,3,2];
-  let sum = 0;
-  for (let i=0;i<12;i++) sum += parseInt(d[i]) * w1[i];
-  let r = sum % 11; let dv1 = (r<2)?0:(11-r);
-  if (dv1 !== parseInt(d[12])) return false;
-  sum = 0;
-  for (let i=0;i<13;i++) sum += parseInt(d[i]) * w2[i];
-  r = sum % 11; let dv2 = (r<2)?0:(11-r);
-  return dv2 === parseInt(d[13]);
-}
-
-function formatPhone(d) {
-  d = d.slice(0,11);
-  if (d.length <= 2) return `(${d}`;
-  if (d.length <= 6) return `(${d.slice(0,2)}) ${d.slice(2)}`;
-  if (d.length <= 10) return `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`;
-  return `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`;
-}
-function validatePhone(d){ return d.length === 10 || d.length === 11; }
-
-function updateDocUI() {
-  let d = digitsOnly(cpfCnpjEl.value);
-  const isCNPJ = d.length > 11;
-  if (isCNPJ) {
-    cpfCnpjEl.value = formatCNPJ(d);
-    const ok = validateCNPJ(d);
-    docHelp.textContent = ok ? 'CNPJ válido.' : 'Digite 14 dígitos para um CNPJ válido.';
-    docHelp.className = 'help' + (ok ? '' : ' error');
-    razaoWrap.style.display = 'block';
-  } else {
-    cpfCnpjEl.value = formatCPF(d);
-    const ok = validateCPF(d);
-    docHelp.textContent = ok ? 'CPF válido.' : 'Digite 11 dígitos para um CPF válido.';
-    docHelp.className = 'help' + (ok ? '' : ' error');
-    razaoWrap.style.display = 'none';
-    razaoSocialEl.value = '';
-  }
-}
-cpfCnpjEl.addEventListener('input', updateDocUI);
-
-telefoneEl.addEventListener('input', () => {
-  const d = digitsOnly(telefoneEl.value);
-  telefoneEl.value = formatPhone(d);
-  const ok = d.length === 0 || validatePhone(d);
-  telHelp.textContent = ok ? 'Formato BR (com DDD).' : 'Telefone inválido. Use 10 ou 11 dígitos.';
-  telHelp.className = 'help' + (ok ? '' : ' error');
-});
-
+/* =========================
+   Estado
+   ========================= */
 let sessionUser = null;
+let userPlan = 'trial';
+let planLimit = PLAN_LIMIT[userPlan];
+let allSites = [];         // [{id, nome, site}]
+let selectedIds = new Set(); // Set<number>
+
+/* =========================
+   Fluxo principal
+   ========================= */
 (async function init(){
+  // Sessão
   const { data: { session } } = await sb.auth.getSession();
   if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return; }
   sessionUser = session.user;
-  emailEl.value = session.user.email || '';
 
-  // Carrega plano para exibir no chip e no select (bloqueado)
-  try{
-    const { data: prof, error: e1 } = await sb.from('profiles').select('first_name,last_name,cpf_cnpj,phone,plan,razao_social,cpf_cnpj_type').eq('id', sessionUser.id).maybeSingle();
+  // Perfil (obter plano)
+  try {
+    const { data: prof, error: e1 } = await sb
+      .from('profiles')
+      .select('plan')
+      .eq('id', sessionUser.id)
+      .maybeSingle();
     if (e1) throw e1;
 
-    if (prof){
-      nomeEl.value = prof.first_name || '';
-      sobrenomeEl.value = prof.last_name || '';
-      if (prof.cpf_cnpj) {
-        cpfCnpjEl.value = (prof.cpf_cnpj_type === 'cnpj') ? prof.cpf_cnpj : prof.cpf_cnpj;
-        cpfCnpjEl.value = (prof.cpf_cnpj_type === 'cnpj') ? formatCNPJ(prof.cpf_cnpj) : formatCPF(prof.cpf_cnpj);
-        updateDocUI();
-      }
-      if (prof.razao_social) {
-        razaoSocialEl.value = prof.razao_social;
-        razaoWrap.style.display = 'block';
-      }
-      if (prof.phone) telefoneEl.value = formatPhone(prof.phone);
+    userPlan = (prof && prof.plan) ? String(prof.plan) : 'trial';
+    planLimit = PLAN_LIMIT[userPlan] ?? PLAN_LIMIT.trial;
 
-      const plan = (prof.plan || 'basico').toString();
-      planoEl.value = plan;
-      const pretty = plan.charAt(0).toUpperCase() + plan.slice(1);
-      const prettyBR = pretty.replace('Basico','Básico').replace('Intermediario','Intermediário');
-      planChip.textContent = `Plano: ${prettyBR}`;
-    }
-  }catch(e){
+    const pretty = capitalize(userPlan)
+      .replace('Basico','Básico')
+      .replace('Intermediario','Intermediário');
+    planChip.textContent = `Plano: ${pretty}`;
+    limitInfo.textContent = `Limite do plano: ${planLimit} site${planLimit>1?'s':''}`;
+  } catch (e) {
     console.error(e);
-    showBanner('Erro ao carregar dados (tabela "profiles" ausente?).', 'err');
+    showBanner('Não foi possível ler seu plano. Usando limite do Trial (2).', 'warn');
+    userPlan = 'trial';
+    planLimit = PLAN_LIMIT.trial;
   }
+
+  // Carregar sites disponíveis
+  await loadSitesDisponiveis();
+
+  // Carregar seleção atual do usuário
+  await loadUserSelection();
+
+  // Renderizar UI
+  renderSites();
+  updateCounter();
 })();
 
-btnSair.addEventListener('click', async ()=>{
-  await sb.auth.signOut();
-  window.location.href = CFG.SITE_URL || 'index.html';
+/* =========================
+   Carregamentos
+   ========================= */
+async function loadSitesDisponiveis(){
+  try{
+    // Tabela esperada: sites_disponiveis (id int, nome text, site text)
+    const { data, error } = await sb
+      .from('sites_disponiveis')
+      .select('id,nome,site')
+      .order('nome', { ascending: true });
+    if (error) throw error;
+    allSites = data || [];
+  }catch(e){
+    console.error(e);
+    allSites = [];
+    showBanner('Erro ao carregar lista de sites. Verifique a tabela "sites_disponiveis".', 'err');
+  }
+}
+
+async function loadUserSelection(){
+  try{
+    // Tabela esperada: user_sites (user_id uuid, site_id int)
+    const { data, error } = await sb
+      .from('user_sites')
+      .select('site_id')
+      .eq('user_id', sessionUser.id);
+    if (error) throw error;
+    selectedIds = new Set((data||[]).map(r => r.site_id));
+  }catch(e){
+    console.error(e);
+    selectedIds = new Set();
+    // Aviso suave apenas se existirem sites para marcar
+    if (allSites.length) {
+      showBanner('Não foi possível carregar sua seleção anterior (tabela "user_sites").', 'warn', 5000);
+    }
+  }
+}
+
+/* =========================
+   Render / Interação
+   ========================= */
+function renderSites(){
+  sitesWrap.innerHTML = '';
+  sitesWrap.setAttribute('aria-busy', 'true');
+
+  if (!allSites.length){
+    const empty = document.createElement('div');
+    empty.className = 'muted';
+    empty.textContent = 'Nenhum site disponível cadastrado.';
+    sitesWrap.appendChild(empty);
+    sitesWrap.setAttribute('aria-busy', 'false');
+    return;
+  }
+
+  const reached = selectedIds.size >= planLimit;
+
+  for (const s of allSites){
+    const checked = selectedIds.has(s.id);
+    const disabled = !checked && reached; // se atingiu o limite, desabilita os que não estão marcados
+
+    const wrap = document.createElement('label');
+    wrap.className = 'site-item' + (disabled ? ' disabled' : '');
+    wrap.htmlFor = `chk_${s.id}`;
+
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.id = `chk_${s.id}`;
+    chk.value = String(s.id);
+    chk.checked = checked;
+    chk.disabled = disabled;
+    chk.addEventListener('change', onToggle);
+
+    const block = document.createElement('div');
+    const title = document.createElement('div');
+    title.className = 'site-title';
+    title.textContent = s.nome || '(sem nome)';
+
+    const url = document.createElement('div');
+    url.className = 'site-url';
+    const a = document.createElement('a');
+    a.href = s.site || '#';
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.textContent = s.site || '(sem URL)';
+    url.appendChild(a);
+
+    block.appendChild(title);
+    block.appendChild(url);
+
+    wrap.appendChild(chk);
+    wrap.appendChild(block);
+    sitesWrap.appendChild(wrap);
+  }
+
+  // Mensagem discreta quando limite atingido
+  if (reached){
+    showBanner(`Você atingiu o limite do seu plano (${planLimit}). Para marcar mais, desmarque algum ou atualize seu plano.`, 'warn', 3000);
+  }
+
+  sitesWrap.setAttribute('aria-busy', 'false');
+}
+
+function onToggle(ev){
+  const id = Number(ev.target.value);
+  if (ev.target.checked){
+    if (selectedIds.size >= planLimit){
+      // Não permite ultrapassar; desfaz e informa
+      ev.target.checked = false;
+      showBanner(`Limite do plano (${planLimit}) atingido.`, 'warn', 2500);
+      return;
+    }
+    selectedIds.add(id);
+  } else {
+    selectedIds.delete(id);
+  }
+  // Re-render para aplicar/retirar "disabled" dos demais
+  renderSites();
+  updateCounter();
+}
+
+function updateCounter(){
+  counterEl.textContent = `Selecionados: ${selectedIds.size} / ${planLimit}`;
+}
+
+/* =========================
+   Ações
+   ========================= */
+btnLimpar.addEventListener('click', ()=>{
+  selectedIds.clear();
+  renderSites();
+  updateCounter();
 });
 
 btnSalvar.addEventListener('click', async ()=>{
-  const first_name = nomeEl.value.trim();
-  const last_name  = sobrenomeEl.value.trim();
-  const docDigits  = digitsOnly(cpfCnpjEl.value);
-  const phoneDigits= digitsOnly(telefoneEl.value);
+  try{
+    btnSalvar.disabled = true;
 
-  if (!first_name){ showBanner('Informe o Nome.', 'warn'); nomeEl.focus(); return; }
-  if (!last_name){ showBanner('Informe o Sobrenome.', 'warn'); sobrenomeEl.focus(); return; }
+    // Apaga seleção anterior do usuário
+    const { error: delErr } = await sb
+      .from('user_sites')
+      .delete()
+      .eq('user_id', sessionUser.id);
+    if (delErr) throw delErr;
 
-  let docType = null, docOK = false;
-  if (docDigits.length > 0 && docDigits.length <= 11) {
-    docType = 'cpf'; docOK = validateCPF(docDigits);
-  } else if (docDigits.length >= 12) {
-    docType = 'cnpj'; docOK = validateCNPJ(docDigits);
-  }
-  if (!docOK){ showBanner('CPF/CNPJ inválido.', 'warn'); cpfCnpjEl.focus(); return; }
+    // Insere a seleção atual (até o limite)
+    const ids = Array.from(selectedIds).slice(0, planLimit);
+    if (ids.length){
+      const payload = ids.map(site_id => ({ user_id: sessionUser.id, site_id }));
+      const { error: insErr } = await sb.from('user_sites').insert(payload);
+      if (insErr) throw insErr;
+    }
 
-  let razao_social = null;
-  if (docType === 'cnpj') {
-    razao_social = (razaoSocialEl.value || '').trim();
-    if (!razao_social) { showBanner('Informe a Razão social para CNPJ.', 'warn'); razaoSocialEl.focus(); return; }
-  }
-
-  if (phoneDigits && !validatePhone(phoneDigits)){
-    showBanner('Telefone inválido (use 10 ou 11 dígitos).', 'warn'); telefoneEl.focus(); return;
-  }
-
-  const payload = {
-    id: sessionUser.id,
-    email: sessionUser.email,
-    first_name,
-    last_name,
-    cpf_cnpj: docDigits,
-    cpf_cnpj_type: docType,
-    razao_social,
-    phone: phoneDigits
-    // plan NÃO é alterado aqui; somente via compra/cancelamento
-  };
-
-  try {
-    const { error } = await sb.from('profiles').upsert(payload, { onConflict: 'id' });
-    if (error) throw error;
-    showBanner('Dados salvos com sucesso!', 'ok');
-  } catch (e) {
+    showBanner('Seleção salva com sucesso!', 'ok');
+  }catch(e){
     console.error(e);
-    showBanner('Falha ao salvar na base. Verifique a tabela/privilegios.', 'err');
+    showBanner('Falha ao salvar sua seleção. Verifique permissões/RLS de "user_sites".', 'err');
+  }finally{
+    btnSalvar.disabled = false;
   }
 });
 </script>
