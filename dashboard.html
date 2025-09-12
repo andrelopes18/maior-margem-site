@@ -88,6 +88,7 @@
     display:flex; align-items:center; justify-content:center;
   }
   .resizer:after { content: ""; width: 40px; height: 3px; border-radius: 3px; background: #3a3a3a; }
+
   body.resizing, body.resizing * { cursor: ns-resize !important; user-select: none; }
 
   /* Botão do gráfico – mais encorpado/visível */
@@ -121,6 +122,9 @@
   canvas.spark {
     width:200px; height:180px; display:block; background:#121212; border:1px solid #232323; border-radius:6px;
   }
+
+  /* >>> NOVO: esconder colunas de sites não permitidos <<< */
+  .col-hidden { display: none; }
 </style>
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="./config.js"></script>
@@ -163,14 +167,14 @@
           <th class="col-fav">Ação</th>
           <th class="col-sku">EAN</th>
           <th class="col-desc">Descrição</th>
-          <th>LeroyMerlin</th>
-          <th>QueroQuero</th>
-          <th>Cassol</th>
-          <th>RedeMac</th>
-          <th>MestreTinho</th>
-          <th>Tumelero</th>
-          <th>Supremeinox</th>
-          <th>Ghaus</th>
+          <th data-site="LeroyMerlin">LeroyMerlin</th>
+          <th data-site="QueroQuero">QueroQuero</th>
+          <th data-site="Cassol">Cassol</th>
+          <th data-site="RedeMac">RedeMac</th>
+          <th data-site="MestreTinho">MestreTinho</th>
+          <th data-site="Tumelero">Tumelero</th>
+          <th data-site="Supremeinox">Supremeinox</th>
+          <th data-site="Ghaus">Ghaus</th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -191,14 +195,14 @@
           <th class="col-fav">★</th>
           <th class="col-sku">EAN</th>
           <th class="col-desc">Descrição</th>
-          <th>LeroyMerlin</th>
-          <th>QueroQuero</th>
-          <th>Cassol</th>
-          <th>RedeMac</th>
-          <th>MestreTinho</th>
-          <th>Tumelero</th>
-          <th>Supremeinox</th>
-          <th>Ghaus</th>
+          <th data-site="LeroyMerlin">LeroyMerlin</th>
+          <th data-site="QueroQuero">QueroQuero</th>
+          <th data-site="Cassol">Cassol</th>
+          <th data-site="RedeMac">RedeMac</th>
+          <th data-site="MestreTinho">MestreTinho</th>
+          <th data-site="Tumelero">Tumelero</th>
+          <th data-site="Supremeinox">Supremeinox</th>
+          <th data-site="Ghaus">Ghaus</th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -313,6 +317,151 @@ const generalChkMap = new Map();
 /* Aux para favoritos */
 let favFirstAutoRenderDone = false;
 
+/* ======== NOVO: controle de colunas visíveis por plano/seleção ======== */
+/** Limites default por plano (fallback se não houver tabela billing_plans) */
+const DEFAULT_PLAN_SITE_LIMIT = {
+  trial: 2,
+  basico: 3,
+  intermediario: 5,
+  premium: 8
+};
+/** Set com os nomes de sites que ficarão visíveis no dashboard */
+let visibleSites = new Set(siteOrder); // inicia liberando todos, reduz após carregar dados do usuário
+
+function normalizeSiteLabel(x){
+  if (!x) return "";
+  return x.toString()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'') // remove acentos
+    .replace(/\s+/g,'') // remove espaços
+    .replace(/[^a-zA-Z0-9]/g,'') // limpa símbolos
+    .toLowerCase();
+}
+function toDashboardLabel(raw){
+  const n = normalizeSiteLabel(raw);
+  // mapeia para os labels usados no cabeçalho
+  for (const lbl of siteOrder){
+    if (normalizeSiteLabel(lbl) === n) return lbl;
+  }
+  // alguns apelidos comuns
+  if (n === 'leroymerlin') return 'LeroyMerlin';
+  if (n === 'queroquero') return 'QueroQuero';
+  if (n === 'cassol') return 'Cassol';
+  if (n === 'redemac' || n === 'redemacsuperbem' || n === 'superbem') return 'RedeMac';
+  if (n === 'mestretinho' || n === 'mestrettinho') return 'MestreTinho';
+  if (n === 'tumelero') return 'Tumelero';
+  if (n === 'supremeinox') return 'Supremeinox';
+  if (n === 'ghaus' || n === 'gháus') return 'Ghaus';
+  return ''; // não reconhecido
+}
+
+/** Aplica/remover classe de oculto nos TH/TD das tabelas conforme visibleSites */
+function applyColumnVisibility(){
+  const tables = [document.getElementById('produtosTable'), document.getElementById('favTable')];
+  for (const table of tables){
+    if (!table) continue;
+    const headCells = table.querySelectorAll('thead th');
+    // mapeia índice do cabeçalho -> site
+    const siteIndexMap = new Map(); // idx -> 'LeroyMerlin'...
+    headCells.forEach((th, idx) => {
+      const siteName = th.getAttribute('data-site'); // só existe nas colunas de site
+      if (siteName){
+        const allowed = visibleSites.has(siteName);
+        th.classList.toggle('col-hidden', !allowed);
+        siteIndexMap.set(idx, siteName);
+      }
+    });
+    // aplica nas linhas do corpo
+    const rows = table.querySelectorAll('tbody tr');
+    for (const tr of rows){
+      const cells = tr.children;
+      for (let i=0; i<cells.length; i++){
+        if (siteIndexMap.has(i)){
+          const siteName = siteIndexMap.get(i);
+          const allowed = visibleSites.has(siteName);
+          cells[i].classList.toggle('col-hidden', !allowed);
+        }
+      }
+    }
+  }
+}
+
+/** Obtém limite de sites pelo plano do usuário: tenta billing_plans.plan_key -> sites_limit/max_sites; cai no fallback */
+async function getSitesLimitForPlan(planKey){
+  const key = (planKey || '').toString().trim().toLowerCase();
+  try {
+    const { data, error } = await sb
+      .from('billing_plans')
+      .select('sites_limit, max_sites')
+      .eq('plan_key', key)
+      .maybeSingle();
+    if (error) throw error;
+    const lim = Number(data?.sites_limit ?? data?.max_sites);
+    if (Number.isFinite(lim) && lim > 0) return lim;
+  } catch(e) {
+    console.warn('billing_plans não encontrado/sem campo sites_limit. Usando fallback.', e);
+  }
+  return DEFAULT_PLAN_SITE_LIMIT[key] ?? 2;
+}
+
+/** Lê os sites selecionados do usuário em meusdados (user_sites + sites) e calcula os visíveis pelo plano */
+async function loadUserVisibleSites(userId, planKey){
+  const maxSites = await getSitesLimitForPlan(planKey);
+
+  // 1) user_sites -> ids
+  let siteIds = [];
+  try{
+    const { data: us, error } = await sb
+      .from('user_sites')
+      .select('site_id, enabled')
+      .eq('user_id', userId);
+    if (error) throw error;
+    siteIds = (us || [])
+      .filter(r => (r.enabled === true || r.enabled === null || typeof r.enabled === 'undefined'))
+      .map(r => r.site_id)
+      .filter(x => x !== null && x !== undefined);
+  }catch(e){
+    console.warn('Tabela user_sites ausente? Prosseguindo sem ela.', e);
+  }
+
+  // 2) sites -> nomes
+  let chosenLabels = [];
+  if (siteIds.length){
+    try{
+      const { data: st, error } = await sb
+        .from('sites')
+        .select('id, nome, name, site')
+        .in('id', siteIds);
+      if (error) throw error;
+      const orderedByUser = siteIds.map(id => (st||[]).find(s => s.id === id)).filter(Boolean);
+      chosenLabels = orderedByUser.map(s => {
+        const raw = s?.nome || s?.name || s?.site || '';
+        const lbl = toDashboardLabel(raw);
+        return lbl;
+      }).filter(lbl => !!lbl && siteOrder.includes(lbl));
+    } catch(e){
+      console.warn('Falha ao ler sites por id. Tentando fallback.', e);
+    }
+  }
+
+  // Fallback: se não há seleção válida, usa a ordem padrão
+  if (chosenLabels.length === 0){
+    chosenLabels = [...siteOrder];
+  }
+
+  // 3) Respeita o limite do plano
+  const limited = chosenLabels.filter((s, idx) => idx < maxSites);
+
+  // 4) Atualiza o Set global
+  visibleSites = new Set(limited);
+
+  // 5) Indica no status
+  const etc = chosenLabels.length > maxSites ? ` (+${chosenLabels.length - maxSites} oculto${(chosenLabels.length - maxSites) > 1 ? 's':''})` : '';
+  setStatus(`Sites exibidos: ${limited.join(', ')}${etc ? etc : ''}`);
+
+  // 6) Atualiza cabeçalhos atuais
+  applyColumnVisibility();
+}
+
 /* ======== FUNÇÕES UTIL ======== */
 function setStatus(t){ statusEl.textContent = t || ''; }
 function showErr(e){ errEl.style.display='block'; errEl.textContent = String(e||'').trim(); }
@@ -324,6 +473,7 @@ function computeMinMaxForRow(item){
   let min = { site:null, val: Infinity };
   let max = { site:null, val: -Infinity };
   for (const s of siteOrder) {
+    if (!visibleSites.has(s)) continue; // <<< considera só colunas visíveis
     const d = item.sites[s];
     if (!d || !Number.isFinite(d.precoNum)) continue;
     const n = d.precoNum;
@@ -486,6 +636,7 @@ function renderGeneralChunk(){
       renderFavs();
       updateFavHeight();
       updateCounts();
+      applyColumnVisibility(); // manter coerência ao atualizar favs
     });
     tdFav.appendChild(chk);
     tr.appendChild(tdFav);
@@ -503,9 +654,10 @@ function renderGeneralChunk(){
     tdDesc.innerHTML = (item.desc || '').replace(/</g,'&lt;');
     tr.appendChild(tdDesc);
 
-    // Preços (com botão de gráfico)
+    // Preços (com botão de gráfico) — somente colunas visíveis
     const { minSite, maxSite } = computeMinMaxForRow(item);
     for (const s of siteOrder) {
+      if (!visibleSites.has(s)) continue; // não cria TD para sites ocultos
       const td = document.createElement('td');
       const d = item.sites[s];
       if (d) {
@@ -602,6 +754,7 @@ function renderFavs(){
       renderFavs();
       updateFavHeight();
       updateCounts();
+      applyColumnVisibility();
     });
     tdAct.appendChild(btn);
     tr.appendChild(tdAct);
@@ -618,6 +771,7 @@ function renderFavs(){
 
     const { minSite, maxSite } = computeMinMaxForRow(item);
     for (const s of siteOrder) {
+      if (!visibleSites.has(s)) continue; // não cria TD para sites ocultos
       const td = document.createElement('td');
       const d = item.sites[s];
       if (d) {
@@ -723,6 +877,7 @@ async function fetchNextPage(){
 
       serverOffset += PAGE_SIZE;
       setStatus(`Carregados: ${produtosList.length} SKUs (parcial)`);
+      applyColumnVisibility(); // garante colunas corretas após novo lote
     }
   } catch(e){
     console.error(e);
@@ -751,7 +906,16 @@ function resetAndQuery(){
 }
 
 /* ======== EVENTOS UI ======== */
-btnReload.addEventListener('click', () => { resetAndQuery(); });
+btnReload.addEventListener('click', async () => {
+  // Recarrega também os sites visíveis (caso o usuário tenha mudado meusdados ou plano)
+  const session = (await sb.auth.getSession()).data.session;
+  if (session?.user?.id) {
+    // plano pode ter mudado: recarrega header para obter planKey e sites
+    const planKey = await loadHeaderInfoPlanOnly();
+    await loadUserVisibleSites(session.user.id, planKey);
+  }
+  resetAndQuery();
+});
 
 const onFilterInput = debounce(() => {
   currentEanQ = (eanFilter.value || '').trim();
@@ -768,6 +932,7 @@ async function loadHeaderInfo(){
   if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return null; }
   userChip.textContent = session.user?.email || 'Logado';
 
+  let planKey = 'basico';
   try{
     const { data, error } = await sb
       .from('profiles')
@@ -776,13 +941,36 @@ async function loadHeaderInfo(){
       .maybeSingle();
     if (error) throw error;
     const planRaw = (data?.plan || 'basico').toString();
+    planKey = planRaw.toLowerCase();
     const pretty = planRaw.charAt(0).toUpperCase() + planRaw.slice(1);
     planChip.textContent = `Plano: ${pretty}`;
   }catch(e){
     console.error(e);
     planChip.textContent = 'Plano: —';
   }
+
+  // carrega colunas visíveis conforme plano + seleção do usuário
+  await loadUserVisibleSites(session.user.id, planKey);
+
   return session;
+}
+
+/** Variante usada no botão Recarregar (evita redirecionar) */
+async function loadHeaderInfoPlanOnly(){
+  try{
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) return 'basico';
+    const { data, error } = await sb
+      .from('profiles')
+      .select('plan')
+      .eq('id', session.user.id)
+      .maybeSingle();
+    if (error) throw error;
+    return (data?.plan || 'basico').toString().toLowerCase();
+  }catch(e){
+    console.error(e);
+    return 'basico';
+  }
 }
 
 /* ======== SAIR ======== */
@@ -871,7 +1059,6 @@ function drawSparkline(points){
   ctx.fillStyle = '#9aa0a6';
   ctx.font = '11px Arial';
   ctx.textAlign = 'right';
-  // ajuste para não colar no topo/rodapé
   const yMaxY = yScale(yMax), yMinY = yScale(yMin);
   ctx.fillText(formatBRL(yMax), m.l-6, Math.max(m.t+10, yMaxY-6));
   ctx.fillText(formatBRL(yMin), m.l-6, Math.min(H - m.b - 2, yMinY+12));
