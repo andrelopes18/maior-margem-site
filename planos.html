@@ -48,6 +48,10 @@
   small.mono{font-family:ui-monospace,Consolas,monospace;opacity:.85}
   #btnDiag{position:fixed;right:16px;bottom:16px;z-index:9999;width:38px;height:38px;border-radius:999px;border:1px solid #2a2a2a;background:#131313;color:#bdbdbd;opacity:.5;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:18px}
   #btnDiag:hover{opacity:.9}
+
+  /* NOVO: chips de vigência */
+  .chip.time{color:#cfe8ff;border-color:#2f435a;background:#0f1a24}
+  .chip.pending{color:#ffe2bf;border-color:#5c3f00;background:#1b1300}
 </style>
 </head>
 <body>
@@ -55,6 +59,8 @@
   <h1>Planos</h1>
   <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
     <span id="planChip" class="chip plan">Plano: —</span>
+    <span id="timeChip" class="chip time" style="display:none"></span>
+    <span id="pendingChip" class="chip pending" style="display:none"></span>
     <a class="btn ghost" href="dashboard.html">← Voltar</a>
     <a class="btn ghost" href="meusdados.html">Meus dados</a>
     <button id="btnSair" class="btn">Sair</button>
@@ -71,6 +77,7 @@
       <div>
         <div><b>Plano:</b> <span id="planoNome">—</span> • <b>Valor:</b> R$ <span id="planoValor">—</span></div>
         <div><b>Conta:</b> <span id="contaEmail">—</span></div>
+        <div class="muted" id="vigenciaInfo" style="margin-top:6px;display:none"></div>
       </div>
       <div class="stack" id="badges"></div>
     </div>
@@ -158,8 +165,10 @@ if (!FUNCTIONS_URL) { try { const ref = new URL(CFG.SUPABASE_URL).host.split("."
 
 const sb  = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 const $ = s=>document.querySelector(s);
-const planChip = $('#planChip'), cardsEl = $('#cards');
+const planChip = $('#planChip'), timeChip = $('#timeChip'), pendingChip = $('#pendingChip');
+const cardsEl = $('#cards');
 const checkoutEl = $('#checkout'), banner = $('#banner'), logs = $('#logs'), resp = $('#resp');
+const vigenciaInfo = $('#vigenciaInfo');
 
 /* ============== NOVO: map de preapproval por plano ============== */
 const PREAPPROVAL_BY_PLAN = {
@@ -172,7 +181,7 @@ function subscriptionCheckoutUrl(planKey){
   return id ? `https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=${id}` : "#";
 }
 
-/* ============== helpers UI/diag (inalterados) ============== */
+/* ============== helpers UI/diag (inalterados + util novo) ============== */
 function money(c){return (Number(c||0)/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
 function label(k){return (CFG.PLAN_LABELS||{})[k]||k.charAt(0).toUpperCase()+k.slice(1)}
 function addBadge(text, ok=false){ const b=document.createElement('span'); b.className='badge '+(ok?'ok':''); b.textContent=text; $('#badges').appendChild(b); }
@@ -181,28 +190,73 @@ function log(...args){ if(!logs) return; const line=args.map(a=>{ try{return typ
 function showResp(obj){ if(!resp) return; try{ resp.textContent=JSON.stringify(obj,null,2);}catch{ resp.textContent=String(obj);} }
 function digitsOnly(s){ return (s||'').replace(/\D+/g,""); }
 function detectBrand(num){ const n=digitsOnly(num); if(n.startsWith('4'))return'visa'; if(n.startsWith('5'))return'master'; if(n.startsWith('34')||n.startsWith('37'))return'amex'; return undefined; }
+function fmtDate(d){try{const dt=new Date(d);return dt.toLocaleDateString('pt-BR');}catch{return '—';}}
+function daysLeft(expiresAt){
+  if(!expiresAt) return 0;
+  const now = new Date();
+  const end = new Date(expiresAt);
+  const diff = Math.ceil((end - now) / (1000*60*60*24));
+  return diff > 0 ? diff : 0;
+}
 
 /* ============== máscaras (inalterado) ============== */
 IMask($('#cardExp'), { mask: '00/0000' });
 IMask($('#cardNumber'), { mask: '0000 0000 0000 0000' });
 IMask($('#cardCVV'), { mask: '000[0]' });
 
-/* ============== estado global (inalterado) ============== */
+/* ============== estado global (inalterado + campos novos) ============== */
 let user=null, currentPlanKey='trial', plans=[];
 let CURRENT_PLAN=null;
 let LAST_CARD_TOKEN=null;
 let LAST_TOKEN_TS=0;
+let PLAN_EXPIRES_AT=null;
+let PENDING_PLAN=null;
 
 /* ============== eventos topo (inalterado) ============== */
 document.getElementById('btnSair').onclick = async()=>{ await sb.auth.signOut(); location.href=CFG.SITE_URL||'index.html'; };
 document.getElementById('btnDiag').onclick = ()=>{ document.body.classList.toggle('show-diag'); };
 
-/* ============== init (igual, com badges extras) ============== */
+/* ============== aplica pendência vencida (auto) ============== */
+async function applyPendingIfDue(){
+  try{
+    const { data, error } = await sb.rpc('apply_pending_plan'); // se existir a RPC
+    // se não existir, tudo bem — a troca será aplicada pelo backend ou em outro momento
+  }catch(e){/* silencioso */}
+}
+
+/* ============== carregar perfil e atualizar chips de vigência ============== */
+function updateChips(){
+  planChip.textContent = `Plano: ${label(currentPlanKey)}`;
+  // time chip
+  const dleft = daysLeft(PLAN_EXPIRES_AT);
+  if (dleft > 0) {
+    timeChip.style.display = 'inline-block';
+    timeChip.textContent = `Faltam ${dleft} dia${dleft>1?'s':''} • até ${fmtDate(PLAN_EXPIRES_AT)}`;
+  } else {
+    timeChip.style.display = 'none';
+  }
+  // pending chip
+  if (PENDING_PLAN) {
+    pendingChip.style.display = 'inline-block';
+    pendingChip.textContent = `Downgrade agendado para: ${label(PENDING_PLAN)} (ao fim da vigência)`;
+  } else {
+    pendingChip.style.display = 'none';
+  }
+}
+
+/* ============== init (igual, com badges e vigência) ============== */
 (async function init(){
+  await applyPendingIfDue();
+
   const {data:{session}}=await sb.auth.getSession(); if(!session){location.href=CFG.SITE_URL||'index.html';return}
   user=session.user;
-  const prof=await sb.from('profiles').select('plan').eq('id',user.id).maybeSingle();
-  currentPlanKey=(prof.data?.plan||'trial'); planChip.textContent=`Plano: ${label(currentPlanKey)}`;
+
+  // carrega plano + vigência + pendência
+  const prof=await sb.from('profiles').select('plan, plan_expires_at, pending_plan').eq('id',user.id).maybeSingle();
+  currentPlanKey=(prof.data?.plan||'trial');
+  PLAN_EXPIRES_AT=prof.data?.plan_expires_at||null;
+  PENDING_PLAN=prof.data?.pending_plan||null;
+  updateChips();
 
   const {data}=await sb.from('billing_plans')
     .select('id,name,plan_key,price_cents,interval_unit,interval_length,active,sort_order')
@@ -218,10 +272,11 @@ document.getElementById('btnDiag').onclick = ()=>{ document.body.classList.toggl
   document.getElementById('pkIsTest').textContent = CFG.MP_PUBLIC_KEY?.startsWith("TEST-") ? "SIM" : "NÃO";
 })();
 
-/* ============== render dos cards (inalterado) ============== */
+/* ============== render dos cards (com botão de agendar downgrade no Trial) ============== */
 function renderCards(){
   cardsEl.innerHTML='';
   const order=['trial','basico','intermediario','premium'];
+  const dleft = daysLeft(PLAN_EXPIRES_AT);
   for(const k of order){
     const p=plans.find(x=>String(x.plan_key).toLowerCase()===k); if(!p) continue;
     const el=document.createElement('div');el.className='card';
@@ -229,26 +284,99 @@ function renderCards(){
       <div class="price">${money(p.price_cents||0)}</div>
       <div class="muted">Cobrança: ${p.interval_length||1}× / ${p.interval_unit||'month'}</div>
       <div class="muted">${k==='trial'?'Plano gratuito para conhecer a plataforma.':'Acesso aos recursos do plano selecionado.'}</div>`;
-    const btn=document.createElement('button');
+
     const isCurrent=(k===String(currentPlanKey).toLowerCase());
-    btn.className=isCurrent?'btn ghost':'btn'; btn.textContent=isCurrent?'Plano atual':'Escolher'; btn.disabled=isCurrent;
-    btn.onclick=()=>openCheckout(p);
+    const btn=document.createElement('button');
+
+    if (k==='trial' && !isCurrent) {
+      if (dleft>0) {
+        btn.className='btn';
+        btn.textContent='Agendar downgrade p/ Trial';
+        btn.onclick=()=>scheduleTrialDowngrade();
+      } else {
+        btn.className='btn';
+        btn.textContent='Mudar para Trial agora';
+        btn.onclick=()=>switchToTrialImmediately();
+      }
+    } else {
+      btn.className=isCurrent?'btn ghost':'btn';
+      btn.textContent=isCurrent?'Plano atual':'Escolher';
+      btn.disabled=isCurrent;
+      btn.onclick=()=>openCheckout(p);
+    }
+
     el.appendChild(btn); cardsEl.appendChild(el);
   }
 }
 
-/* ============== abre checkout (também ajusta link do MP opcional) ============== */
+/* ============== ações Trial (sem pagamento) ============== */
+async function scheduleTrialDowngrade(){
+  try{
+    // tenta RPC (segura) — se não existir, faz UPDATE direto
+    let ok=false, err=null, row=null;
+
+    try{
+      const { data, error } = await sb.rpc('schedule_downgrade_to_trial');
+      if (!error && data){ ok=true; row=data; }
+    }catch(e){ /* se não houver RPC, cai para o update abaixo */ }
+
+    if (!ok) {
+      const { data, error } = await sb.from('profiles')
+        .update({ pending_plan: 'trial', pending_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .eq('id', user.id)
+        .select('plan_expires_at, pending_plan')
+        .maybeSingle();
+      if (error) throw error;
+      row = data;
+    }
+
+    PENDING_PLAN = 'trial';
+    PLAN_EXPIRES_AT = row?.plan_expires_at || PLAN_EXPIRES_AT;
+
+    const dleft = daysLeft(PLAN_EXPIRES_AT);
+    showBanner(`Downgrade para Trial agendado. Você manterá o plano atual por ${dleft} dia${dleft>1?'s':''} (até ${fmtDate(PLAN_EXPIRES_AT)}).`, 'ok', 6000);
+    updateChips();
+    renderCards();
+  }catch(e){
+    showBanner("Não foi possível agendar o downgrade para Trial.", "err");
+  }
+}
+
+async function switchToTrialImmediately(){
+  try{
+    // só permite se não houver vigência ativa
+    const dleft = daysLeft(PLAN_EXPIRES_AT);
+    if (dleft>0){
+      showBanner("Você ainda tem período pago ativo. Agende o downgrade para o fim da vigência.", "warn");
+      return;
+    }
+    const { error } = await sb.from('profiles')
+      .update({ plan: 'trial', pending_plan: null, pending_at: null, plan_expires_at: null, updated_at: new Date().toISOString() })
+      .eq('id', user.id);
+    if (error) throw error;
+    currentPlanKey='trial'; PLAN_EXPIRES_AT=null; PENDING_PLAN=null;
+    updateChips(); renderCards();
+    showBanner("Plano alterado para Trial.", "ok");
+  }catch(e){
+    showBanner("Falha ao mudar para Trial.", "err");
+  }
+}
+
+/* ============== abre checkout (também mostra vigência atual) ============== */
 function openCheckout(plan){
   CURRENT_PLAN = plan;
   const planKey = String(plan?.plan_key||"").toLowerCase();
   $('#planoNome').textContent = plan?.name || plan?.plan_key || '—';
   $('#planoValor').textContent = (Number(plan?.price_cents||0)/100).toFixed(2);
+  const dleft = daysLeft(PLAN_EXPIRES_AT);
+  if (dleft>0){
+    vigenciaInfo.style.display='block';
+    vigenciaInfo.textContent = `Sua vigência atual termina em ${dleft} dia${dleft>1?'s':''} (até ${fmtDate(PLAN_EXPIRES_AT)}). Ao contratar, a nova vigência é somada a partir do maior entre hoje e o fim atual.`;
+  } else {
+    vigenciaInfo.style.display='none';
+  }
   checkoutEl.style.display = 'block';
   document.getElementById('btnPagar').disabled = false;
-
-  // (se quiser, pode usar subscriptionCheckoutUrl(planKey) para abrir o MP oficial em outra aba)
-  // const mpLink = subscriptionCheckoutUrl(planKey);
-
   checkoutEl.scrollIntoView({behavior:'smooth', block:'start'});
 }
 
@@ -321,12 +449,12 @@ document.getElementById('btnInspectToken')?.addEventListener('click', async ()=>
   }
 });
 
-/* ============== PAGAMENTO (mantido 1x; assinatura corrigida p/ rota) ============== */
+/* ============== PAGAMENTO (inalterado), com nota de vigência no backend ============== */
 document.getElementById('btnPagar').onclick = async ()=>{
   if (logs) logs.textContent = ""; if (resp) resp.textContent = "";
   if (!CURRENT_PLAN){ showBanner("Escolha um plano antes de pagar.", "warn"); return; }
   const cents = Number(CURRENT_PLAN.price_cents || 0);
-  if (!cents || cents<=0){ showBanner("Este plano não requer pagamento.", "warn"); return; }
+  if (!cents || cents<=0){ showBanner("Este plano não requer pagamento. Use o botão de Trial.", "warn"); return; }
 
   try{
     // tokenizar SEMPRE que for pagar
@@ -349,7 +477,6 @@ document.getElementById('btnPagar').onclick = async ()=>{
     if (!session){ showBanner("Faça login antes de pagar.", "warn"); return; }
     const isRecurring = document.getElementById('recorrente').checked;
 
-    // helper: assinatura (ajustada p/ rota + preapproval_plan_id + external_reference)
     const trySubscription = async (cardToken) => {
       const planKey = String(CURRENT_PLAN.plan_key||"").toLowerCase();
       const preapproval_plan_id = PREAPPROVAL_BY_PLAN[planKey];
@@ -357,11 +484,8 @@ document.getElementById('btnPagar').onclick = async ()=>{
         return { ok:false, status:400, data:{ error:"missing_preapproval_plan_id", note:`Cadastre o ID para o plano ${planKey}.` } };
       }
       const bodyBase = {
-        // agora enviamos o ID de preapproval explicitamente
         preapproval_plan_id,
-        // external_reference para o webhook atualizar o profile (userId|planKey)
         external_reference: `${session.user.id}|${planKey}`,
-        // dados para anexar/validar cartão + quem paga
         card_token: cardToken,
         payer_email: $('#payerEmail').value.trim()
       };
@@ -373,7 +497,6 @@ document.getElementById('btnPagar').onclick = async ()=>{
     };
 
     if (isRecurring) {
-      // Diagnóstico do token + (se preciso) re-tokeniza
       const age = (Date.now() - LAST_TOKEN_TS)/1000;
       if (age > 60) {
         showBanner("Token antigo, gerando novamente…", "warn");
@@ -396,7 +519,6 @@ document.getElementById('btnPagar').onclick = async ()=>{
         LAST_CARD_TOKEN = token3.id; LAST_TOKEN_TS = Date.now();
       }
 
-      // chamada principal de assinatura (rota certa)
       const r1 = await trySubscription(LAST_CARD_TOKEN);
       showResp({ sub_try_1: r1 });
       if (r1.ok && (r1.data?.ok)) {
