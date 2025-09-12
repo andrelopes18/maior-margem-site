@@ -88,7 +88,6 @@
     display:flex; align-items:center; justify-content:center;
   }
   .resizer:after { content: ""; width: 40px; height: 3px; border-radius: 3px; background: #3a3a3a; }
-
   body.resizing, body.resizing * { cursor: ns-resize !important; user-select: none; }
 
   /* Botão do gráfico – mais encorpado/visível */
@@ -123,8 +122,29 @@
     width:200px; height:180px; display:block; background:#121212; border:1px solid #232323; border-radius:6px;
   }
 
-  /* >>> NOVO: esconder colunas de sites não permitidos <<< */
-  .col-hidden { display: none; }
+  /* ===== Bloqueio por plano ===== */
+  th[data-locked="true"] {
+    position: relative;
+    color: #aaa;
+  }
+  th[data-locked="true"]::after {
+    content: "🔒";
+    margin-left: 6px;
+    opacity: .8;
+    font-size: 14px;
+  }
+  td.locked-cell .price {
+    filter: blur(6px);           /* modo padrão: desfocar */
+  }
+  td.locked-cell .masked {
+    letter-spacing: 1px;         /* usado se optar por máscara em vez de blur */
+  }
+  td.locked-cell .unlock {
+    display:inline-flex; align-items:center; gap:6px;
+    margin-left:8px; padding:4px 8px; border-radius:6px;
+    border:1px solid #2e2e2e; background:#141414; color:#ddd; font-size:12px; cursor:pointer;
+  }
+  td.locked-cell .unlock:hover { background:#1b1b1b; }
 </style>
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="./config.js"></script>
@@ -222,7 +242,6 @@
     <span id="chartTitle">Histórico</span>
     <button class="close" id="chartClose" aria-label="Fechar">×</button>
   </header>
-  <!-- canvas menor para sobrar espaço aos labels -->
   <canvas id="spark" class="spark" width="200" height="180"></canvas>
   <div id="chartMsg" class="msg" style="display:none;"></div>
 </div>
@@ -234,6 +253,10 @@ const SUPABASE_URL = CFG.SUPABASE_URL;
 const SUPABASE_ANON_KEY = CFG.SUPABASE_ANON_KEY;
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) { alert("Erro de configuração: config.js não carregado."); throw new Error("CONFIG ausente"); }
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+
+/* ======== MODO DE BLOQUEIO ======== */
+/** "blur" (padrão) para desfocar, "mask" para mostrar R$ •••,•• */
+const LOCK_STYLE = (CFG.LOCK_STYLE || 'blur').toLowerCase();
 
 /* ======== CONSTANTES ======== */
 const VIEW = "vw_precos_com_desc";
@@ -293,6 +316,14 @@ const siteMap = {
 };
 const siteOrder = Object.values(siteMap);
 
+/** Ordem real a exibir: sites selecionados pelo usuário (cai em siteOrder se vazio) */
+let chosenSitesAll = [...siteOrder];
+/** Subconjunto destravado (primeiros N do plano) */
+let unlockedSites = new Set(siteOrder);
+/** Subconjunto bloqueado (excedentes) */
+let lockedSites = new Set();
+
+/** Favoritos/local state */
 let favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
 
 /* Produtos agregados: Map<ean, { sku, desc, sites{} }> */
@@ -317,32 +348,27 @@ const generalChkMap = new Map();
 /* Aux para favoritos */
 let favFirstAutoRenderDone = false;
 
-/* ======== NOVO: controle de colunas visíveis por plano/seleção ======== */
-/** Limites default por plano (fallback se não houver tabela billing_plans) */
+/* ======== LIMITES DO PLANO ======== */
 const DEFAULT_PLAN_SITE_LIMIT = {
   trial: 2,
   basico: 3,
   intermediario: 5,
   premium: 8
 };
-/** Set com os nomes de sites que ficarão visíveis no dashboard */
-let visibleSites = new Set(siteOrder); // inicia liberando todos, reduz após carregar dados do usuário
 
 function normalizeSiteLabel(x){
   if (!x) return "";
   return x.toString()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g,'') // remove acentos
-    .replace(/\s+/g,'') // remove espaços
-    .replace(/[^a-zA-Z0-9]/g,'') // limpa símbolos
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/\s+/g,'')
+    .replace(/[^a-zA-Z0-9]/g,'')
     .toLowerCase();
 }
 function toDashboardLabel(raw){
   const n = normalizeSiteLabel(raw);
-  // mapeia para os labels usados no cabeçalho
   for (const lbl of siteOrder){
     if (normalizeSiteLabel(lbl) === n) return lbl;
   }
-  // alguns apelidos comuns
   if (n === 'leroymerlin') return 'LeroyMerlin';
   if (n === 'queroquero') return 'QueroQuero';
   if (n === 'cassol') return 'Cassol';
@@ -351,41 +377,9 @@ function toDashboardLabel(raw){
   if (n === 'tumelero') return 'Tumelero';
   if (n === 'supremeinox') return 'Supremeinox';
   if (n === 'ghaus' || n === 'gháus') return 'Ghaus';
-  return ''; // não reconhecido
+  return '';
 }
 
-/** Aplica/remover classe de oculto nos TH/TD das tabelas conforme visibleSites */
-function applyColumnVisibility(){
-  const tables = [document.getElementById('produtosTable'), document.getElementById('favTable')];
-  for (const table of tables){
-    if (!table) continue;
-    const headCells = table.querySelectorAll('thead th');
-    // mapeia índice do cabeçalho -> site
-    const siteIndexMap = new Map(); // idx -> 'LeroyMerlin'...
-    headCells.forEach((th, idx) => {
-      const siteName = th.getAttribute('data-site'); // só existe nas colunas de site
-      if (siteName){
-        const allowed = visibleSites.has(siteName);
-        th.classList.toggle('col-hidden', !allowed);
-        siteIndexMap.set(idx, siteName);
-      }
-    });
-    // aplica nas linhas do corpo
-    const rows = table.querySelectorAll('tbody tr');
-    for (const tr of rows){
-      const cells = tr.children;
-      for (let i=0; i<cells.length; i++){
-        if (siteIndexMap.has(i)){
-          const siteName = siteIndexMap.get(i);
-          const allowed = visibleSites.has(siteName);
-          cells[i].classList.toggle('col-hidden', !allowed);
-        }
-      }
-    }
-  }
-}
-
-/** Obtém limite de sites pelo plano do usuário: tenta billing_plans.plan_key -> sites_limit/max_sites; cai no fallback */
 async function getSitesLimitForPlan(planKey){
   const key = (planKey || '').toString().trim().toLowerCase();
   try {
@@ -403,11 +397,11 @@ async function getSitesLimitForPlan(planKey){
   return DEFAULT_PLAN_SITE_LIMIT[key] ?? 2;
 }
 
-/** Lê os sites selecionados do usuário em meusdados (user_sites + sites) e calcula os visíveis pelo plano */
-async function loadUserVisibleSites(userId, planKey){
+/** Lê seleção do usuário e calcula locked/unlocked (sem ocultar colunas) */
+async function loadUserSitesAndLocks(userId, planKey){
   const maxSites = await getSitesLimitForPlan(planKey);
 
-  // 1) user_sites -> ids
+  // 1) user_sites -> ids habilitados
   let siteIds = [];
   try{
     const { data: us, error } = await sb
@@ -423,7 +417,7 @@ async function loadUserVisibleSites(userId, planKey){
     console.warn('Tabela user_sites ausente? Prosseguindo sem ela.', e);
   }
 
-  // 2) sites -> nomes
+  // 2) sites -> nomes (na ordem escolhida pelo usuário)
   let chosenLabels = [];
   if (siteIds.length){
     try{
@@ -439,27 +433,41 @@ async function loadUserVisibleSites(userId, planKey){
         return lbl;
       }).filter(lbl => !!lbl && siteOrder.includes(lbl));
     } catch(e){
-      console.warn('Falha ao ler sites por id. Tentando fallback.', e);
+      console.warn('Falha ao ler sites por id. Usando todos por padrão.', e);
     }
   }
+  if (chosenLabels.length === 0) chosenLabels = [...siteOrder];
 
-  // Fallback: se não há seleção válida, usa a ordem padrão
-  if (chosenLabels.length === 0){
-    chosenLabels = [...siteOrder];
+  chosenSitesAll = [...new Set(chosenLabels)];       // evita duplicados mantendo ordem
+  unlockedSites = new Set(chosenSitesAll.slice(0, maxSites));
+  lockedSites = new Set(chosenSitesAll.slice(maxSites));
+
+  // Atualiza cabeçalhos (cadeado nas bloqueadas)
+  markLockedHeaders();
+  setStatus(buildSitesStatusMessage());
+}
+
+/* Cabeçalho: marca colunas bloqueadas com data-locked=true  */
+function markLockedHeaders(){
+  const tables = [document.getElementById('produtosTable'), document.getElementById('favTable')];
+  for (const table of tables){
+    const ths = table?.querySelectorAll('thead th[data-site]');
+    if (!ths) continue;
+    ths.forEach(th=>{
+      const s = th.getAttribute('data-site');
+      const locked = lockedSites.has(s);
+      th.setAttribute('data-locked', locked ? 'true' : 'false');
+      th.title = locked ? 'Excedeu o limite do plano' : '';
+    });
   }
+}
 
-  // 3) Respeita o limite do plano
-  const limited = chosenLabels.filter((s, idx) => idx < maxSites);
-
-  // 4) Atualiza o Set global
-  visibleSites = new Set(limited);
-
-  // 5) Indica no status
-  const etc = chosenLabels.length > maxSites ? ` (+${chosenLabels.length - maxSites} oculto${(chosenLabels.length - maxSites) > 1 ? 's':''})` : '';
-  setStatus(`Sites exibidos: ${limited.join(', ')}${etc ? etc : ''}`);
-
-  // 6) Atualiza cabeçalhos atuais
-  applyColumnVisibility();
+function buildSitesStatusMessage(){
+  const total = chosenSitesAll.length;
+  const lockedCount = lockedSites.size;
+  const unlockedCount = unlockedSites.size;
+  const extra = lockedCount > 0 ? ` • ${lockedCount} bloqueado${lockedCount>1?'s':''}` : '';
+  return `Sites selecionados: ${unlockedCount}/${total} liberados${extra}`;
 }
 
 /* ======== FUNÇÕES UTIL ======== */
@@ -469,11 +477,13 @@ function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
 function formatBRL(n){ try { return n.toLocaleString('pt-BR', { style:'currency', currency:'BRL' }); } catch { return String(n); } }
 function favSave(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet])); }
 function isFav(sku){ return favSet.has(String(sku)); }
+
+/** min/max ignorando colunas bloqueadas */
 function computeMinMaxForRow(item){
   let min = { site:null, val: Infinity };
   let max = { site:null, val: -Infinity };
-  for (const s of siteOrder) {
-    if (!visibleSites.has(s)) continue; // <<< considera só colunas visíveis
+  for (const s of chosenSitesAll) {
+    if (lockedSites.has(s)) continue; // ignora bloqueadas
     const d = item.sites[s];
     if (!d || !Number.isFinite(d.precoNum)) continue;
     const n = d.precoNum;
@@ -604,7 +614,6 @@ function upsertRowsIntoProdutos(rows){
 
 /* ======== RENDER ======== */
 function chartButtonSVG(){
-  /* Ícone personalizado – barras + linha */
   return `
     <svg class="chart-icon" viewBox="0 0 24 24" aria-hidden="true">
       <rect x="3" y="11" width="3" height="7" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>
@@ -612,6 +621,74 @@ function chartButtonSVG(){
       <rect x="15" y="5" width="3" height="13" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>
       <path d="M3,18 L7,14 L12,15 L17,8 L21,10" fill="none" stroke="#00d084" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>`;
+}
+
+/** Cria TD de preço para um site, aplicando bloqueio quando necessário */
+function createPriceCell(item, siteName, minSite, maxSite){
+  const td = document.createElement('td');
+  const d = item.sites[siteName];
+
+  const isLocked = lockedSites.has(siteName);
+  if (isLocked) td.classList.add('locked-cell');
+
+  if (d) {
+    const dataStr = d.data ? new Date(d.data).toLocaleString('pt-BR') : '';
+    if (Number.isFinite(d.precoNum)) {
+      // conteúdo do preço (real, mas estilização/mascara depende do modo)
+      const display = formatBRL(d.precoNum);
+      const cls = (!isLocked && siteName === minSite) ? 'min'
+                 : (!isLocked && siteName === maxSite) ? 'max' : '';
+      const priceSpan = document.createElement('span');
+      priceSpan.className = `price ${cls}`;
+      priceSpan.title = isLocked ? 'Excedeu o limite do plano' : (dataStr ? `Atualizado em ${dataStr}` : '');
+
+      if (isLocked && LOCK_STYLE === 'mask') {
+        priceSpan.textContent = 'R$ •••,••';
+        priceSpan.classList.add('masked');
+      } else {
+        priceSpan.textContent = display; // texto real; blur via CSS se 'blur'
+      }
+
+      td.appendChild(priceSpan);
+
+      // botão gráfico (ainda disponível – histórico pode abrir, mas a linha ficará com dados reais/blur)
+      const btn = document.createElement('button');
+      btn.className = 'chart-btn';
+      btn.type = 'button';
+      btn.title = isLocked ? 'Disponível no upgrade' : 'Ver gráfico do histórico';
+      btn.innerHTML = chartButtonSVG();
+      btn.addEventListener('click', (ev) => {
+        if (isLocked) {
+          window.location.href = 'planos.html';
+          return;
+        }
+        openChartFor(ev, item.sku, siteName, item.desc);
+      });
+      td.appendChild(btn);
+
+      // CTA de upgrade nas bloqueadas
+      if (isLocked) {
+        const up = document.createElement('button');
+        up.className = 'unlock';
+        up.type = 'button';
+        up.title = 'Excedeu o limite do plano. Ver planos.';
+        up.innerHTML = 'Ver planos';
+        up.addEventListener('click', ()=> window.location.href = 'planos.html');
+        td.appendChild(up);
+      }
+
+    } else {
+      const raw = (d.precoRaw ?? '').toString().replace(/</g,'&lt;');
+      const span = document.createElement('span');
+      span.className = 'price';
+      span.title = isLocked ? 'Excedeu o limite do plano' : (dataStr ? `Atualizado em ${dataStr}` : '');
+      span.textContent = isLocked && LOCK_STYLE === 'mask' ? '—' : raw;
+      td.appendChild(span);
+    }
+  } else {
+    td.innerHTML = `<span class="muted">—</span>`;
+  }
+  return td;
 }
 
 function renderGeneralChunk(){
@@ -636,7 +713,6 @@ function renderGeneralChunk(){
       renderFavs();
       updateFavHeight();
       updateCounts();
-      applyColumnVisibility(); // manter coerência ao atualizar favs
     });
     tdFav.appendChild(chk);
     tr.appendChild(tdFav);
@@ -654,43 +730,10 @@ function renderGeneralChunk(){
     tdDesc.innerHTML = (item.desc || '').replace(/</g,'&lt;');
     tr.appendChild(tdDesc);
 
-    // Preços (com botão de gráfico) — somente colunas visíveis
+    // Preços de cada site selecionado (todos), aplicando locks quando necessário
     const { minSite, maxSite } = computeMinMaxForRow(item);
-    for (const s of siteOrder) {
-      if (!visibleSites.has(s)) continue; // não cria TD para sites ocultos
-      const td = document.createElement('td');
-      const d = item.sites[s];
-      if (d) {
-        const dataStr = d.data ? new Date(d.data).toLocaleString('pt-BR') : '';
-        if (Number.isFinite(d.precoNum)) {
-          const display = formatBRL(d.precoNum);
-          const cls = (s === minSite) ? 'min' : (s === maxSite ? 'max' : '');
-          const priceSpan = document.createElement('span');
-          priceSpan.className = `price ${cls}`;
-          priceSpan.title = dataStr ? `Atualizado em ${dataStr}` : '';
-          priceSpan.textContent = display;
-
-          const btn = document.createElement('button');
-          btn.className = 'chart-btn';
-          btn.type = 'button';
-          btn.title = 'Ver gráfico do histórico';
-          btn.innerHTML = chartButtonSVG();
-          btn.addEventListener('click', (ev) => openChartFor(ev, item.sku, s, item.desc));
-
-          td.appendChild(priceSpan);
-          td.appendChild(btn);
-        } else {
-          const raw = (d.precoRaw ?? '').toString().replace(/</g,'&lt;');
-          const span = document.createElement('span');
-          span.className = 'price';
-          span.title = dataStr ? `Atualizado em ${dataStr}` : '';
-          span.textContent = raw;
-          td.appendChild(span);
-        }
-      } else {
-        td.innerHTML = `<span class="muted">—</span>`;
-      }
-      tr.appendChild(td);
+    for (const s of chosenSitesAll) {
+      tr.appendChild(createPriceCell(item, s, minSite, maxSite));
     }
 
     frag.appendChild(tr);
@@ -754,7 +797,6 @@ function renderFavs(){
       renderFavs();
       updateFavHeight();
       updateCounts();
-      applyColumnVisibility();
     });
     tdAct.appendChild(btn);
     tr.appendChild(tdAct);
@@ -770,41 +812,8 @@ function renderFavs(){
     tr.appendChild(tdDesc);
 
     const { minSite, maxSite } = computeMinMaxForRow(item);
-    for (const s of siteOrder) {
-      if (!visibleSites.has(s)) continue; // não cria TD para sites ocultos
-      const td = document.createElement('td');
-      const d = item.sites[s];
-      if (d) {
-        const dataStr = d.data ? new Date(d.data).toLocaleString('pt-BR') : '';
-        if (Number.isFinite(d.precoNum)) {
-          const display = formatBRL(d.precoNum);
-          const cls = (s === minSite) ? 'min' : (s === maxSite ? 'max' : '');
-          const priceSpan = document.createElement('span');
-          priceSpan.className = `price ${cls}`;
-          priceSpan.title = dataStr ? `Atualizado em ${dataStr}` : '';
-          priceSpan.textContent = display;
-
-          const btnChart = document.createElement('button');
-          btnChart.className = 'chart-btn';
-          btnChart.type = 'button';
-          btnChart.title = 'Ver gráfico do histórico';
-          btnChart.innerHTML = chartButtonSVG();
-          btnChart.addEventListener('click', (ev) => openChartFor(ev, item.sku, s, item.desc));
-
-          td.appendChild(priceSpan);
-          td.appendChild(btnChart);
-        } else {
-          const raw = (d.precoRaw ?? '').toString().replace(/</g,'&lt;');
-          const span = document.createElement('span');
-          span.className = 'price';
-          span.title = dataStr ? `Atualizado em ${dataStr}` : '';
-          span.textContent = raw;
-          td.appendChild(span);
-        }
-      } else {
-        td.innerHTML = `<span class="muted">—</span>`;
-      }
-      tr.appendChild(td);
+    for (const s of chosenSitesAll) {
+      tr.appendChild(createPriceCell(item, s, minSite, maxSite));
     }
 
     frag.appendChild(tr);
@@ -871,13 +880,11 @@ async function fetchNextPage(){
 
       if (itemsRendered < produtosList.length) renderGeneralChunk();
 
-      // Atualiza favoritos automaticamente a cada leva
       renderFavs();
       if (!favFirstAutoRenderDone) { updateFavHeight(); favFirstAutoRenderDone = true; }
 
       serverOffset += PAGE_SIZE;
       setStatus(`Carregados: ${produtosList.length} SKUs (parcial)`);
-      applyColumnVisibility(); // garante colunas corretas após novo lote
     }
   } catch(e){
     console.error(e);
@@ -907,12 +914,10 @@ function resetAndQuery(){
 
 /* ======== EVENTOS UI ======== */
 btnReload.addEventListener('click', async () => {
-  // Recarrega também os sites visíveis (caso o usuário tenha mudado meusdados ou plano)
   const session = (await sb.auth.getSession()).data.session;
   if (session?.user?.id) {
-    // plano pode ter mudado: recarrega header para obter planKey e sites
     const planKey = await loadHeaderInfoPlanOnly();
-    await loadUserVisibleSites(session.user.id, planKey);
+    await loadUserSitesAndLocks(session.user.id, planKey);
   }
   resetAndQuery();
 });
@@ -949,13 +954,10 @@ async function loadHeaderInfo(){
     planChip.textContent = 'Plano: —';
   }
 
-  // carrega colunas visíveis conforme plano + seleção do usuário
-  await loadUserVisibleSites(session.user.id, planKey);
-
+  await loadUserSitesAndLocks(session.user.id, planKey);
   return session;
 }
 
-/** Variante usada no botão Recarregar (evita redirecionar) */
 async function loadHeaderInfoPlanOnly(){
   try{
     const { data: { session } } = await sb.auth.getSession();
@@ -1016,19 +1018,16 @@ function drawSparkline(points){
   }
   popMsg.style.display='none';
 
-  // Margens ampliadas para rótulos
   const m = { l: 40, r: 14, t: 12, b: 28 };
 
-  // Escalas
   const xs = points.map(p=>p.x.getTime());
   const ys = points.map(p=>p.y);
   const xMin = Math.min(...xs), xMax = Math.max(...xs);
   const yMin = Math.min(...ys), yMax = Math.max(...ys);
   const xScale = v => m.l + ( (v - xMin) / (xMax - xMin || 1) ) * (W - m.l - m.r);
   const yScaleRaw = v => H - m.b - ( (v - yMin) / (yMax - yMin || 1) ) * (H - m.t - m.b);
-  const yScale = v => Math.max(m.t+6, Math.min(H - m.b - 6, yScaleRaw(v))); // clamp
+  const yScale = v => Math.max(m.t+6, Math.min(H - m.b - 6, yScaleRaw(v)));
 
-  // Grade
   ctx.strokeStyle = '#232323';
   ctx.lineWidth = 1;
   ctx.beginPath();
@@ -1038,7 +1037,6 @@ function drawSparkline(points){
   }
   ctx.stroke();
 
-  // Linha principal mais grossa
   ctx.beginPath();
   ctx.lineWidth = 3;
   ctx.strokeStyle = '#00d084';
@@ -1048,14 +1046,12 @@ function drawSparkline(points){
   });
   ctx.stroke();
 
-  // Pontos maiores
   ctx.fillStyle = '#bfffc1';
   for (const p of points){
     const x = xScale(p.x.getTime()), y = yScale(p.y);
     ctx.beginPath(); ctx.arc(x,y,3.2,0,Math.PI*2); ctx.fill();
   }
 
-  // Eixos – valores
   ctx.fillStyle = '#9aa0a6';
   ctx.font = '11px Arial';
   ctx.textAlign = 'right';
@@ -1063,7 +1059,6 @@ function drawSparkline(points){
   ctx.fillText(formatBRL(yMax), m.l-6, Math.max(m.t+10, yMaxY-6));
   ctx.fillText(formatBRL(yMin), m.l-6, Math.min(H - m.b - 2, yMinY+12));
 
-  // Datas extremas (com clamp nas bordas)
   const fmt = (d)=> d.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' });
   ctx.textAlign = 'center';
   ctx.fillText(fmt(points[0].x), Math.max(m.l, 24), H-8);
