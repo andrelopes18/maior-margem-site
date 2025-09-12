@@ -15,8 +15,21 @@
   body{background:#121212;color:#fff;font-family:Arial,sans-serif;margin:0;padding:24px}
   a{color:#00b140}
   .container{max-width:980px;margin:0 auto}
-  header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+  header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
   h1{margin:0;color:#00b140}
+
+  /* NOVO: Barra de Vigência */
+  .vigencia-bar{
+    margin: 6px auto 18px;
+    background:#0f0f0f;border:1px solid #2a2a2a;border-radius:12px;
+    padding:10px 14px; display:flex;align-items:center;justify-content:space-between;gap:10px
+  }
+  .vigencia-bar .left{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .vigencia-title{font-weight:700}
+  .vigencia-info{color:#cfe8ff}
+  .vigencia-warn{color:#ffc966}
+  .vigencia-mute{color:#9aa0a6}
+
   .grid{display:grid;gap:16px;grid-template-columns:repeat(4,1fr)}
   @media(max-width:980px){.grid{grid-template-columns:repeat(2,1fr)}}
   @media(max-width:560px){.grid{grid-template-columns:1fr}}
@@ -64,6 +77,17 @@
     <button id="btnSair" class="btn">Sair</button>
   </div>
 </header>
+
+<!-- NOVO: Barra de Vigência sempre visível -->
+<div class="container vigencia-bar" id="vigenciaBar" style="display:none">
+  <div class="left">
+    <span class="vigencia-title">Vigência:</span>
+    <span id="vigenciaTexto" class="vigencia-info">—</span>
+  </div>
+  <div class="right">
+    <span id="vigenciaObs" class="vigencia-mute"></span>
+  </div>
+</div>
 
 <main class="container">
   <section id="cards" class="grid"></section>
@@ -177,6 +201,11 @@ const cardsEl = $('#cards');
 const checkoutEl = $('#checkout'), banner = $('#banner'), logs = $('#logs'), resp = $('#resp');
 const vigenciaInfo = $('#vigenciaInfo');
 
+/* NOVO: elementos da barra de vigência */
+const vigenciaBar = $('#vigenciaBar');
+const vigenciaTexto = $('#vigenciaTexto');
+const vigenciaObs = $('#vigenciaObs');
+
 /* MAP de preapproval por plano (ajuste seus IDs) */
 const PREAPPROVAL_BY_PLAN = {
   premium:        "65aa0a173adc4eb49ce3927a0211dd9c",
@@ -231,12 +260,13 @@ document.getElementById('btnDiag').onclick = ()=>{ document.body.classList.toggl
 /* aplicar pendência se venceu */
 async function applyPendingIfDue(){
   try{
-    await sb.rpc('apply_pending_plan'); // se não existir, apenas ignora
+    await sb.rpc('apply_pending_plan'); // ok se não existir
   }catch(e){ log("apply_pending_plan error:", e.message||e); }
 }
 
-/* chips topo */
-function updateChips(){
+/* NOVO: atualiza barra e chips */
+function updateVigenciaUI(){
+  // Chips
   planChip.textContent = `Plano: ${label(currentPlanKey)}`;
   const dleft = daysLeft(PLAN_EXPIRES_AT);
   if (dleft > 0) {
@@ -251,6 +281,21 @@ function updateChips(){
   } else {
     pendingChip.style.display = 'none';
   }
+
+  // Barra de Vigência
+  if (PLAN_EXPIRES_AT) {
+    const d = daysLeft(PLAN_EXPIRES_AT);
+    vigenciaBar.style.display = 'flex';
+    vigenciaTexto.textContent = `até ${fmtDate(PLAN_EXPIRES_AT)} • faltam ${d} dia${d>1?'s':''}`;
+    vigenciaObs.textContent = PENDING_PLAN ? `Downgrade agendado para ${label(PENDING_PLAN)}.` : '';
+    vigenciaObs.className = PENDING_PLAN ? 'vigencia-warn' : 'vigencia-mute';
+  } else {
+    // sem vigência ativa
+    vigenciaBar.style.display = 'flex';
+    vigenciaTexto.textContent = `sem vigência ativa`;
+    vigenciaObs.textContent = `Selecione um plano pago para iniciar a vigência.`;
+    vigenciaObs.className = 'vigencia-mute';
+  }
 }
 
 /* init */
@@ -262,13 +307,13 @@ function updateChips(){
     if(!session){location.href=CFG.SITE_URL||'index.html';return}
     user=session.user;
 
-    // carrega perfil
+    // perfil
     const prof=await sb.from('profiles').select('plan, plan_expires_at, pending_plan').eq('id',user.id).maybeSingle();
     if (prof.error) { showBanner("Erro ao ler perfil", "err", 8000); log("profiles read error:", prof.error); }
     currentPlanKey=(prof.data?.plan||'trial');
     PLAN_EXPIRES_AT=prof.data?.plan_expires_at||null;
     PENDING_PLAN=prof.data?.pending_plan||null;
-    updateChips();
+    updateVigenciaUI();
 
     // planos
     const bp=await sb.from('billing_plans')
@@ -333,7 +378,6 @@ function renderCards(){
 /* ações Trial */
 async function scheduleTrialDowngrade(){
   try{
-    // RPC preferida
     let row=null, ok=false;
     try{
       const { data, error } = await sb.rpc('schedule_downgrade_to_trial');
@@ -342,7 +386,6 @@ async function scheduleTrialDowngrade(){
     }catch(e){ log("rpc schedule_downgrade_to_trial threw:", e.message||e); }
 
     if (!ok) {
-      // fallback via update (somente colunas permitidas por GRANT)
       const up = await sb.from('profiles')
         .update({ pending_plan: 'trial', pending_at: new Date().toISOString(), updated_at: new Date().toISOString() })
         .eq('id', user.id)
@@ -357,7 +400,7 @@ async function scheduleTrialDowngrade(){
 
     const dleft = daysLeft(PLAN_EXPIRES_AT);
     showBanner(`Downgrade para Trial agendado. Você manterá o plano atual por ${dleft} dia${dleft>1?'s':''} (até ${fmtDate(PLAN_EXPIRES_AT)}).`, 'ok', 6000);
-    updateChips();
+    updateVigenciaUI();
     renderCards();
   }catch(e){
     showBanner("Não foi possível agendar o downgrade para Trial.", "err");
@@ -374,7 +417,6 @@ async function switchToTrialImmediately(){
     }
     const { data, error } = await sb.rpc('switch_to_trial_if_expired');
     if (error) {
-      // quando a RPC lança 'vigencia_ativa_ainda'
       showBanner("Não foi possível mudar agora (vigência ativa). Agende o downgrade.", "warn");
       log("switch_to_trial_if_expired error:", error);
       return;
@@ -382,7 +424,7 @@ async function switchToTrialImmediately(){
     currentPlanKey = data?.plan || 'trial';
     PLAN_EXPIRES_AT = data?.plan_expires_at || null;
     PENDING_PLAN = data?.pending_plan || null;
-    updateChips(); renderCards();
+    updateVigenciaUI(); renderCards();
     showBanner("Plano alterado para Trial.", "ok");
   }catch(e){
     showBanner("Falha ao mudar para Trial.", "err");
