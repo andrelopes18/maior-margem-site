@@ -58,11 +58,16 @@
   .status { margin:10px 0; color:#aaa; font-size:12px; }
   .err { display:none; color:#ff5d5d; margin:8px 0; font-size:13px; }
 
-  .wrap { overflow:auto; border:1px solid #2a2a2a; border-radius:10px; }
+  /* WRAPS com rolagem + base para sticky header */
+  .wrap {
+    overflow:auto; border:1px solid #2a2a2a; border-radius:10px;
+    position: relative; /* base p/ sticky z-index */
+  }
   #generalWrap { height: 55vh; }
 
-  table { width:100%; border-collapse: collapse; }
-  thead th { position:sticky; top:0; background:#0f0f0f; z-index:1; }
+  table { width:100%; border-collapse: separate; border-spacing: 0; } /* <- separate melhora sticky */
+  thead { position: sticky; top: 0; z-index: 3; }
+  thead th { position: sticky; top: 0; background:#0f0f0f; z-index: 4; }
   th, td { border-bottom:1px solid #2a2a2a; padding:10px; text-align:left; font-size:14px; vertical-align:top; }
   tbody tr:hover { background:#1a1a1a; }
 
@@ -133,13 +138,11 @@
     opacity: .8;
     font-size: 14px;
   }
-  td.locked-cell .price {
-    filter: blur(6px);           /* modo padrão: desfocar */
-  }
-  td.locked-cell .masked {
-    letter-spacing: 1px;         /* usado se optar por máscara em vez de blur */
-  }
-  td.locked-cell .unlock {
+  /* desfoque mais leve */
+  td.locked-cell .price { filter: blur(3px); }  /* <- de 6px para 3px */
+  /* CTA "Ver planos" aparece só no hover do preço bloqueado */
+  td.locked-cell .unlock { display:none; }
+  td.locked-cell:hover .unlock {
     display:inline-flex; align-items:center; gap:6px;
     margin-left:8px; padding:4px 8px; border-radius:6px;
     border:1px solid #2e2e2e; background:#141414; color:#ddd; font-size:12px; cursor:pointer;
@@ -254,16 +257,16 @@ const SUPABASE_ANON_KEY = CFG.SUPABASE_ANON_KEY;
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) { alert("Erro de configuração: config.js não carregado."); throw new Error("CONFIG ausente"); }
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
 
-/* ======== MODO DE BLOQUEIO ======== */
-/** "blur" (padrão) para desfocar, "mask" para mostrar R$ •••,•• */
+/* ======== MODO DE BLOQUEIO (apenas referência; blur controlado no CSS) ======== */
+/** "blur" (padrão visual via CSS), "mask" trocaria texto por R$ •••,•• (não requerido aqui) */
 const LOCK_STYLE = (CFG.LOCK_STYLE || 'blur').toLowerCase();
 
 /* ======== CONSTANTES ======== */
 const VIEW = "vw_precos_com_desc";
 
 /* Paginação no servidor e chunk de renderização */
-const PAGE_SIZE = 200;       // consulta por página no servidor
-const RENDER_CHUNK = 60;     // quantidade por “lote” de render no DOM
+const PAGE_SIZE = 200;
+const RENDER_CHUNK = 60;
 
 /* ======== ELEMENTOS ======== */
 const statusEl = document.getElementById('status');
@@ -303,7 +306,7 @@ const popMsg = document.getElementById('chartMsg');
 const sparkCanvas = document.getElementById('spark');
 const sparkCtx = sparkCanvas.getContext('2d');
 
-/* ======== ESTADO ======== */
+/* ======== ESTADO / MAPAS ======== */
 const siteMap = {
   "PrecoLeroyMerlin": "LeroyMerlin",
   "PrecoQueroQuero": "QueroQuero",
@@ -349,26 +352,16 @@ const generalChkMap = new Map();
 let favFirstAutoRenderDone = false;
 
 /* ======== LIMITES DO PLANO ======== */
-const DEFAULT_PLAN_SITE_LIMIT = {
-  trial: 2,
-  basico: 3,
-  intermediario: 5,
-  premium: 8
-};
+const DEFAULT_PLAN_SITE_LIMIT = { trial: 2, basico: 3, intermediario: 5, premium: 8 };
 
 function normalizeSiteLabel(x){
   if (!x) return "";
-  return x.toString()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-    .replace(/\s+/g,'')
-    .replace(/[^a-zA-Z0-9]/g,'')
-    .toLowerCase();
+  return x.toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/\s+/g,'').replace(/[^a-zA-Z0-9]/g,'').toLowerCase();
 }
 function toDashboardLabel(raw){
   const n = normalizeSiteLabel(raw);
-  for (const lbl of siteOrder){
-    if (normalizeSiteLabel(lbl) === n) return lbl;
-  }
+  for (const lbl of siteOrder){ if (normalizeSiteLabel(lbl) === n) return lbl; }
   if (n === 'leroymerlin') return 'LeroyMerlin';
   if (n === 'queroquero') return 'QueroQuero';
   if (n === 'cassol') return 'Cassol';
@@ -379,15 +372,10 @@ function toDashboardLabel(raw){
   if (n === 'ghaus' || n === 'gháus') return 'Ghaus';
   return '';
 }
-
 async function getSitesLimitForPlan(planKey){
   const key = (planKey || '').toString().trim().toLowerCase();
   try {
-    const { data, error } = await sb
-      .from('billing_plans')
-      .select('sites_limit, max_sites')
-      .eq('plan_key', key)
-      .maybeSingle();
+    const { data, error } = await sb.from('billing_plans').select('sites_limit, max_sites').eq('plan_key', key).maybeSingle();
     if (error) throw error;
     const lim = Number(data?.sites_limit ?? data?.max_sites);
     if (Number.isFinite(lim) && lim > 0) return lim;
@@ -396,58 +384,36 @@ async function getSitesLimitForPlan(planKey){
   }
   return DEFAULT_PLAN_SITE_LIMIT[key] ?? 2;
 }
-
-/** Lê seleção do usuário e calcula locked/unlocked (sem ocultar colunas) */
 async function loadUserSitesAndLocks(userId, planKey){
   const maxSites = await getSitesLimitForPlan(planKey);
 
-  // 1) user_sites -> ids habilitados
+  // user_sites -> ids
   let siteIds = [];
   try{
-    const { data: us, error } = await sb
-      .from('user_sites')
-      .select('site_id, enabled')
-      .eq('user_id', userId);
+    const { data: us, error } = await sb.from('user_sites').select('site_id, enabled').eq('user_id', userId);
     if (error) throw error;
-    siteIds = (us || [])
-      .filter(r => (r.enabled === true || r.enabled === null || typeof r.enabled === 'undefined'))
-      .map(r => r.site_id)
-      .filter(x => x !== null && x !== undefined);
-  }catch(e){
-    console.warn('Tabela user_sites ausente? Prosseguindo sem ela.', e);
-  }
+    siteIds = (us || []).filter(r => (r.enabled !== false)).map(r => r.site_id).filter(x => x != null);
+  }catch(e){ console.warn('user_sites ausente? Prosseguindo.', e); }
 
-  // 2) sites -> nomes (na ordem escolhida pelo usuário)
+  // sites -> nomes
   let chosenLabels = [];
   if (siteIds.length){
     try{
-      const { data: st, error } = await sb
-        .from('sites')
-        .select('id, nome, name, site')
-        .in('id', siteIds);
+      const { data: st, error } = await sb.from('sites').select('id, nome, name, site').in('id', siteIds);
       if (error) throw error;
-      const orderedByUser = siteIds.map(id => (st||[]).find(s => s.id === id)).filter(Boolean);
-      chosenLabels = orderedByUser.map(s => {
-        const raw = s?.nome || s?.name || s?.site || '';
-        const lbl = toDashboardLabel(raw);
-        return lbl;
-      }).filter(lbl => !!lbl && siteOrder.includes(lbl));
-    } catch(e){
-      console.warn('Falha ao ler sites por id. Usando todos por padrão.', e);
-    }
+      const ordered = siteIds.map(id => (st||[]).find(s => s.id === id)).filter(Boolean);
+      chosenLabels = ordered.map(s => toDashboardLabel(s?.nome || s?.name || s?.site || '')).filter(lbl => !!lbl && siteOrder.includes(lbl));
+    } catch(e){ console.warn('Falha ao ler sites por id. Usando padrão.', e); }
   }
   if (chosenLabels.length === 0) chosenLabels = [...siteOrder];
 
-  chosenSitesAll = [...new Set(chosenLabels)];       // evita duplicados mantendo ordem
+  chosenSitesAll = [...new Set(chosenLabels)];
   unlockedSites = new Set(chosenSitesAll.slice(0, maxSites));
   lockedSites = new Set(chosenSitesAll.slice(maxSites));
 
-  // Atualiza cabeçalhos (cadeado nas bloqueadas)
   markLockedHeaders();
   setStatus(buildSitesStatusMessage());
 }
-
-/* Cabeçalho: marca colunas bloqueadas com data-locked=true  */
 function markLockedHeaders(){
   const tables = [document.getElementById('produtosTable'), document.getElementById('favTable')];
   for (const table of tables){
@@ -461,40 +427,32 @@ function markLockedHeaders(){
     });
   }
 }
-
 function buildSitesStatusMessage(){
-  const total = chosenSitesAll.length;
-  const lockedCount = lockedSites.size;
-  const unlockedCount = unlockedSites.size;
+  const total = chosenSitesAll.length, lockedCount = lockedSites.size, unlockedCount = unlockedSites.size;
   const extra = lockedCount > 0 ? ` • ${lockedCount} bloqueado${lockedCount>1?'s':''}` : '';
   return `Sites selecionados: ${unlockedCount}/${total} liberados${extra}`;
 }
 
-/* ======== FUNÇÕES UTIL ======== */
+/* ======== UTILS ======== */
 function setStatus(t){ statusEl.textContent = t || ''; }
 function showErr(e){ errEl.style.display='block'; errEl.textContent = String(e||'').trim(); }
 function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
 function formatBRL(n){ try { return n.toLocaleString('pt-BR', { style:'currency', currency:'BRL' }); } catch { return String(n); } }
 function favSave(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet])); }
 function isFav(sku){ return favSet.has(String(sku)); }
-
-/** min/max ignorando colunas bloqueadas */
 function computeMinMaxForRow(item){
-  let min = { site:null, val: Infinity };
-  let max = { site:null, val: -Infinity };
+  let min = { site:null, val: Infinity }, max = { site:null, val: -Infinity };
   for (const s of chosenSitesAll) {
     if (lockedSites.has(s)) continue; // ignora bloqueadas
     const d = item.sites[s];
     if (!d || !Number.isFinite(d.precoNum)) continue;
-    const n = d.precoNum;
-    if (n < min.val) { min = { site:s, val:n }; }
-    if (n > max.val) { max = { site:s, val:n }; }
+    if (d.precoNum < min.val) { min = { site:s, val:d.precoNum }; }
+    if (d.precoNum > max.val) { max = { site:s, val:d.precoNum }; }
   }
   return { minSite: min.site, maxSite: max.site };
 }
 function debounce(fn, delay=500){
-  let t;
-  return (...args)=>{ clearTimeout(t); t = setTimeout(()=>fn(...args), delay); };
+  let t; return (...args)=>{ clearTimeout(t); t = setTimeout(()=>fn(...args), delay); };
 }
 
 /* ======== LOGOUT POR VIRADA DE DIA ======== */
@@ -507,15 +465,9 @@ function enforceDayBoundaryLogout() {
     return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
   }
   if (!localStorage.getItem(key)) localStorage.setItem(key, getLocalDateStr());
-
   async function check() {
-    const current = getLocalDateStr();
-    const stored = localStorage.getItem(key);
-    if (stored && stored !== current) {
-      try { await sb.auth.signOut(); } catch {}
-      localStorage.removeItem('mm_login_date');
-      window.location.href = CFG.SITE_URL || 'index.html';
-    }
+    const current = getLocalDateStr(), stored = localStorage.getItem(key);
+    if (stored && stored !== current) { try { await sb.auth.signOut(); } catch {} localStorage.removeItem('mm_login_date'); window.location.href = CFG.SITE_URL || 'index.html'; }
   }
   setInterval(check, 60 * 1000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
@@ -530,25 +482,10 @@ document.addEventListener('click', (e) => { if (!userChipWrap.contains(e.target)
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') userChipWrap.classList.remove('open'); });
 
 /* ======== FAV HEIGHT / RESIZER ======== */
-function measureRowHeight(){
-  const row = document.querySelector('#favTable tbody tr');
-  if (!row) return 44;
-  const h = Math.round(row.getBoundingClientRect().height);
-  return Math.max(36, h || 44);
-}
-function measureHeadHeight(){
-  const head = document.querySelector('#favTable thead');
-  if (!head) return 40;
-  const h = Math.round(head.getBoundingClientRect().height);
-  return Math.max(32, h || 40);
-}
+function measureRowHeight(){ const row = document.querySelector('#favTable tbody tr'); if (!row) return 44; const h = Math.round(row.getBoundingClientRect().height); return Math.max(36, h || 44); }
+function measureHeadHeight(){ const head = document.querySelector('#favTable thead'); if (!head) return 40; const h = Math.round(head.getBoundingClientRect().height); return Math.max(32, h || 40); }
 let favHeightUser = Number(localStorage.getItem('mm_fav_height')) || null;
-function applyFavHeight(px){
-  if (!px || !Number.isFinite(px)) return;
-  const maxPx = Math.round(window.innerHeight * 0.85);
-  const clamped = Math.max(120, Math.min(px, maxPx));
-  favWrap.style.height = clamped + 'px';
-}
+function applyFavHeight(px){ if (!px || !Number.isFinite(px)) return; const maxPx = Math.round(window.innerHeight * 0.85); const clamped = Math.max(120, Math.min(px, maxPx)); favWrap.style.height = clamped + 'px'; }
 function updateFavHeight(){
   if (favHeightUser) { applyFavHeight(favHeightUser); return; }
   const rowsLen = favBody.children.length;
@@ -561,28 +498,10 @@ function updateFavHeight(){
 }
 (function initResizer(){
   let startY = 0, startH = 0;
-  function onMove(ev){
-    const dy = ev.clientY - startY;
-    favHeightUser = startH + dy;
-    localStorage.setItem('mm_fav_height', String(favHeightUser));
-    applyFavHeight(favHeightUser);
-  }
-  function stop(){
-    document.removeEventListener('mousemove', onMove);
-    document.removeEventListener('mouseup', stop);
-    document.body.classList.remove('resizing');
-  }
-  favResizer.addEventListener('mousedown', (ev)=>{
-    startY = ev.clientY; startH = favWrap.offsetHeight;
-    document.body.classList.add('resizing');
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', stop);
-  });
-  favResizer.addEventListener('dblclick', ()=>{
-    favHeightUser = null;
-    localStorage.removeItem('mm_fav_height');
-    updateFavHeight();
-  });
+  function onMove(ev){ const dy = ev.clientY - startY; favHeightUser = startH + dy; localStorage.setItem('mm_fav_height', String(favHeightUser)); applyFavHeight(favHeightUser); }
+  function stop(){ document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', stop); document.body.classList.remove('resizing'); }
+  favResizer.addEventListener('mousedown', (ev)=>{ startY = ev.clientY; startH = favWrap.offsetHeight; document.body.classList.add('resizing'); document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', stop); });
+  favResizer.addEventListener('dblclick', ()=>{ favHeightUser = null; localStorage.removeItem('mm_fav_height'); updateFavHeight(); });
 })();
 
 /* ======== AGREGAÇÃO ======== */
@@ -595,9 +514,7 @@ function upsertRowsIntoProdutos(rows){
     const dt = row.data;
     const desc = row.descricao || '';
 
-    if (!produtosMap.has(ean)) {
-      produtosMap.set(ean, { sku: ean, desc: desc, sites: {} });
-    }
+    if (!produtosMap.has(ean)) { produtosMap.set(ean, { sku: ean, desc: desc, sites: {} }); }
     const item = produtosMap.get(ean);
     if (!item.desc && desc) item.desc = desc;
 
@@ -622,51 +539,36 @@ function chartButtonSVG(){
       <path d="M3,18 L7,14 L12,15 L17,8 L21,10" fill="none" stroke="#00d084" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>`;
 }
-
-/** Cria TD de preço para um site, aplicando bloqueio quando necessário */
 function createPriceCell(item, siteName, minSite, maxSite){
   const td = document.createElement('td');
   const d = item.sites[siteName];
-
   const isLocked = lockedSites.has(siteName);
   if (isLocked) td.classList.add('locked-cell');
 
   if (d) {
     const dataStr = d.data ? new Date(d.data).toLocaleString('pt-BR') : '';
     if (Number.isFinite(d.precoNum)) {
-      // conteúdo do preço (real, mas estilização/mascara depende do modo)
       const display = formatBRL(d.precoNum);
-      const cls = (!isLocked && siteName === minSite) ? 'min'
-                 : (!isLocked && siteName === maxSite) ? 'max' : '';
+      const cls = (!isLocked && siteName === minSite) ? 'min' : (!isLocked && siteName === maxSite ? 'max' : '');
       const priceSpan = document.createElement('span');
       priceSpan.className = `price ${cls}`;
       priceSpan.title = isLocked ? 'Excedeu o limite do plano' : (dataStr ? `Atualizado em ${dataStr}` : '');
-
-      if (isLocked && LOCK_STYLE === 'mask') {
-        priceSpan.textContent = 'R$ •••,••';
-        priceSpan.classList.add('masked');
-      } else {
-        priceSpan.textContent = display; // texto real; blur via CSS se 'blur'
-      }
+      priceSpan.textContent = display; // blur é puramente CSS
 
       td.appendChild(priceSpan);
 
-      // botão gráfico (ainda disponível – histórico pode abrir, mas a linha ficará com dados reais/blur)
       const btn = document.createElement('button');
       btn.className = 'chart-btn';
       btn.type = 'button';
       btn.title = isLocked ? 'Disponível no upgrade' : 'Ver gráfico do histórico';
       btn.innerHTML = chartButtonSVG();
       btn.addEventListener('click', (ev) => {
-        if (isLocked) {
-          window.location.href = 'planos.html';
-          return;
-        }
+        if (isLocked) { window.location.href = 'planos.html'; return; }
         openChartFor(ev, item.sku, siteName, item.desc);
       });
       td.appendChild(btn);
 
-      // CTA de upgrade nas bloqueadas
+      // CTA "Ver planos" — aparece só no hover (via CSS)
       if (isLocked) {
         const up = document.createElement('button');
         up.className = 'unlock';
@@ -676,13 +578,12 @@ function createPriceCell(item, siteName, minSite, maxSite){
         up.addEventListener('click', ()=> window.location.href = 'planos.html');
         td.appendChild(up);
       }
-
     } else {
       const raw = (d.precoRaw ?? '').toString().replace(/</g,'&lt;');
       const span = document.createElement('span');
       span.className = 'price';
       span.title = isLocked ? 'Excedeu o limite do plano' : (dataStr ? `Atualizado em ${dataStr}` : '');
-      span.textContent = isLocked && LOCK_STYLE === 'mask' ? '—' : raw;
+      span.textContent = raw;
       td.appendChild(span);
     }
   } else {
@@ -690,80 +591,48 @@ function createPriceCell(item, siteName, minSite, maxSite){
   }
   return td;
 }
+function renderRowInto(tr, item){
+  // Fav
+  const tdFav = document.createElement('td');
+  tdFav.className = 'col-fav';
+  const chk = document.createElement('input');
+  chk.type = 'checkbox'; chk.checked = isFav(item.sku); chk.title = 'Marcar como favorito';
+  chk.addEventListener('change', () => {
+    if (suppressGeneralChange) return;
+    if (chk.checked) favSet.add(item.sku); else favSet.delete(item.sku);
+    favSave(); renderFavs(); updateFavHeight(); updateCounts();
+  });
+  tdFav.appendChild(chk);
+  tr.appendChild(tdFav);
+  generalChkMap.set(item.sku, chk);
 
+  // EAN
+  const tdSku = document.createElement('td'); tdSku.className = 'col-sku'; tdSku.textContent = item.sku; tr.appendChild(tdSku);
+
+  // Descrição
+  const tdDesc = document.createElement('td'); tdDesc.className = 'col-desc'; tdDesc.innerHTML = (item.desc || '').replace(/</g,'&lt;'); tr.appendChild(tdDesc);
+
+  // Sites
+  const { minSite, maxSite } = computeMinMaxForRow(item);
+  for (const s of chosenSitesAll) { tr.appendChild(createPriceCell(item, s, minSite, maxSite)); }
+}
 function renderGeneralChunk(){
   const end = Math.min(itemsRendered + RENDER_CHUNK, produtosList.length);
   const frag = document.createDocumentFragment();
-
-  for (let i = itemsRendered; i < end; i++){
-    const item = produtosList[i];
-    const tr = document.createElement('tr');
-
-    // Fav
-    const tdFav = document.createElement('td');
-    tdFav.className = 'col-fav';
-    const chk = document.createElement('input');
-    chk.type = 'checkbox';
-    chk.checked = isFav(item.sku);
-    chk.title = 'Marcar como favorito';
-    chk.addEventListener('change', () => {
-      if (suppressGeneralChange) return;
-      if (chk.checked) favSet.add(item.sku); else favSet.delete(item.sku);
-      favSave();
-      renderFavs();
-      updateFavHeight();
-      updateCounts();
-    });
-    tdFav.appendChild(chk);
-    tr.appendChild(tdFav);
-    generalChkMap.set(item.sku, chk);
-
-    // EAN
-    const tdSku = document.createElement('td');
-    tdSku.className = 'col-sku';
-    tdSku.textContent = item.sku;
-    tr.appendChild(tdSku);
-
-    // Descrição
-    const tdDesc = document.createElement('td');
-    tdDesc.className = 'col-desc';
-    tdDesc.innerHTML = (item.desc || '').replace(/</g,'&lt;');
-    tr.appendChild(tdDesc);
-
-    // Preços de cada site selecionado (todos), aplicando locks quando necessário
-    const { minSite, maxSite } = computeMinMaxForRow(item);
-    for (const s of chosenSitesAll) {
-      tr.appendChild(createPriceCell(item, s, minSite, maxSite));
-    }
-
-    frag.appendChild(tr);
-  }
-
+  for (let i = itemsRendered; i < end; i++){ const item = produtosList[i]; const tr = document.createElement('tr'); renderRowInto(tr, item); frag.appendChild(tr); }
   generalBody.appendChild(frag);
   itemsRendered = end;
   endMarker.textContent = (serverExhausted && itemsRendered >= produtosList.length) ? 'Fim da lista' : '';
   updateCounts();
 }
-
-function resetGeneralDom(){
-  generalBody.innerHTML = '';
-  generalChkMap.clear();
-  itemsRendered = 0;
-  endMarker.textContent = '';
-}
-
+function resetGeneralDom(){ generalBody.innerHTML = ''; generalChkMap.clear(); itemsRendered = 0; endMarker.textContent = ''; }
 function onGeneralScroll(){
   if (loadingMore) return;
   const nearBottom = generalWrap.scrollTop + generalWrap.clientHeight >= generalWrap.scrollHeight - 100;
-
   if (nearBottom && itemsRendered < produtosList.length){
-    loadingMore = true;
-    setTimeout(()=>{ renderGeneralChunk(); loadingMore = false; }, 30);
-    return;
+    loadingMore = true; setTimeout(()=>{ renderGeneralChunk(); loadingMore = false; }, 30); return;
   }
-  if (nearBottom && !serverExhausted && !fetching){
-    fetchNextPage();
-  }
+  if (nearBottom && !serverExhausted && !fetching){ fetchNextPage(); }
 }
 generalWrap.addEventListener('scroll', onGeneralScroll);
 
@@ -772,53 +641,31 @@ function renderFavs(){
   favBody.innerHTML = '';
   const favList = produtosList.filter(p => isFav(p.sku));
   const frag = document.createDocumentFragment();
-
   for (const item of favList){
     const tr = document.createElement('tr');
 
-    const tdAct = document.createElement('td');
-    tdAct.className = 'col-fav';
-    const btn = document.createElement('button');
-    btn.className = 'trash-btn';
-    btn.title = 'Remover dos favoritos';
-    btn.innerHTML = `
-      <svg class="trash-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" width="16" height="16">
-        <path d="M9 3h6a1 1 0 0 1 1 1v1h4v2h-1l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 7H4V5h4V4a1 1 0 0 1 1-1zm2 0v1h2V3h-2zM7 7l1 14h8l1-14H7z"></path>
-      </svg>`;
+    // ação
+    const tdAct = document.createElement('td'); tdAct.className = 'col-fav';
+    const btn = document.createElement('button'); btn.className = 'trash-btn'; btn.title = 'Remover dos favoritos';
+    btn.innerHTML = `<svg class="trash-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" width="16" height="16"><path d="M9 3h6a1 1 0 0 1 1 1v1h4v2h-1l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 7H4V5h4V4a1 1 0 0 1 1-1zm2 0v1h2V3h-2zM7 7l1 14h8l1-14H7z"></path></svg>`;
     btn.addEventListener('click', () => {
-      favSet.delete(item.sku);
-      favSave();
+      favSet.delete(item.sku); favSave();
       const chk = generalChkMap.get(item.sku);
-      if (chk) {
-        suppressGeneralChange = true;
-        chk.checked = false;
-        suppressGeneralChange = false;
-      }
-      renderFavs();
-      updateFavHeight();
-      updateCounts();
+      if (chk) { suppressGeneralChange = true; chk.checked = false; suppressGeneralChange = false; }
+      renderFavs(); updateFavHeight(); updateCounts();
     });
-    tdAct.appendChild(btn);
-    tr.appendChild(tdAct);
+    tdAct.appendChild(btn); tr.appendChild(tdAct);
 
-    const tdSku = document.createElement('td');
-    tdSku.className = 'col-sku';
-    tdSku.textContent = item.sku;
-    tr.appendChild(tdSku);
+    // EAN / Descrição
+    const tdSku = document.createElement('td'); tdSku.className = 'col-sku'; tdSku.textContent = item.sku; tr.appendChild(tdSku);
+    const tdDesc = document.createElement('td'); tdDesc.className = 'col-desc'; tdDesc.innerHTML = (item.desc || '').replace(/</g,'&lt;'); tr.appendChild(tdDesc);
 
-    const tdDesc = document.createElement('td');
-    tdDesc.className = 'col-desc';
-    tdDesc.innerHTML = (item.desc || '').replace(/</g,'&lt;');
-    tr.appendChild(tdDesc);
-
+    // Sites
     const { minSite, maxSite } = computeMinMaxForRow(item);
-    for (const s of chosenSitesAll) {
-      tr.appendChild(createPriceCell(item, s, minSite, maxSite));
-    }
+    for (const s of chosenSitesAll) { tr.appendChild(createPriceCell(item, s, minSite, maxSite)); }
 
     frag.appendChild(tr);
   }
-
   favBody.appendChild(frag);
 }
 
@@ -829,10 +676,7 @@ function attachToggle(panel, button){
     button.textContent = expanded ? 'Minimizar' : 'Maximizar';
     button.setAttribute('aria-expanded', String(expanded));
   }
-  button.addEventListener('click', ()=>{
-    const isExpanded = button.getAttribute('aria-expanded') === 'true';
-    setState(!isExpanded);
-  });
+  button.addEventListener('click', ()=>{ const isExpanded = button.getAttribute('aria-expanded') === 'true'; setState(!isExpanded); });
   setState(true);
 }
 attachToggle(favPanel, toggleFavBtn);
@@ -848,67 +692,38 @@ function updateCounts(){
 
 /* ======== CONSULTA SERVIDOR (PAGINADA) ======== */
 function buildQuery(){
-  let q = sb
-    .from(VIEW)
-    .select('ean, site, preco, data, descricao, preco_num', { count: 'estimated' })
-    .order('data', { ascending: false });
-
+  let q = sb.from(VIEW).select('ean, site, preco, data, descricao, preco_num', { count: 'estimated' }).order('data', { ascending: false });
   if (currentEanQ) q = q.ilike('ean', `%${currentEanQ}%`);
   if (currentDescQ) q = q.ilike('descricao', `%${currentDescQ}%`);
   return q;
 }
-
 async function fetchNextPage(){
   if (fetching || serverExhausted) return;
-  fetching = true;
-  hideErr();
-  setStatus(`Carregando dados… (offset ${serverOffset})`);
-
+  fetching = true; hideErr(); setStatus(`Carregando dados… (offset ${serverOffset})`);
   try{
-    const from = serverOffset;
-    const to = serverOffset + PAGE_SIZE - 1;
-
+    const from = serverOffset, to = serverOffset + PAGE_SIZE - 1;
     const { data, error } = await buildQuery().range(from, to);
     if (error) throw error;
 
     if (!data || data.length === 0) {
-      serverExhausted = true;
-      setStatus('Todos os dados carregados.');
+      serverExhausted = true; setStatus('Todos os dados carregados.');
       if (itemsRendered >= produtosList.length) endMarker.textContent = 'Fim da lista';
     } else {
       upsertRowsIntoProdutos(data);
-
       if (itemsRendered < produtosList.length) renderGeneralChunk();
-
       renderFavs();
       if (!favFirstAutoRenderDone) { updateFavHeight(); favFirstAutoRenderDone = true; }
-
       serverOffset += PAGE_SIZE;
       setStatus(`Carregados: ${produtosList.length} SKUs (parcial)`);
     }
-  } catch(e){
-    console.error(e);
-    showErr('Falha ao carregar: ' + (e?.message || e));
-    setStatus('Erro ao carregar.');
-  } finally {
-    fetching = false;
-    updateCounts();
-  }
+  } catch(e){ console.error(e); showErr('Falha ao carregar: ' + (e?.message || e)); setStatus('Erro ao carregar.'); }
+  finally { fetching = false; updateCounts(); }
 }
 
 /* ======== RESET DE CONSULTA ======== */
 function resetAndQuery(){
-  produtosMap.clear();
-  produtosList = [];
-  serverOffset = 0;
-  serverExhausted = false;
-  favFirstAutoRenderDone = false;
-
-  resetGeneralDom();
-  renderFavs();
-  updateFavHeight();
-  updateCounts();
-
+  produtosMap.clear(); produtosList = []; serverOffset = 0; serverExhausted = false; favFirstAutoRenderDone = false;
+  resetGeneralDom(); renderFavs(); updateFavHeight(); updateCounts();
   fetchNextPage();
 }
 
@@ -921,13 +736,11 @@ btnReload.addEventListener('click', async () => {
   }
   resetAndQuery();
 });
-
 const onFilterInput = debounce(() => {
   currentEanQ = (eanFilter.value || '').trim();
   currentDescQ = (descFilter.value || '').trim();
   resetAndQuery();
 }, 500);
-
 eanFilter.addEventListener('input', onFilterInput);
 descFilter.addEventListener('input', onFilterInput);
 
@@ -939,175 +752,97 @@ async function loadHeaderInfo(){
 
   let planKey = 'basico';
   try{
-    const { data, error } = await sb
-      .from('profiles')
-      .select('plan')
-      .eq('id', session.user.id)
-      .maybeSingle();
+    const { data, error } = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
     if (error) throw error;
     const planRaw = (data?.plan || 'basico').toString();
     planKey = planRaw.toLowerCase();
     const pretty = planRaw.charAt(0).toUpperCase() + planRaw.slice(1);
     planChip.textContent = `Plano: ${pretty}`;
-  }catch(e){
-    console.error(e);
-    planChip.textContent = 'Plano: —';
-  }
+  }catch(e){ console.error(e); planChip.textContent = 'Plano: —'; }
 
   await loadUserSitesAndLocks(session.user.id, planKey);
   return session;
 }
-
 async function loadHeaderInfoPlanOnly(){
   try{
     const { data: { session } } = await sb.auth.getSession();
     if (!session) return 'basico';
-    const { data, error } = await sb
-      .from('profiles')
-      .select('plan')
-      .eq('id', session.user.id)
-      .maybeSingle();
+    const { data, error } = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
     if (error) throw error;
     return (data?.plan || 'basico').toString().toLowerCase();
-  }catch(e){
-    console.error(e);
-    return 'basico';
-  }
+  }catch(e){ console.error(e); return 'basico'; }
 }
 
 /* ======== SAIR ======== */
 btnSair.addEventListener('click', async () => {
-  try {
-    await sb.auth.signOut();
-  } catch (e) {
-    console.error('Erro ao sair:', e);
-  } finally {
-    localStorage.removeItem('mm_login_date');
-    window.location.href = CFG.SITE_URL || 'index.html';
-  }
+  try { await sb.auth.signOut(); } catch (e) { console.error('Erro ao sair:', e); }
+  finally { localStorage.removeItem('mm_login_date'); window.location.href = CFG.SITE_URL || 'index.html'; }
 });
 
 /* ======== MINI-GRÁFICO (Spark) ======== */
 function closePopover(){ pop.style.display='none'; }
 function positionPopover(x, y){
-  const pad = 12;
-  const vw = window.innerWidth, vh = window.innerHeight;
-  let left = x + pad, top = y + pad;
-  const rectW = 240, rectH = 260;
+  const pad = 12; const vw = window.innerWidth, vh = window.innerHeight;
+  let left = x + pad, top = y + pad; const rectW = 240, rectH = 260;
   if (left + rectW > vw) left = x - rectW - pad;
   if (top + rectH > vh) top = y - rectH - pad;
   pop.style.left = Math.max(8, left) + 'px';
   pop.style.top = Math.max(8, top) + 'px';
 }
-document.addEventListener('click', (ev) => {
-  if (pop.style.display !== 'none' && !pop.contains(ev.target)) closePopover();
-});
+document.addEventListener('click', (ev) => { if (pop.style.display !== 'none' && !pop.contains(ev.target)) closePopover(); });
 document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closePopover(); });
 popClose.addEventListener('click', closePopover);
 
-/* Desenha sparkline com margens maiores e textos "clampados" */
 function drawSparkline(points){
-  const ctx = sparkCtx;
-  const W = sparkCanvas.width, H = sparkCanvas.height;
-  ctx.clearRect(0,0,W,H);
-
-  if (!points || points.length < 3){
-    popMsg.style.display='block';
-    popMsg.textContent = 'Histórico insuficiente (precisa de 3 preços).';
-    return;
-  }
+  const ctx = sparkCtx; const W = sparkCanvas.width, H = sparkCanvas.height; ctx.clearRect(0,0,W,H);
+  if (!points || points.length < 3){ popMsg.style.display='block'; popMsg.textContent = 'Histórico insuficiente (precisa de 3 preços).'; return; }
   popMsg.style.display='none';
-
   const m = { l: 40, r: 14, t: 12, b: 28 };
-
-  const xs = points.map(p=>p.x.getTime());
-  const ys = points.map(p=>p.y);
-  const xMin = Math.min(...xs), xMax = Math.max(...xs);
-  const yMin = Math.min(...ys), yMax = Math.max(...ys);
-  const xScale = v => m.l + ( (v - xMin) / (xMax - xMin || 1) ) * (W - m.l - m.r);
-  const yScaleRaw = v => H - m.b - ( (v - yMin) / (yMax - yMin || 1) ) * (H - m.t - m.b);
+  const xs = points.map(p=>p.x.getTime()); const ys = points.map(p=>p.y);
+  const xMin = Math.min(...xs), xMax = Math.max(...xs); const yMin = Math.min(...ys), yMax = Math.max(...ys);
+  const xScale = v => m.l + ((v - xMin) / (xMax - xMin || 1)) * (W - m.l - m.r);
+  const yScaleRaw = v => H - m.b - ((v - yMin) / (yMax - yMin || 1)) * (H - m.t - m.b);
   const yScale = v => Math.max(m.t+6, Math.min(H - m.b - 6, yScaleRaw(v)));
-
-  ctx.strokeStyle = '#232323';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  for (let i=0;i<=3;i++){
-    const yy = m.t + i*(H - m.t - m.b)/3;
-    ctx.moveTo(m.l, yy); ctx.lineTo(W - m.r, yy);
-  }
+  ctx.strokeStyle = '#232323'; ctx.lineWidth = 1; ctx.beginPath();
+  for (let i=0;i<=3;i++){ const yy = m.t + i*(H - m.t - m.b)/3; ctx.moveTo(m.l, yy); ctx.lineTo(W - m.r, yy); }
   ctx.stroke();
-
-  ctx.beginPath();
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = '#00d084';
-  points.forEach((p, i)=>{
-    const x = xScale(p.x.getTime()), y = yScale(p.y);
-    if (i === 0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
-  });
+  ctx.beginPath(); ctx.lineWidth = 3; ctx.strokeStyle = '#00d084';
+  points.forEach((p, i)=>{ const x = xScale(p.x.getTime()), y = yScale(p.y); if (i === 0) ctx.moveTo(x,y); else ctx.lineTo(x,y); });
   ctx.stroke();
-
   ctx.fillStyle = '#bfffc1';
-  for (const p of points){
-    const x = xScale(p.x.getTime()), y = yScale(p.y);
-    ctx.beginPath(); ctx.arc(x,y,3.2,0,Math.PI*2); ctx.fill();
-  }
-
-  ctx.fillStyle = '#9aa0a6';
-  ctx.font = '11px Arial';
-  ctx.textAlign = 'right';
+  for (const p of points){ const x = xScale(p.x.getTime()), y = yScale(p.y); ctx.beginPath(); ctx.arc(x,y,3.2,0,Math.PI*2); ctx.fill(); }
+  ctx.fillStyle = '#9aa0a6'; ctx.font = '11px Arial'; ctx.textAlign = 'right';
   const yMaxY = yScale(yMax), yMinY = yScale(yMin);
   ctx.fillText(formatBRL(yMax), m.l-6, Math.max(m.t+10, yMaxY-6));
   ctx.fillText(formatBRL(yMin), m.l-6, Math.min(H - m.b - 2, yMinY+12));
-
   const fmt = (d)=> d.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' });
-  ctx.textAlign = 'center';
-  ctx.fillText(fmt(points[0].x), Math.max(m.l, 24), H-8);
-  ctx.fillText(fmt(points[points.length-1].x), Math.min(W - m.r, W-24), H-8);
+  ctx.textAlign = 'center'; ctx.fillText(fmt(points[0].x), Math.max(m.l, 24), H-8); ctx.fillText(fmt(points[points.length-1].x), Math.min(W - m.r, W-24), H-8);
 }
-
 async function openChartFor(ev, ean, siteName, descText){
   ev.stopPropagation();
   const rect = ev.currentTarget.getBoundingClientRect();
   positionPopover(rect.right, rect.bottom);
-
   popTitle.textContent = `${siteName} • ${ean}`;
-  popMsg.style.display='block';
-  popMsg.textContent = 'Carregando histórico…';
+  popMsg.style.display='block'; popMsg.textContent = 'Carregando histórico…';
   sparkCtx.clearRect(0,0,sparkCanvas.width,sparkCanvas.height);
   pop.style.display='block';
-
   try{
-    const { data, error } = await sb
-      .from(VIEW)
-      .select('data, preco_num')
+    const { data, error } = await sb.from(VIEW).select('data, preco_num')
       .eq('ean', ean)
       .eq('site', Object.keys(siteMap).find(k => siteMap[k] === siteName))
       .not('preco_num', 'is', null)
-      .order('data', { ascending: true })
-      .limit(60);
+      .order('data', { ascending: true }).limit(60);
     if (error) throw error;
-
-    const points = (data||[])
-      .filter(r => typeof r.preco_num === 'number' && Number.isFinite(r.preco_num))
-      .map(r => ({ x: new Date(r.data), y: r.preco_num }));
-
+    const points = (data||[]).filter(r => typeof r.preco_num === 'number' && Number.isFinite(r.preco_num)).map(r => ({ x: new Date(r.data), y: r.preco_num }));
     drawSparkline(points);
-  } catch(e){
-    console.error(e);
-    popMsg.style.display='block';
-    popMsg.textContent = 'Falha ao carregar histórico.';
-  }
+  } catch(e){ console.error(e); popMsg.style.display='block'; popMsg.textContent = 'Falha ao carregar histórico.'; }
 }
 
 /* ======== INIT ======== */
 (async function init(){
   const session = await loadHeaderInfo(); if (!session) return;
-
   enforceDayBoundaryLogout();
-
-  currentEanQ = '';
-  currentDescQ = '';
-
+  currentEanQ = ''; currentDescQ = '';
   resetAndQuery();
   generalWrap.dispatchEvent(new Event('scroll'));
 })();
