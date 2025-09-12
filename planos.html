@@ -18,7 +18,7 @@
   header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
   h1{margin:0;color:#00b140}
 
-  /* NOVO: Barra de Vigência */
+  /* Barra de Vigência */
   .vigencia-bar{
     margin: 6px auto 18px;
     background:#0f0f0f;border:1px solid #2a2a2a;border-radius:12px;
@@ -78,7 +78,7 @@
   </div>
 </header>
 
-<!-- NOVO: Barra de Vigência sempre visível -->
+<!-- Barra de Vigência -->
 <div class="container vigencia-bar" id="vigenciaBar" style="display:none">
   <div class="left">
     <span class="vigencia-title">Vigência:</span>
@@ -201,7 +201,7 @@ const cardsEl = $('#cards');
 const checkoutEl = $('#checkout'), banner = $('#banner'), logs = $('#logs'), resp = $('#resp');
 const vigenciaInfo = $('#vigenciaInfo');
 
-/* NOVO: elementos da barra de vigência */
+/* Barra de Vigência */
 const vigenciaBar = $('#vigenciaBar');
 const vigenciaTexto = $('#vigenciaTexto');
 const vigenciaObs = $('#vigenciaObs');
@@ -264,9 +264,8 @@ async function applyPendingIfDue(){
   }catch(e){ log("apply_pending_plan error:", e.message||e); }
 }
 
-/* NOVO: atualiza barra e chips */
+/* Atualiza barra + chips */
 function updateVigenciaUI(){
-  // Chips
   planChip.textContent = `Plano: ${label(currentPlanKey)}`;
   const dleft = daysLeft(PLAN_EXPIRES_AT);
   if (dleft > 0) {
@@ -282,7 +281,6 @@ function updateVigenciaUI(){
     pendingChip.style.display = 'none';
   }
 
-  // Barra de Vigência
   if (PLAN_EXPIRES_AT) {
     const d = daysLeft(PLAN_EXPIRES_AT);
     vigenciaBar.style.display = 'flex';
@@ -290,12 +288,21 @@ function updateVigenciaUI(){
     vigenciaObs.textContent = PENDING_PLAN ? `Downgrade agendado para ${label(PENDING_PLAN)}.` : '';
     vigenciaObs.className = PENDING_PLAN ? 'vigencia-warn' : 'vigencia-mute';
   } else {
-    // sem vigência ativa
     vigenciaBar.style.display = 'flex';
     vigenciaTexto.textContent = `sem vigência ativa`;
     vigenciaObs.textContent = `Selecione um plano pago para iniciar a vigência.`;
     vigenciaObs.className = 'vigencia-mute';
   }
+}
+
+/* Recarrega perfil do banco e atualiza UI */
+async function reloadProfile(){
+  const prof=await sb.from('profiles').select('plan, plan_expires_at, pending_plan').eq('id',user.id).maybeSingle();
+  if (prof.error) { log("reloadProfile error:", prof.error); return; }
+  currentPlanKey=(prof.data?.plan||'trial');
+  PLAN_EXPIRES_AT=prof.data?.plan_expires_at||null;
+  PENDING_PLAN=prof.data?.pending_plan||null;
+  updateVigenciaUI();
 }
 
 /* init */
@@ -307,15 +314,8 @@ function updateVigenciaUI(){
     if(!session){location.href=CFG.SITE_URL||'index.html';return}
     user=session.user;
 
-    // perfil
-    const prof=await sb.from('profiles').select('plan, plan_expires_at, pending_plan').eq('id',user.id).maybeSingle();
-    if (prof.error) { showBanner("Erro ao ler perfil", "err", 8000); log("profiles read error:", prof.error); }
-    currentPlanKey=(prof.data?.plan||'trial');
-    PLAN_EXPIRES_AT=prof.data?.plan_expires_at||null;
-    PENDING_PLAN=prof.data?.pending_plan||null;
-    updateVigenciaUI();
+    await reloadProfile();
 
-    // planos
     const bp=await sb.from('billing_plans')
       .select('id,name,plan_key,price_cents,interval_unit,interval_length,active,sort_order')
       .eq('active',true).order('sort_order',{ascending:true});
@@ -323,7 +323,6 @@ function updateVigenciaUI(){
     plans=(bp.data||[]);
     renderCards();
 
-    // diag
     $('#fnName').textContent = CFG.EDGE_FUNCTION_NAME || "—";
     $('#fnUrl').textContent  = FUNCTIONS_URL || "(não deduzida)";
     $('#contaEmail').textContent = user.email || "—";
@@ -586,7 +585,10 @@ document.getElementById('btnPagar').onclick = async ()=>{
       const r1 = await trySubscription(LAST_CARD_TOKEN);
       showResp({ sub_try_1: r1 });
       if (r1.ok && (r1.data?.ok)) {
-        showBanner("Assinatura criada com sucesso! Redirecionando…", "ok", 0);
+        /* >>> NOVO: ativar vigência imediatamente */
+        await sb.rpc('activate_plan_for_user', { p_user_id: user.id, p_plan: CURRENT_PLAN.plan_key });
+        await reloadProfile();
+        showBanner("Assinatura criada e vigência ativada! Redirecionando…", "ok", 0);
         setTimeout(()=>{ window.location.href = "dashboard.html"; }, 1000);
       } else if ((r1.data?.status === 404 && String(r1.data?.provider?.message||'').toLowerCase().includes('card token')) ){
         showBanner("Atualizando token e tentando novamente…", "warn");
@@ -599,7 +601,10 @@ document.getElementById('btnPagar').onclick = async ()=>{
         const r2 = await trySubscription(LAST_CARD_TOKEN);
         showResp({ sub_try_2: r2 });
         if (r2.ok && (r2.data?.ok)) {
-          showBanner("Assinatura criada com sucesso! Redirecionando…", "ok", 0);
+          /* >>> NOVO: ativar vigência imediatamente */
+          await sb.rpc('activate_plan_for_user', { p_user_id: user.id, p_plan: CURRENT_PLAN.plan_key });
+          await reloadProfile();
+          showBanner("Assinatura criada e vigência ativada! Redirecionando…", "ok", 0);
           setTimeout(()=>{ window.location.href = "dashboard.html"; }, 1000);
         } else {
           showBanner("Não foi possível criar a assinatura.", "err");
@@ -623,7 +628,10 @@ document.getElementById('btnPagar').onclick = async ()=>{
       const t = await r.text(); let j=null; try{ j=JSON.parse(t)}catch{ j={raw:t} };
       showResp({ status:r.status, data:j });
       if (r.ok && (j?.data?.ok || j?.ok)) {
-        showBanner("Pagamento concluído com sucesso! Redirecionando…", "ok", 0);
+        /* >>> NOVO: ativar vigência imediatamente */
+        await sb.rpc('activate_plan_for_user', { p_user_id: user.id, p_plan: CURRENT_PLAN.plan_key });
+        await reloadProfile();
+        showBanner("Pagamento concluído e vigência ativada! Redirecionando…", "ok", 0);
         setTimeout(()=>{ window.location.href = "dashboard.html"; }, 1000);
       } else {
         showBanner("Não foi possível concluir o pagamento.", "err");
