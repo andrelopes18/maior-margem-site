@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Planos</title>
 
-<!-- libs exatamente como antes -->
+<!-- libs -->
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="https://unpkg.com/imask"></script>
 <script src="/config.js?v=1"></script>
@@ -29,6 +29,8 @@
   .btn:disabled{opacity:.5;cursor:not-allowed}
   .chip{font-size:12px;background:#1e1e1e;border:1px solid #333;padding:6px 10px;border-radius:999px}
   .chip.plan{color:#bfffc1;border-color:#2f5a2f;background:#132313}
+  .chip.time{color:#cfe8ff;border-color:#2f435a;background:#0f1a24}
+  .chip.pending{color:#ffe2bf;border-color:#5c3f00;background:#1b1300}
   .checkout{margin-top:24px;background:#0f0f0f;border:1px solid #2a2a2a;border-radius:14px;padding:18px}
   .row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
   .row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
@@ -48,10 +50,6 @@
   small.mono{font-family:ui-monospace,Consolas,monospace;opacity:.85}
   #btnDiag{position:fixed;right:16px;bottom:16px;z-index:9999;width:38px;height:38px;border-radius:999px;border:1px solid #2a2a2a;background:#131313;color:#bdbdbd;opacity:.5;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:18px}
   #btnDiag:hover{opacity:.9}
-
-  /* NOVO: chips de vigência */
-  .chip.time{color:#cfe8ff;border-color:#2f435a;background:#0f1a24}
-  .chip.pending{color:#ffe2bf;border-color:#5c3f00;background:#1b1300}
 </style>
 </head>
 <body>
@@ -134,7 +132,6 @@
     <div class="stack" style="justify-content:space-between;align-items:center">
       <div class="stack">
         <button id="btnUnlock" class="btn">Desbloquear campos</button>
-        <!-- CONTINUAM os botões de diagnóstico -->
         <button id="btnHealthSubs" class="btn ghost diag-only">/health da assinatura</button>
         <button id="btnInspectToken" class="btn ghost diag-only">Inspecionar token</button>
         <button id="btnTestCors" class="btn ghost diag-only">Testar CORS/URL</button>
@@ -158,19 +155,29 @@
 <button id="btnDiag" title="Modo diagnóstico (mostrar/ocultar)">⚙︎</button>
 
 <script>
-/* ============== CONFIG BÁSICA (inalterada) ============== */
+/* ============== CONFIG ============== */
 const CFG = window.CONFIG||{};
 let FUNCTIONS_URL = CFG.FUNCTIONS_URL;
-if (!FUNCTIONS_URL) { try { const ref = new URL(CFG.SUPABASE_URL).host.split(".")[0]; FUNCTIONS_URL = `https://${ref}.functions.supabase.co`; } catch {} }
+if (!FUNCTIONS_URL) {
+  try {
+    const ref = new URL(CFG.SUPABASE_URL).host.split(".")[0];
+    FUNCTIONS_URL = `https://${ref}.functions.supabase.co`;
+  } catch {}
+}
 
-const sb  = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+const sb  = supabase.createClient(
+  CFG.SUPABASE_URL,
+  CFG.SUPABASE_ANON_KEY,
+  {auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}}
+);
+
 const $ = s=>document.querySelector(s);
 const planChip = $('#planChip'), timeChip = $('#timeChip'), pendingChip = $('#pendingChip');
 const cardsEl = $('#cards');
 const checkoutEl = $('#checkout'), banner = $('#banner'), logs = $('#logs'), resp = $('#resp');
 const vigenciaInfo = $('#vigenciaInfo');
 
-/* ============== NOVO: map de preapproval por plano ============== */
+/* ============== MAP de preapproval por plano (ajuste seus IDs) ============== */
 const PREAPPROVAL_BY_PLAN = {
   premium:        "65aa0a173adc4eb49ce3927a0211dd9c",
   intermediario:  "e5065c5f5f5447fa94d99bf9ffbfdad2",
@@ -181,11 +188,16 @@ function subscriptionCheckoutUrl(planKey){
   return id ? `https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=${id}` : "#";
 }
 
-/* ============== helpers UI/diag (inalterados + util novo) ============== */
+/* ============== helpers UI/diag ============== */
 function money(c){return (Number(c||0)/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
 function label(k){return (CFG.PLAN_LABELS||{})[k]||k.charAt(0).toUpperCase()+k.slice(1)}
 function addBadge(text, ok=false){ const b=document.createElement('span'); b.className='badge '+(ok?'ok':''); b.textContent=text; $('#badges').appendChild(b); }
-function showBanner(text, type='ok', autohideMs=4200){ banner.textContent=text; banner.className='banner '+(type==='warn'?'warn':type==='err'?'err':'ok'); banner.style.display='block'; if(autohideMs>0){ setTimeout(()=>{ banner.style.display='none'; }, autohideMs);} }
+function showBanner(text, type='ok', autohideMs=4200){
+  banner.textContent=text;
+  banner.className='banner '+(type==='warn'?'warn':type==='err'?'err':'ok');
+  banner.style.display='block';
+  if(autohideMs>0){ setTimeout(()=>{ banner.style.display='none'; }, autohideMs);}
+}
 function log(...args){ if(!logs) return; const line=args.map(a=>{ try{return typeof a==='string'?a:JSON.stringify(a,null,2);}catch{ return String(a);} }).join(" "); logs.textContent+=(logs.textContent? "\n":"")+line; logs.scrollTop=logs.scrollHeight; }
 function showResp(obj){ if(!resp) return; try{ resp.textContent=JSON.stringify(obj,null,2);}catch{ resp.textContent=String(obj);} }
 function digitsOnly(s){ return (s||'').replace(/\D+/g,""); }
@@ -199,12 +211,12 @@ function daysLeft(expiresAt){
   return diff > 0 ? diff : 0;
 }
 
-/* ============== máscaras (inalterado) ============== */
+/* ============== máscaras ============== */
 IMask($('#cardExp'), { mask: '00/0000' });
 IMask($('#cardNumber'), { mask: '0000 0000 0000 0000' });
 IMask($('#cardCVV'), { mask: '000[0]' });
 
-/* ============== estado global (inalterado + campos novos) ============== */
+/* ============== estado global ============== */
 let user=null, currentPlanKey='trial', plans=[];
 let CURRENT_PLAN=null;
 let LAST_CARD_TOKEN=null;
@@ -212,7 +224,7 @@ let LAST_TOKEN_TS=0;
 let PLAN_EXPIRES_AT=null;
 let PENDING_PLAN=null;
 
-/* ============== eventos topo (inalterado) ============== */
+/* ============== eventos topo ============== */
 document.getElementById('btnSair').onclick = async()=>{ await sb.auth.signOut(); location.href=CFG.SITE_URL||'index.html'; };
 document.getElementById('btnDiag').onclick = ()=>{ document.body.classList.toggle('show-diag'); };
 
@@ -220,14 +232,13 @@ document.getElementById('btnDiag').onclick = ()=>{ document.body.classList.toggl
 async function applyPendingIfDue(){
   try{
     const { data, error } = await sb.rpc('apply_pending_plan'); // se existir a RPC
-    // se não existir, tudo bem — a troca será aplicada pelo backend ou em outro momento
+    // ok se não existir — backend também pode aplicar via webhook/CRON
   }catch(e){/* silencioso */}
 }
 
-/* ============== carregar perfil e atualizar chips de vigência ============== */
+/* ============== carregar perfil e atualizar chips ============== */
 function updateChips(){
   planChip.textContent = `Plano: ${label(currentPlanKey)}`;
-  // time chip
   const dleft = daysLeft(PLAN_EXPIRES_AT);
   if (dleft > 0) {
     timeChip.style.display = 'inline-block';
@@ -235,16 +246,15 @@ function updateChips(){
   } else {
     timeChip.style.display = 'none';
   }
-  // pending chip
   if (PENDING_PLAN) {
     pendingChip.style.display = 'inline-block';
-    pendingChip.textContent = `Downgrade agendado para: ${label(PENDING_PLAN)} (ao fim da vigência)`;
+    pendingChip.textContent = `Downgrade agendado: ${label(PENDING_PLAN)} (após a vigência)`;
   } else {
     pendingChip.style.display = 'none';
   }
 }
 
-/* ============== init (igual, com badges e vigência) ============== */
+/* ============== init ============== */
 (async function init(){
   await applyPendingIfDue();
 
@@ -272,11 +282,12 @@ function updateChips(){
   document.getElementById('pkIsTest').textContent = CFG.MP_PUBLIC_KEY?.startsWith("TEST-") ? "SIM" : "NÃO";
 })();
 
-/* ============== render dos cards (com botão de agendar downgrade no Trial) ============== */
+/* ============== render cards (inclui botões Trial/downgrade) ============== */
 function renderCards(){
   cardsEl.innerHTML='';
   const order=['trial','basico','intermediario','premium'];
   const dleft = daysLeft(PLAN_EXPIRES_AT);
+
   for(const k of order){
     const p=plans.find(x=>String(x.plan_key).toLowerCase()===k); if(!p) continue;
     const el=document.createElement('div');el.className='card';
@@ -312,13 +323,13 @@ function renderCards(){
 /* ============== ações Trial (sem pagamento) ============== */
 async function scheduleTrialDowngrade(){
   try{
-    // tenta RPC (segura) — se não existir, faz UPDATE direto
-    let ok=false, err=null, row=null;
+    // Preferir RPC; se não existir, usa update direto autorizado por RLS/GRANT
+    let ok=false, row=null;
 
     try{
       const { data, error } = await sb.rpc('schedule_downgrade_to_trial');
       if (!error && data){ ok=true; row=data; }
-    }catch(e){ /* se não houver RPC, cai para o update abaixo */ }
+    }catch(e){ /* cai para UPDATE abaixo */ }
 
     if (!ok) {
       const { data, error } = await sb.from('profiles')
@@ -344,7 +355,6 @@ async function scheduleTrialDowngrade(){
 
 async function switchToTrialImmediately(){
   try{
-    // só permite se não houver vigência ativa
     const dleft = daysLeft(PLAN_EXPIRES_AT);
     if (dleft>0){
       showBanner("Você ainda tem período pago ativo. Agende o downgrade para o fim da vigência.", "warn");
@@ -362,12 +372,12 @@ async function switchToTrialImmediately(){
   }
 }
 
-/* ============== abre checkout (também mostra vigência atual) ============== */
+/* ============== abre checkout ============== */
 function openCheckout(plan){
   CURRENT_PLAN = plan;
-  const planKey = String(plan?.plan_key||"").toLowerCase();
   $('#planoNome').textContent = plan?.name || plan?.plan_key || '—';
   $('#planoValor').textContent = (Number(plan?.price_cents||0)/100).toFixed(2);
+
   const dleft = daysLeft(PLAN_EXPIRES_AT);
   if (dleft>0){
     vigenciaInfo.style.display='block';
@@ -375,26 +385,32 @@ function openCheckout(plan){
   } else {
     vigenciaInfo.style.display='none';
   }
+
   checkoutEl.style.display = 'block';
   document.getElementById('btnPagar').disabled = false;
   checkoutEl.scrollIntoView({behavior:'smooth', block:'start'});
 }
 
-/* ============== headers para chamadas (inalterado) ============== */
+/* ============== headers para chamadas ============== */
 function buildHeaders(sessionAccessToken){
-  const h = { "Content-Type":"application/json", "apikey": CFG.SUPABASE_ANON_KEY, "x-supabase-url": CFG.SUPABASE_URL, "x-supabase-anon-key": CFG.SUPABASE_ANON_KEY };
+  const h = {
+    "Content-Type":"application/json",
+    "apikey": CFG.SUPABASE_ANON_KEY,
+    "x-supabase-url": CFG.SUPABASE_URL,
+    "x-supabase-anon-key": CFG.SUPABASE_ANON_KEY
+  };
   if (sessionAccessToken) h["Authorization"] = `Bearer ${sessionAccessToken}`;
   return h;
 }
 
-/* ============== desbloqueio campos (inalterado) ============== */
+/* ============== desbloqueio campos ============== */
 document.getElementById('btnUnlock').onclick = ()=>{
   for (const id of ["cardholder","payerEmail","payerCPF","installments","cardNumber","cardExp","cardCVV"])
     document.getElementById(id).disabled = false;
   showBanner("Campos desbloqueados.", "ok");
 };
 
-/* ============== util: inspecionar token no backend (rota correta) ============== */
+/* ============== util: inspecionar token no backend ============== */
 async function inspectToken(tokenId){
   const { data: { session } } = await sb.auth.getSession();
   const r = await fetch(`${FUNCTIONS_URL}/mercado-pago-subscription/token/inspect`, {
@@ -405,7 +421,7 @@ async function inspectToken(tokenId){
   return { status: r.status, data: j };
 }
 
-/* ============== botões de diagnóstico -> rotas corretas ============== */
+/* ============== botões de diagnóstico ============== */
 document.getElementById('btnHealthSubs')?.addEventListener('click', async ()=>{
   if (logs) logs.textContent = ""; if (resp) resp.textContent = "";
   try{
@@ -429,7 +445,6 @@ document.getElementById('btnTestPost')?.addEventListener('click', async ()=>{
   const { data: { session } } = await sb.auth.getSession();
   if (!session){ showBanner("Sem sessão.", "warn"); return; }
   try{
-    // POST de teste na rota certa (vai falhar com dados fake, mas valida CORS/handler)
     const r = await fetch(`${FUNCTIONS_URL}/mercado-pago-subscription/subscription/create`, {
       method:"POST", headers: buildHeaders(session.access_token),
       body: JSON.stringify({ payer_email:"x@y.com", preapproval_plan_id:"PLN_FAKE", card_token:"FAKE", external_reference:`${session.user.id}|premium` })
@@ -449,7 +464,7 @@ document.getElementById('btnInspectToken')?.addEventListener('click', async ()=>
   }
 });
 
-/* ============== PAGAMENTO (inalterado), com nota de vigência no backend ============== */
+/* ============== PAGAMENTO (1x + assinatura) ============== */
 document.getElementById('btnPagar').onclick = async ()=>{
   if (logs) logs.textContent = ""; if (resp) resp.textContent = "";
   if (!CURRENT_PLAN){ showBanner("Escolha um plano antes de pagar.", "warn"); return; }
@@ -457,7 +472,7 @@ document.getElementById('btnPagar').onclick = async ()=>{
   if (!cents || cents<=0){ showBanner("Este plano não requer pagamento. Use o botão de Trial.", "warn"); return; }
 
   try{
-    // tokenizar SEMPRE que for pagar
+    // tokenizar
     const [mm,yyyy] = ($('#cardExp').value||"").split("/");
     const payloadToken = {
       card_number: digitsOnly($('#cardNumber').value),
@@ -477,6 +492,7 @@ document.getElementById('btnPagar').onclick = async ()=>{
     if (!session){ showBanner("Faça login antes de pagar.", "warn"); return; }
     const isRecurring = document.getElementById('recorrente').checked;
 
+    // assinatura
     const trySubscription = async (cardToken) => {
       const planKey = String(CURRENT_PLAN.plan_key||"").toLowerCase();
       const preapproval_plan_id = PREAPPROVAL_BY_PLAN[planKey];
@@ -497,6 +513,7 @@ document.getElementById('btnPagar').onclick = async ()=>{
     };
 
     if (isRecurring) {
+      // token fresco e válido
       const age = (Date.now() - LAST_TOKEN_TS)/1000;
       if (age > 60) {
         showBanner("Token antigo, gerando novamente…", "warn");
@@ -544,7 +561,7 @@ document.getElementById('btnPagar').onclick = async ()=>{
         showBanner("Não foi possível criar a assinatura.", "err");
       }
     } else {
-      // ======== PAGAMENTO 1x (MANTIDO) ========
+      // pagamento 1x
       const body = {
         mode: "card",
         plan_key: CURRENT_PLAN.plan_key,
