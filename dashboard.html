@@ -196,7 +196,7 @@
 </div>
 
 <script>
-/* ======== AJUDA: Mostra erros no topo em vez de “sumir” ======== */
+/* ======== AJUDA: Mostra erros no topo ======== */
 window.addEventListener('error', e => { const el=document.getElementById('err'); el.style.display='block'; el.textContent='Erro JS: '+e.message; });
 window.addEventListener('unhandledrejection', e => { const el=document.getElementById('err'); el.style.display='block'; el.textContent='Erro assíncrono: '+(e.reason?.message||e.reason); });
 
@@ -248,7 +248,7 @@ const popMsg = document.getElementById('chartMsg');
 const sparkCanvas = document.getElementById('spark');
 const sparkCtx = sparkCanvas.getContext('2d');
 
-/* ======== MAPA DE VIEW->LABEL (deve casar com VIEW) ======== */
+/* ======== MAPA view_key -> label, e inverso ======== */
 const siteMap = {
   "PrecoLeroyMerlin": "LeroyMerlin",
   "PrecoQueroQuero": "QueroQuero",
@@ -259,12 +259,13 @@ const siteMap = {
   "PrecoSupremeinox": "Supremeinox",
   "PrecoGhaus": "Ghaus"
 };
-const siteOrder = Object.values(siteMap); // labels conhecidos (para fallback)
+const viewKeyByLabel = Object.fromEntries(Object.entries(siteMap).map(([k,v])=>[v,k]));
+const KNOWN_LABELS = Object.values(siteMap);
 
 /* ======== ESTADO ======== */
-let chosenSitesAll = [...siteOrder];      // ordem dos sites SELECIONADOS (de user_sites)
-let unlockedSites = new Set(siteOrder);   // mantido (plano)
-let lockedSites = new Set();              // mantido
+let chosenSitesAll = [];          // labels exatamente como o usuário selecionou (ordem do user_sites)
+let unlockedSites = new Set(KNOWN_LABELS); // mantido (plano) — não tratamos limite aqui
+let lockedSites = new Set();               // mantido
 
 let favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
 let produtosMap = new Map();              // Map<ean, { sku, desc, sites: { [label]: {...} } }>
@@ -306,25 +307,24 @@ function toDashboardLabel(raw){
   if (n === 'leroymerlin') return 'LeroyMerlin';
   if (n === 'queroquero') return 'QueroQuero';
   if (n === 'cassol' || n === 'cassolcenterlar') return 'Cassol';
-  if (n === 'redemac' || n === 'redemacsuperbem' || n === 'superbem' || n === 'rede mac') return 'RedeMac';
+  if (n === 'redemac' || n === 'redemacsuperbem' || n === 'superbem' || n === 'redemacsuperbem') return 'RedeMac';
   if (n === 'mestretinho' || n === 'mestrettinho') return 'MestreTinho';
   if (n === 'tumelero') return 'Tumelero';
   if (n === 'supremeinox' || n === 'supreme inox') return 'Supremeinox';
   if (n === 'ghaus' || n === 'g-haus' || n === 'gháus') return 'Ghaus';
-  for (const lbl of siteOrder){ if (normalizeSiteLabel(lbl) === n) return lbl; }
-  return '';
+  // Se não casar, retorna string "colável" como rótulo mesmo assim
+  const fallback = (raw||'').toString().replace(/\s+/g,'').replace(/[^\w]/g,'');
+  return fallback || '';
 }
 
 /* ======== 1) Cabeçalhos dinâmicos conforme seleção ======== */
 function buildHeaders(){
-  // colunas fixas:
   const favHeadFixed = `<th class="col-fav">Ação</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
   const genHeadFixed = `<th class="col-fav">★</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
 
-  // sites conforme seleção
-  const sitesTh = chosenSitesAll.map(s => {
-    const locked = lockedSites.has(s) ? ' data-locked="true"' : ' data-locked="false"';
-    return `<th data-site="${s}"${locked}>${s}</th>`;
+  const sitesTh = chosenSitesAll.map(lbl => {
+    const locked = lockedSites.has(lbl) ? ' data-locked="true"' : ' data-locked="false"';
+    return `<th data-site="${lbl}"${locked}>${lbl}</th>`;
   }).join('');
 
   favHeaderRow.innerHTML = favHeadFixed + sitesTh;
@@ -340,7 +340,7 @@ function markLockedHeaders(){
   });
 }
 
-/* ======== 2) Carregar seleção do usuário em user_sites ======== */
+/* ======== 2) Carregar seleção do usuário em user_sites (ordem real) ======== */
 async function getSitesLimitForPlan(planKey){
   const key = (planKey || '').toString().trim().toLowerCase();
   try {
@@ -358,56 +358,73 @@ async function getSitesLimitForPlan(planKey){
 async function loadUserSitesAndLocks(userId, planKey){
   const maxSites = await getSitesLimitForPlan(planKey);
 
-  // 1) Lê user_sites do usuário (ordem por id; se tiver "position", pode trocar aqui)
-  let siteIds = [];
+  // 1) Lê user_sites na ordem real do usuário (position, depois id)
+  let userRows = [];
   try{
-    const { data: us, error } = await sb.from('user_sites')
-      .select('site_id, enabled')
+    const { data, error } = await sb.from('user_sites')
+      .select('site_id, enabled, position, id')
       .eq('user_id', userId)
+      .order('position', { ascending: true, nullsFirst: true })
       .order('id', { ascending: true });
     if (error) throw error;
-    siteIds = (us || [])
-      .filter(r => (r.enabled !== false))
-      .map(r => r.site_id)
-      .filter(x => x != null);
-  }catch(e){ console.warn('user_sites ausente? Prosseguindo.', e); }
+    userRows = (data || []).filter(r => r.enabled !== false);
+  }catch(e){ console.warn('user_sites: falha de leitura', e); }
 
-  // 2) Converte IDs -> labels do dashboard preservando ordem
-  let chosenLabels = [];
-  if (siteIds.length){
+  // 2) Converte para labels preservando ordem do user_sites
+  let labels = [];
+  if (userRows.length){
+    const ids = userRows.map(r=>r.site_id).filter(x=>x!=null);
     try{
-      const { data: st, error } = await sb.from('sites').select('id, nome, name, site').in('id', siteIds);
+      const { data: sites, error } = await sb.from('sites')
+        .select('id, view_key, nome, name, site')
+        .in('id', ids);
       if (error) throw error;
-      const ordered = siteIds.map(id => (st||[]).find(s => s.id === id)).filter(Boolean);
-      chosenLabels = ordered
-        .map(s => toDashboardLabel(s?.nome || s?.name || s?.site || ''))
-        .filter(lbl => !!lbl && siteOrder.includes(lbl));
-    }catch(e){ console.warn('Falha ao ler sites por id. Usando padrão.', e); }
+
+      const ordered = ids.map(id => (sites||[]).find(s => s.id === id)).filter(Boolean);
+      ordered.forEach(s => {
+        let lbl = '';
+        // Preferência: usar view_key mapeado
+        if (s.view_key && siteMap[s.view_key]) {
+          lbl = siteMap[s.view_key];
+          // guarda inverso para gráficos
+          viewKeyByLabel[lbl] = s.view_key;
+        } else {
+          // Heurística pelo nome
+          lbl = toDashboardLabel(s?.nome || s?.name || s?.site || '');
+          // se já conhecemos a view_key dessa label, mantemos; senão, fica sem vínculo (só cabeçalho)
+        }
+        if (lbl) labels.push(lbl);
+      });
+    }catch(e){ console.warn('sites: falha de leitura', e); }
   }
 
-  // 3) Fallback: todas conhecidas (se usuário não selecionou nada)
-  if (chosenLabels.length === 0) chosenLabels = [...siteOrder];
+  // 3) Se não há seleção válida, fallback = todos conhecidos (apenas para garantir que a página abra)
+  if (!labels.length){
+    labels = [...KNOWN_LABELS]; // ordem padrão apenas quando não há seleção
+  }
 
-  // 4) Aplica seleção e calcula bloqueadas (mantido)
-  chosenSitesAll = [...new Set(chosenLabels)];
+  // 4) Remove duplicatas preservando ordem
+  chosenSitesAll = [...new Set(labels)];
+
+  // 5) (Bloqueio por plano — mantido, sem mudanças de regra)
   unlockedSites = new Set(chosenSitesAll.slice(0, maxSites));
-  lockedSites = new Set(chosenSitesAll.slice(maxSites));
+  lockedSites   = new Set(chosenSitesAll.slice(maxSites));
 
-  // 5) Monta cabeçalhos dinâmicos e marca bloqueios
+  // 6) Monta cabeçalhos na exata ordem da seleção
   buildHeaders();
   markLockedHeaders();
 
-  setStatus(`Sites selecionados: ${unlockedSites.size}/${chosenSitesAll.length}` + (lockedSites.size ? ` • ${lockedSites.size} bloqueado(s)` : ''));
+  setStatus(`Sites selecionados (ordem do usuário): ${chosenSitesAll.join(' · ')}`);
 }
 
 /* ======== 3) Agregar dados por EAN, gravando por label selecionado ======== */
 function upsertRowsIntoProdutos(rows){
   for (const row of rows){
     const ean = String(row.ean ?? '');
-    const viewKey = String(row.site ?? '');  // ex.: "PrecoLeroyMerlin"
-    const label = siteMap[viewKey];          // ex.: "LeroyMerlin"
-    if (!label) continue;                    // ignora sites não mapeados na view
-    if (!chosenSitesAll.includes(label)) continue; // ignora se não está selecionado
+    const viewKey = String(row.site ?? '');           // ex.: "PrecoLeroyMerlin"
+    const label = siteMap[viewKey];                   // ex.: "LeroyMerlin"
+    if (!label) continue;                             // ignora sites não mapeados na view
+    if (!chosenSitesAll.includes(label)) continue;    // ignora se usuário não selecionou essa coluna
 
     if (!produtosMap.has(ean)) {
       produtosMap.set(ean, { sku: ean, desc: row.descricao || '', sites: {} });
@@ -480,7 +497,7 @@ function createPriceCell(item, siteName, minSite, maxSite){
         up.className = 'unlock';
         up.type = 'button';
         up.title = 'Excedeu o limite do plano. Ver planos.';
-        up.innerHTML = 'Ver planos';
+        up.textContent = 'Ver planos';
         up.addEventListener('click', ()=> window.location.href = 'planos.html');
         td.appendChild(up);
       }
@@ -631,7 +648,6 @@ async function fetchNextPage(){
 function resetAndQuery(){
   produtosMap.clear(); produtosList = []; serverOffset = 0; serverExhausted = false; favFirstAutoRenderDone = false;
 
-  // Cabeçalhos já estão corretos (dinâmicos)
   generalBody.innerHTML = '';
   generalChkMap.clear();
   itemsRendered = 0;
@@ -646,7 +662,7 @@ btnReload.addEventListener('click', async () => {
   const session = (await sb.auth.getSession()).data.session;
   if (session?.user?.id) {
     const planKey = await loadHeaderInfoPlanOnly();
-    await loadUserSitesAndLocks(session.user.id, planKey);
+    await loadUserSitesAndLocks(session.user.id, planKey); // reconstrói cabeçalhos na ordem do user_sites
   }
   resetAndQuery();
 });
@@ -765,7 +781,11 @@ async function openChartFor(ev, ean, siteLabel){
   sparkCtx.clearRect(0,0,sparkCanvas.width,sparkCanvas.height);
   pop.style.display='block';
   try{
-    const viewKey = Object.keys(siteMap).find(k => siteMap[k] === siteLabel);
+    // Usa a view_key conhecida; se não existir, tenta heurística "Preco"+label compacto
+    let viewKey = viewKeyByLabel[siteLabel];
+    if (!viewKey){
+      viewKey = 'Preco' + siteLabel.replace(/[^A-Za-z0-9]/g,'');
+    }
     const { data, error } = await sb.from(VIEW).select('data, preco_num')
       .eq('ean', ean)
       .eq('site', viewKey)
@@ -794,7 +814,7 @@ async function openChartFor(ev, ean, siteLabel){
     planChip.textContent = `Plano: ${pretty}`;
   }catch(e){ console.error(e); planChip.textContent = 'Plano: —'; }
 
-  // Seleção de sites + limites + constrói cabeçalhos
+  // Seleção de sites + cabeçalhos na ordem da seleção
   await loadUserSitesAndLocks(session.user.id, planKey);
 
   // Primeira carga
