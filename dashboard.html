@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MaiorMargem — Dashboard</title>
+<title>MaiorMargem - Tabela de Produtos</title>
 <style>
   :root { color-scheme: dark; }
-  body { margin:0; font-family: Arial, sans-serif; background:#121212; color:#fff; padding:20px; }
+  body { margin:0; font-family: Arial, sans-serif; background-color:#121212; color:white; padding:20px; }
   header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; gap:12px; flex-wrap:wrap; }
   h1 { color:#00b140; margin:0; }
 
@@ -54,16 +54,19 @@
   .toggle-btn:hover { background:#1b1b1b; }
 
   .filters { display:grid; grid-template-columns: 1fr 1fr auto; gap:12px; margin:16px 0; }
-  .filters input { padding:10px 12px; border-radius:6px; border:1px solid #333; background:#1e1e1e; color:#fff; }
+  .filters input { padding:10px 12px; border-radius:6px; border:1px solid #333; background-color:#1e1e1e; color:white; }
   .status { margin:10px 0; color:#aaa; font-size:12px; }
   .err { display:none; color:#ff5d5d; margin:8px 0; font-size:13px; }
 
-  /* WRAPS + sticky header */
-  .wrap { overflow:auto; border:1px solid #2a2a2a; border-radius:10px; position: relative; }
+  /* WRAPS com rolagem + base para sticky header */
+  .wrap {
+    overflow:auto; border:1px solid #2a2a2a; border-radius:10px;
+    position: relative; /* base p/ sticky z-index */
+  }
   #generalWrap { height: 55vh; }
 
-  table { width:100%; border-collapse: separate; border-spacing: 0; }
-  thead { position: sticky; top: 0; z-index: 3; }
+  table { width:100%; border-collapse: separate; border-spacing: 0; } /* <- separate melhora sticky */
+  thead { position: sticky; top: 0; z-index: 3; } /* cabeça fixa */
   thead th { position: sticky; top: 0; background:#0f0f0f; z-index: 4; }
   th, td { border-bottom:1px solid #2a2a2a; padding:10px; text-align:left; font-size:14px; vertical-align:top; }
   tbody tr:hover { background:#1a1a1a; }
@@ -80,7 +83,9 @@
 
   .counts { margin-top:10px; font-size:12px; color:#9aa0a6; display:flex; gap:12px; flex-wrap:wrap; }
 
-  .panel.collapsed .wrap, .panel.collapsed .counts, .panel.collapsed .resizer { display:none; }
+  .panel.collapsed .wrap { display:none; }
+  .panel.collapsed .counts { display:none; }
+  .panel.collapsed .resizer { display:none; }
 
   .resizer {
     height: 10px; margin-top: 6px; border: 1px solid #2a2a2a; border-radius: 8px;
@@ -90,7 +95,7 @@
   .resizer:after { content: ""; width: 40px; height: 3px; border-radius: 3px; background: #3a3a3a; }
   body.resizing, body.resizing * { cursor: ns-resize !important; user-select: none; }
 
-  /* Botão do gráfico */
+  /* Botão do gráfico – mais encorpado/visível */
   .chart-btn {
     display:inline-flex; align-items:center; justify-content:center;
     width:28px; height:28px; margin-left:8px; border-radius:6px;
@@ -98,6 +103,8 @@
     cursor:pointer; box-shadow: 0 2px 6px rgba(0,0,0,.35);
   }
   .chart-btn:hover { background:#1b1b1b; border-color:#3a3a3a; }
+  .chart-btn:active { transform: translateY(1px); }
+
   .chart-icon { width:16px; height:16px; display:block; }
 
   /* Popover do gráfico */
@@ -124,10 +131,10 @@
 </head>
 <body>
 <header>
-  <h1>MaiorMargem — Dashboard</h1>
+  <h1>MaiorMargem - Tabela de Produtos</h1>
   <div class="userbox">
     <span id="planChip" class="chip plan">Plano: —</span>
-    <div class="userChipWrap">
+    <div class="userChipWrap" id="userChipWrap">
       <span id="userChip" class="chip">Usuário</span>
       <div id="userDropdown" class="dropdown" role="menu" aria-hidden="true">
         <button class="dd-item" id="ddMeusDados">Meus dados</button>
@@ -145,38 +152,34 @@
     <button id="btnReload" class="btn">Recarregar</button>
   </div>
   <div class="status"><span id="status"></span></div>
-  <div id="err" class="err"></div>
+  <div class="err" id="err"></div>
 </div>
 
-<section id="favPanel" class="panel">
+<section class="panel" id="favPanel">
   <div class="panel-header">
     <h2>Favoritos</h2>
-    <button id="toggleFav" class="toggle-btn" aria-expanded="true">Minimizar</button>
+    <button class="toggle-btn" id="toggleFav" aria-expanded="true">Minimizar</button>
   </div>
-  <div id="favWrap" class="wrap">
+  <div class="wrap" id="favWrap">
     <table id="favTable">
-      <thead>
-        <tr id="favHeaderRow"><!-- montado via JS --></tr>
-      </thead>
+      <thead><tr id="favHeaderRow"></tr></thead>
       <tbody></tbody>
     </table>
   </div>
-  <div id="favResizer" class="resizer" title="Arraste para redimensionar. Duplo clique: voltar ao auto."></div>
+  <div class="resizer" id="favResizer" title="Arraste para redimensionar. Duplo clique: voltar ao auto."></div>
 </section>
 
-<section id="generalPanel" class="panel">
+<section class="panel" id="generalPanel">
   <div class="panel-header">
     <h2>Geral</h2>
-    <button id="toggleGen" class="toggle-btn" aria-expanded="true">Minimizar</button>
+    <button class="toggle-btn" id="toggleGen" aria-expanded="true">Minimizar</button>
   </div>
-  <div id="generalWrap" class="wrap">
+  <div class="wrap" id="generalWrap">
     <table id="produtosTable">
-      <thead>
-        <tr id="generalHeaderRow"><!-- montado via JS --></tr>
-      </thead>
+      <thead><tr id="generalHeaderRow"></tr></thead>
       <tbody></tbody>
     </table>
-    <div id="endMarker" class="end-marker"></div>
+    <div class="end-marker" id="endMarker"></div>
   </div>
   <div class="counts">
     <span id="countShown"></span>
@@ -185,7 +188,7 @@
   </div>
 </section>
 
-<!-- Popover único para gráficos -->
+<!-- Popover único para os gráficos -->
 <div id="chartPopover" class="chart-popover" style="display:none;">
   <header>
     <span id="chartTitle">Histórico</span>
@@ -196,27 +199,23 @@
 </div>
 
 <script>
-/* ======== AJUDA: Mostra erros no topo ======== */
-window.addEventListener('error', e => { const el=document.getElementById('err'); el.style.display='block'; el.textContent='Erro JS: '+e.message; });
-window.addEventListener('unhandledrejection', e => { const el=document.getElementById('err'); el.style.display='block'; el.textContent='Erro assíncrono: '+(e.reason?.message||e.reason); });
-
 /* ======== CONFIG / SUPABASE ======== */
 const CFG = window.CONFIG || {};
 const SUPABASE_URL = CFG.SUPABASE_URL;
 const SUPABASE_ANON_KEY = CFG.SUPABASE_ANON_KEY;
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) { const el=document.getElementById('err'); el.style.display='block'; el.textContent="Erro de configuração: config.js não carregado."; throw new Error("CONFIG ausente"); }
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) { alert("Erro de config...config.js não carregado."); throw new Error("CONFIG ausente"); }
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
 
-/* ======== CONSTANTES ======== */
-const VIEW = "vw_precos_com_desc";
-const PAGE_SIZE = 200;
-const RENDER_CHUNK = 60;
+/* ======== MODO DE BLOQUEIO (apenas referência; blur controlado no CSS) ======== */
+/** "blur" (padrão) – omite o número do preço excedido */
+const BLUR_MODE = "blur";
 
 /* ======== ELEMENTOS ======== */
 const statusEl = document.getElementById('status');
 const errEl = document.getElementById('err');
 const userChip = document.getElementById('userChip');
 const planChip = document.getElementById('planChip');
+const userChipWrap = document.getElementById('userChipWrap');
 const ddMeusDados = document.getElementById('ddMeusDados');
 const ddPlanos = document.getElementById('ddPlanos');
 const btnSair = document.getElementById('btnSair');
@@ -224,10 +223,14 @@ const btnReload = document.getElementById('btnReload');
 const eanFilter = document.getElementById('eanFilter');
 const descFilter = document.getElementById('descFilter');
 
+const favPanel = document.getElementById('favPanel');
+const toggleFavBtn = document.getElementById('toggleFav');
 const favWrap = document.getElementById('favWrap');
 const favBody = document.querySelector('#favTable tbody');
 const favResizer = document.getElementById('favResizer');
 
+const generalPanel = document.getElementById('generalPanel');
+const toggleGenBtn = document.getElementById('toggleGen');
 const generalWrap = document.getElementById('generalWrap');
 const generalBody = document.querySelector('#produtosTable tbody');
 const endMarker = document.getElementById('endMarker');
@@ -235,10 +238,6 @@ const endMarker = document.getElementById('endMarker');
 const countShown = document.getElementById('countShown');
 const countTotal = document.getElementById('countTotal');
 const countFavs  = document.getElementById('countFavs');
-
-/* Cabeçalhos dinâmicos */
-const favHeaderRow = document.getElementById('favHeaderRow');
-const generalHeaderRow = document.getElementById('generalHeaderRow');
 
 /* Popover/Canvas */
 const pop = document.getElementById('chartPopover');
@@ -248,7 +247,7 @@ const popMsg = document.getElementById('chartMsg');
 const sparkCanvas = document.getElementById('spark');
 const sparkCtx = sparkCanvas.getContext('2d');
 
-/* ======== MAPA view_key -> label, e inverso ======== */
+/* ======== ESTADO / MAPAS ======== */
 const siteMap = {
   "PrecoLeroyMerlin": "LeroyMerlin",
   "PrecoQueroQuero": "QueroQuero",
@@ -259,43 +258,40 @@ const siteMap = {
   "PrecoSupremeinox": "Supremeinox",
   "PrecoGhaus": "Ghaus"
 };
-const viewKeyByLabel = Object.fromEntries(Object.entries(siteMap).map(([k,v])=>[v,k]));
-const KNOWN_LABELS = Object.values(siteMap);
+const siteOrder = Object.values(siteMap);
 
-/* ======== ESTADO ======== */
-let chosenSitesAll = [];          // labels exatamente como o usuário selecionou (ordem do user_sites)
-let unlockedSites = new Set(KNOWN_LABELS); // mantido (plano) — não tratamos limite aqui
-let lockedSites = new Set();               // mantido
+/** Ordem real a exibir: sites selecionados pelo usuário (cai em siteOrder se vazio) */
+let chosenSitesAll = [...siteOrder];
 
-let favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
-let produtosMap = new Map();              // Map<ean, { sku, desc, sites: { [label]: {...} } }>
+/** Bloqueio por plano */
+let unlockedSites = new Set(siteOrder.slice(0, 3));
+let lockedSites   = new Set(siteOrder.slice(3));
+
+/** mapa EAN -> dados agregados */
+let produtosMap = new Map();
+/** lista derivada para render em chunks */
 let produtosList = [];
+/** rendered count */
 let itemsRendered = 0;
-
+/** estado de paginação server-side */
 let serverOffset = 0;
 let serverExhausted = false;
 let fetching = false;
 
+/* Controle filtros */
 let currentEanQ = '';
 let currentDescQ = '';
 
+/* Controle render */
 let loadingMore = false;
 let suppressGeneralChange = false;
 const generalChkMap = new Map();
 
+/* Aux para favoritos */
 let favFirstAutoRenderDone = false;
 
-/* ======== LIMITES (fallback, mantido) ======== */
-const DEFAULT_PLAN_SITE_LIMIT = { trial: 2, basico: 4, intermediario: 5, premium: 8 };
-
-/* ======== HELPERS ======== */
-function setStatus(t){ statusEl.textContent = t || ''; }
-function showErr(e){ errEl.style.display='block'; errEl.textContent = String(e||'').trim(); }
-function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
-function formatBRL(n){ try { return n.toLocaleString('pt-BR', { style:'currency', currency:'BRL' }); } catch { return String(n); } }
-function favSave(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet])); }
-function isFav(sku){ return favSet.has(String(sku)); }
-function debounce(fn, delay=500){ let t; return (...args)=>{ clearTimeout(t); t = setTimeout(()=>fn(...args), delay); }; }
+/* ======== LIMITES DO PLANO ======== */
+const DEFAULT_PLAN_SITE_LIMIT = { trial: 2, basico: 3, intermediario: 5, premium: 8 };
 
 function normalizeSiteLabel(x){
   if (!x) return "";
@@ -305,45 +301,20 @@ function normalizeSiteLabel(x){
 function toDashboardLabel(raw){
   const n = normalizeSiteLabel(raw);
   if (n === 'leroymerlin') return 'LeroyMerlin';
-  if (n === 'queroquero') return 'QueroQuero';
+  if (n === 'queroquero')  return 'QueroQuero';
   if (n === 'cassol' || n === 'cassolcenterlar') return 'Cassol';
-  if (n === 'redemac' || n === 'redemacsuperbem' || n === 'superbem' || n === 'redemacsuperbem') return 'RedeMac';
+  if (n === 'redemac' || n === 'redemacsuperbem' || n === 'superbem') return 'RedeMac';
   if (n === 'mestretinho' || n === 'mestrettinho') return 'MestreTinho';
   if (n === 'tumelero') return 'Tumelero';
   if (n === 'supremeinox' || n === 'supreme inox') return 'Supremeinox';
   if (n === 'ghaus' || n === 'g-haus' || n === 'gháus') return 'Ghaus';
-  // Se não casar, retorna string "colável" como rótulo mesmo assim
-  const fallback = (raw||'').toString().replace(/\s+/g,'').replace(/[^\w]/g,'');
-  return fallback || '';
+  return '';
 }
 
-/* ======== 1) Cabeçalhos dinâmicos conforme seleção ======== */
-function buildHeaders(){
-  const favHeadFixed = `<th class="col-fav">Ação</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
-  const genHeadFixed = `<th class="col-fav">★</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
-
-  const sitesTh = chosenSitesAll.map(lbl => {
-    const locked = lockedSites.has(lbl) ? ' data-locked="true"' : ' data-locked="false"';
-    return `<th data-site="${lbl}"${locked}>${lbl}</th>`;
-  }).join('');
-
-  favHeaderRow.innerHTML = favHeadFixed + sitesTh;
-  generalHeaderRow.innerHTML = genHeadFixed + sitesTh;
-}
-function markLockedHeaders(){
-  const ths = document.querySelectorAll('thead th[data-site]');
-  ths.forEach(th=>{
-    const s = th.getAttribute('data-site');
-    const locked = lockedSites.has(s);
-    th.setAttribute('data-locked', locked ? 'true' : 'false');
-    th.style.opacity = locked ? '0.4' : '1';
-  });
-}
-
-/* ======== 2) Carregar seleção do usuário em user_sites (ordem real) ======== */
+/* ======== LIMITE / PLANO ======== */
 async function getSitesLimitForPlan(planKey){
   const key = (planKey || '').toString().trim().toLowerCase();
-  try {
+  try{
     const { data, error } = await sb.from('billing_plans')
       .select('sites_limit, max_sites')
       .eq('plan_key', key)
@@ -351,96 +322,120 @@ async function getSitesLimitForPlan(planKey){
     if (error) throw error;
     const lim = Number(data?.sites_limit ?? data?.max_sites);
     if (Number.isFinite(lim) && lim > 0) return lim;
-  } catch(e) { console.warn('billing_plans sem valor; usando fallback.', e); }
+  } catch(e) {
+    console.warn('billing_plans não encontrado/sem campo sites_limit. Usando fallback.', e);
+  }
   return DEFAULT_PLAN_SITE_LIMIT[key] ?? 2;
 }
 
+/* ======== SELEÇÃO DO USUÁRIO -> COLUNAS (APENAS ESTA PARTE FOI AJUSTADA) ======== */
 async function loadUserSitesAndLocks(userId, planKey){
   const maxSites = await getSitesLimitForPlan(planKey);
 
-  // 1) Lê user_sites na ordem real do usuário (position, depois id)
-  let userRows = [];
+  // user_sites (ordem de seleção)
+  let siteIds = [];
   try{
-    const { data, error } = await sb.from('user_sites')
-      .select('site_id, enabled, position, id')
+    const { data: us, error } = await sb
+      .from('user_sites')
+      .select('site_id, created_at, id')
       .eq('user_id', userId)
-      .order('position', { ascending: true, nullsFirst: true })
+      .order('created_at', { ascending: true, nullsFirst: true })
       .order('id', { ascending: true });
     if (error) throw error;
-    userRows = (data || []).filter(r => r.enabled !== false);
-  }catch(e){ console.warn('user_sites: falha de leitura', e); }
+    siteIds = (us || []).map(r => r.site_id).filter(x => x != null);
+  }catch(e){ console.warn('user_sites ausente? Prosseguindo.', e); }
 
-  // 2) Converte para labels preservando ordem do user_sites
-  let labels = [];
-  if (userRows.length){
-    const ids = userRows.map(r=>r.site_id).filter(x=>x!=null);
+  // sites -> labels (mantendo a ordem do user_sites)
+  let chosenLabels = [];
+  if (siteIds.length){
     try{
-      const { data: sites, error } = await sb.from('sites')
-        .select('id, view_key, nome, name, site')
-        .in('id', ids);
+      const { data: st, error } = await sb.from('sites').select('id, nome, name, site').in('id', siteIds);
       if (error) throw error;
-
-      const ordered = ids.map(id => (sites||[]).find(s => s.id === id)).filter(Boolean);
-      ordered.forEach(s => {
-        let lbl = '';
-        // Preferência: usar view_key mapeado
-        if (s.view_key && siteMap[s.view_key]) {
-          lbl = siteMap[s.view_key];
-          // guarda inverso para gráficos
-          viewKeyByLabel[lbl] = s.view_key;
-        } else {
-          // Heurística pelo nome
-          lbl = toDashboardLabel(s?.nome || s?.name || s?.site || '');
-          // se já conhecemos a view_key dessa label, mantemos; senão, fica sem vínculo (só cabeçalho)
-        }
-        if (lbl) labels.push(lbl);
-      });
-    }catch(e){ console.warn('sites: falha de leitura', e); }
+      const ordered = siteIds.map(id => (st||[]).find(s => s.id === id)).filter(Boolean);
+      chosenLabels = ordered
+        .map(s => toDashboardLabel((s?.nome || s?.name || s?.site || '')))
+        .filter(lbl => !!lbl && siteOrder.includes(lbl));
+    } catch(e){ console.warn('Falha ao ler sites por id. Usando padrão.', e); }
   }
+  if (chosenLabels.length === 0) chosenLabels = [...siteOrder];
 
-  // 3) Se não há seleção válida, fallback = todos conhecidos (apenas para garantir que a página abra)
-  if (!labels.length){
-    labels = [...KNOWN_LABELS]; // ordem padrão apenas quando não há seleção
-  }
-
-  // 4) Remove duplicatas preservando ordem
-  chosenSitesAll = [...new Set(labels)];
-
-  // 5) (Bloqueio por plano — mantido, sem mudanças de regra)
+  chosenSitesAll = [...new Set(chosenLabels)];
   unlockedSites = new Set(chosenSitesAll.slice(0, maxSites));
-  lockedSites   = new Set(chosenSitesAll.slice(maxSites));
+  lockedSites = new Set(chosenSitesAll.slice(maxSites));
 
-  // 6) Monta cabeçalhos na exata ordem da seleção
-  buildHeaders();
+  rebuildHeaders();
   markLockedHeaders();
-
-  setStatus(`Sites selecionados (ordem do usuário): ${chosenSitesAll.join(' · ')}`);
+  setStatus(buildSitesStatusMessage());
 }
 
-/* ======== 3) Agregar dados por EAN, gravando por label selecionado ======== */
+/* ======== MONTA CABEÇALHOS DINÂMICOS ======== */
+function rebuildHeaders(){
+  const favHeadFixed = `<th class="col-fav">Ação</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
+  const genHeadFixed = `<th class="col-fav">★</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
+  const sitesTh = chosenSitesAll.map(lbl => {
+    const locked = lockedSites.has(lbl) ? ' data-locked="true"' : ' data-locked="false"';
+    return `<th data-site="\${lbl}"\${locked}>${lbl}</th>`;
+  }).join('');
+  const favHeaderRow = document.getElementById('favHeaderRow');
+  const generalHeaderRow = document.getElementById('generalHeaderRow');
+  if (favHeaderRow) favHeaderRow.innerHTML = favHeadFixed + sitesTh;
+  if (generalHeaderRow) generalHeaderRow.innerHTML = genHeadFixed + sitesTh;
+}
+function markLockedHeaders(){
+  const tables = [document.getElementById('produtosTable'), document.getElementById('favTable')];
+  for (const table of tables){
+    const ths = table?.querySelectorAll('thead th[data-site]');
+    if (!ths) continue;
+    ths.forEach(th=>{
+      const s = th.getAttribute('data-site');
+      const locked = lockedSites.has(s);
+      th.setAttribute('data-locked', locked ? 'true' : 'false');
+      th.title = locked ? 'Excedeu o limite do plano' : '';
+      th.style.opacity = locked ? '0.4' : '1';
+    });
+  }
+}
+function buildSitesStatusMessage(){
+  const total = chosenSitesAll.length, lockedCount = lockedSites.size, unlockedCount = unlockedSites.size;
+  const extra = lockedCount > 0 ? ` • ${lockedCount} bloqueado${lockedCount>1?'s':''}` : '';
+  return `Sites selecionados: ${unlockedCount}/${total} liberados${extra}`;
+}
+
+/* ======== UTILS ======== */
+function setStatus(t){ statusEl.textContent = t || ''; }
+function showErr(e){ errEl.style.display='block'; errEl.textContent = String(e||'').trim(); }
+function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
+function formatBRL(n){ try { return n.toLocaleString('pt-BR', { style:'currency', currency:'BRL' }); } catch { return String(n); } }
+function debounce(fn, delay=400){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),delay); } }
+function favSave(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet])); }
+function isFav(sku){ return favSet.has(String(sku)); }
+
+/* ======== AGREGAÇÃO ======== */
 function upsertRowsIntoProdutos(rows){
   for (const row of rows){
     const ean = String(row.ean ?? '');
-    const viewKey = String(row.site ?? '');           // ex.: "PrecoLeroyMerlin"
-    const label = siteMap[viewKey];                   // ex.: "LeroyMerlin"
-    if (!label) continue;                             // ignora sites não mapeados na view
-    if (!chosenSitesAll.includes(label)) continue;    // ignora se usuário não selecionou essa coluna
+    const site = String(row.site ?? '');
+    const precoRaw = row.preco;
+    const precoNum = row.preco_num;
+    const dt = row.data;
+    const desc = row.descricao || '';
 
-    if (!produtosMap.has(ean)) {
-      produtosMap.set(ean, { sku: ean, desc: row.descricao || '', sites: {} });
-    }
+    if (!produtosMap.has(ean)) { produtosMap.set(ean, { sku: ean, desc: desc, sites: {} }); }
     const item = produtosMap.get(ean);
-    if (!item.desc && row.descricao) item.desc = row.descricao;
+    if (!item.desc && desc) item.desc = desc;
 
-    const prev = item.sites[label];
-    if (!prev || new Date(row.data) > new Date(prev.data)) {
-      item.sites[label] = { precoRaw: row.preco, precoNum: row.preco_num, data: row.data };
+    const htmlSiteName = siteMap[site];
+    if (htmlSiteName) {
+      const prev = item.sites[htmlSiteName];
+      if (!prev || new Date(dt) > new Date(prev.data)) {
+        item.sites[htmlSiteName] = { precoRaw, precoNum, data: dt };
+      }
     }
   }
   produtosList = Array.from(produtosMap.values());
 }
 
-/* ======== 4) Render: só cria TD para sites selecionados, na ordem ======== */
+/* ======== RENDER ======== */
 function chartButtonSVG(){
   return `
     <svg class="chart-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -452,19 +447,17 @@ function chartButtonSVG(){
 }
 function computeMinMaxForRow(item){
   let min = { site:null, val: Infinity }, max = { site:null, val: -Infinity };
-  for (const s of chosenSitesAll) {
-    if (lockedSites.has(s)) continue; // ignora bloqueadas
+  for (const s of chosenSitesAll){
+    if (lockedSites.has(s)) continue; // não considera os ofuscados
     const d = item.sites[s];
     if (!d || !Number.isFinite(d.precoNum)) continue;
     if (d.precoNum < min.val) { min = { site:s, val:d.precoNum }; }
     if (d.precoNum > max.val) { max = { site:s, val:d.precoNum }; }
   }
-  return { minSite: min.site, maxSite: max.site };
+  return { minSite:min.site, maxSite:max.site };
 }
 function createPriceCell(item, siteName, minSite, maxSite){
   const td = document.createElement('td');
-  if (!chosenSitesAll.includes(siteName)) return td; // segurança
-
   const d = item.sites[siteName];
   const isLocked = lockedSites.has(siteName);
   if (isLocked) td.classList.add('locked-cell');
@@ -473,40 +466,33 @@ function createPriceCell(item, siteName, minSite, maxSite){
     const dataStr = d.data ? new Date(d.data).toLocaleString('pt-BR') : '';
     if (Number.isFinite(d.precoNum)) {
       const display = formatBRL(d.precoNum);
-      const cls = (!isLocked && siteName === minSite) ? 'min' : (!isLocked && siteName === maxSite ? 'max' : '');
-      const priceSpan = document.createElement('span');
-      priceSpan.className = `price ${cls}`;
-      priceSpan.title = isLocked ? 'Excedeu o limite do plano' : (dataStr ? `Atualizado em ${dataStr}` : '');
-      priceSpan.textContent = display;
+      const span = document.createElement('span');
+      span.className = `price ${!isLocked && siteName===minSite ? 'min' : (!isLocked && siteName===maxSite ? 'max' : '')}`;
+      span.title = isLocked ? 'Excedeu o limite do plano' : (dataStr ? `Atualizado em ${dataStr}` : '');
+      span.textContent = display;
+      td.appendChild(span);
 
-      td.appendChild(priceSpan);
-
-      const btn = document.createElement('button');
-      btn.className = 'chart-btn';
-      btn.type = 'button';
-      btn.title = isLocked ? 'Disponível no upgrade' : 'Ver gráfico do histórico';
-      btn.innerHTML = chartButtonSVG();
-      btn.addEventListener('click', (ev) => {
-        if (isLocked) { window.location.href = 'planos.html'; return; }
+      const b = document.createElement('button');
+      b.className='chart-btn'; b.type='button';
+      b.title = isLocked ? 'Disponível no upgrade' : 'Ver histórico';
+      b.innerHTML = chartButtonSVG();
+      b.addEventListener('click', (ev)=>{
+        if (isLocked){ window.location.href='planos.html'; return; }
         openChartFor(ev, item.sku, siteName);
       });
-      td.appendChild(btn);
+      td.appendChild(b);
 
-      if (isLocked) {
+      if (isLocked){
         const up = document.createElement('button');
-        up.className = 'unlock';
-        up.type = 'button';
-        up.title = 'Excedeu o limite do plano. Ver planos.';
-        up.textContent = 'Ver planos';
-        up.addEventListener('click', ()=> window.location.href = 'planos.html');
+        up.className='unlock'; up.type='button'; up.title='Excedeu o limite do plano. Ver planos.'; up.textContent='Ver planos';
+        up.addEventListener('click', ()=> window.location.href='planos.html');
         td.appendChild(up);
       }
     } else {
-      const raw = (d.precoRaw ?? '').toString().replace(/</g,'&lt;');
       const span = document.createElement('span');
-      span.className = 'price';
+      span.className='price';
       span.title = isLocked ? 'Excedeu o limite do plano' : (dataStr ? `Atualizado em ${dataStr}` : '');
-      span.textContent = raw;
+      span.textContent = (d.precoRaw ?? '').toString();
       td.appendChild(span);
     }
   } else {
@@ -515,31 +501,16 @@ function createPriceCell(item, siteName, minSite, maxSite){
   return td;
 }
 function renderRowInto(tr, item){
-  // Fav
-  const tdFav = document.createElement('td');
-  tdFav.className = 'col-fav';
-  const chk = document.createElement('input');
-  chk.type = 'checkbox'; chk.checked = isFav(item.sku); chk.title = 'Marcar como favorito';
-  chk.addEventListener('change', () => {
-    if (suppressGeneralChange) return;
-    if (chk.checked) favSet.add(item.sku); else favSet.delete(item.sku);
-    favSave(); renderFavs(); updateFavHeight(); updateCounts();
-  });
-  tdFav.appendChild(chk);
-  tr.appendChild(tdFav);
-  generalChkMap.set(item.sku, chk);
+  const tdFav = document.createElement('td'); tdFav.className='col-fav';
+  const chk = document.createElement('input'); chk.type='checkbox'; chk.checked=isFav(item.sku); chk.title='Marcar como favorito';
+  chk.addEventListener('change', ()=>{ if (suppressGeneralChange) return; if (chk.checked) favSet.add(item.sku); else favSet.delete(item.sku); favSave(); renderFavs(); updateFavHeight(); updateCounts(); });
+  tdFav.appendChild(chk); tr.appendChild(tdFav); generalChkMap.set(item.sku, chk);
 
-  // EAN
-  const tdSku = document.createElement('td'); tdSku.className = 'col-sku'; tdSku.textContent = item.sku; tr.appendChild(tdSku);
+  const tdSku = document.createElement('td'); tdSku.className='col-sku'; tdSku.textContent=item.sku; tr.appendChild(tdSku);
+  const tdDesc= document.createElement('td'); tdDesc.className='col-desc'; tdDesc.innerHTML=(item.desc||'').replace(/</g,'&lt;'); tr.appendChild(tdDesc);
 
-  // Descrição
-  const tdDesc = document.createElement('td'); tdDesc.className = 'col-desc'; tdDesc.innerHTML = (item.desc || '').replace(/</g,'&lt;'); tr.appendChild(tdDesc);
-
-  // Sites (somente os selecionados, na ordem escolhida)
   const { minSite, maxSite } = computeMinMaxForRow(item);
-  for (const s of chosenSitesAll) {
-    tr.appendChild(createPriceCell(item, s, minSite, maxSite));
-  }
+  for (const s of chosenSitesAll) { tr.appendChild(createPriceCell(item, s, minSite, maxSite)); }
 }
 function renderGeneralChunk(){
   const end = Math.min(itemsRendered + RENDER_CHUNK, produtosList.length);
@@ -550,61 +521,39 @@ function renderGeneralChunk(){
   endMarker.textContent = (serverExhausted && itemsRendered >= produtosList.length) ? 'Fim da lista' : '';
   updateCounts();
 }
-function resetGeneralDom(){ generalBody.innerHTML = ''; generalChkMap.clear(); itemsRendered = 0; endMarker.textContent = ''; }
+function resetGeneralDom(){ generalBody.innerHTML = ''; generalChkMap.clear(); itemsRendered = 0; endMarker.textContent=''; }
 function onGeneralScroll(){
   if (loadingMore) return;
   const nearBottom = generalWrap.scrollTop + generalWrap.clientHeight >= generalWrap.scrollHeight - 100;
-  if (nearBottom && itemsRendered < produtosList.length){
-    loadingMore = true; setTimeout(()=>{ renderGeneralChunk(); loadingMore = false; }, 30); return;
-  }
+  if (nearBottom && itemsRendered < produtosList.length){ loadingMore = true; setTimeout(()=>{ renderGeneralChunk(); loadingMore = false; }, 30); return; }
   if (nearBottom && !serverExhausted && !fetching){ fetchNextPage(); }
 }
 generalWrap.addEventListener('scroll', onGeneralScroll);
 
 /* ======== FAVORITOS ======== */
+let favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
 function renderFavs(){
   favBody.innerHTML = '';
-  const favList = produtosList.filter(p => isFav(p.sku));
+  const favList = produtosList.filter(p => favSet.has(p.sku));
   const frag = document.createDocumentFragment();
   for (const item of favList){
     const tr = document.createElement('tr');
 
-    const tdAct = document.createElement('td'); tdAct.className = 'col-fav';
-    const btn = document.createElement('button'); btn.className = 'trash-btn'; btn.title = 'Remover dos favoritos';
-    btn.innerHTML = '🗑️';
-    btn.addEventListener('click', () => {
-      favSet.delete(item.sku); favSave();
-      const chk = generalChkMap.get(item.sku);
-      if (chk) { suppressGeneralChange = true; chk.checked = false; suppressGeneralChange = false; }
-      renderFavs(); updateFavHeight(); updateCounts();
-    });
+    const tdAct = document.createElement('td'); tdAct.className='col-fav';
+    const btn = document.createElement('button'); btn.className='trash-btn'; btn.title='Remover'; btn.innerHTML='🗑️';
+    btn.addEventListener('click', ()=>{ favSet.delete(item.sku); favSave(); const chk=generalChkMap.get(item.sku); if (chk){ suppressGeneralChange=true; chk.checked=false; suppressGeneralChange=false; } renderFavs(); updateFavHeight(); updateCounts(); });
     tdAct.appendChild(btn); tr.appendChild(tdAct);
 
-    const tdSku = document.createElement('td'); tdSku.className = 'col-sku'; tdSku.textContent = item.sku; tr.appendChild(tdSku);
-    const tdDesc = document.createElement('td'); tdDesc.className = 'col-desc'; tdDesc.innerHTML = (item.desc || '').replace(/</g,'&lt;'); tr.appendChild(tdDesc);
+    const tdSku = document.createElement('td'); tdSku.className='col-sku'; tdSku.textContent=item.sku; tr.appendChild(tdSku);
+    const tdDesc = document.createElement('td'); tdDesc.className='col-desc'; tdDesc.innerHTML=(item.desc||'').replace(/</g,'&lt;'); tr.appendChild(tdDesc);
 
     const { minSite, maxSite } = computeMinMaxForRow(item);
-    for (const s of chosenSitesAll) {
-      tr.appendChild(createPriceCell(item, s, minSite, maxSite));
-    }
+    for (const s of chosenSitesAll){ tr.appendChild(createPriceCell(item, s, minSite, maxSite)); }
 
     frag.appendChild(tr);
   }
   favBody.appendChild(frag);
 }
-
-/* ======== TOGGLE SEÇÕES ======== */
-function attachToggle(panel, button){
-  function setState(expanded){
-    panel.classList.toggle('collapsed', !expanded);
-    button.textContent = expanded ? 'Minimizar' : 'Maximizar';
-    button.setAttribute('aria-expanded', String(expanded));
-  }
-  button.addEventListener('click', ()=>{ const isExpanded = button.getAttribute('aria-expanded') === 'true'; setState(!isExpanded); });
-  setState(true);
-}
-attachToggle(document.getElementById('favPanel'), document.getElementById('toggleFav'));
-attachToggle(document.getElementById('generalPanel'), document.getElementById('toggleGen'));
 
 /* ======== CONTADORES ======== */
 function updateCounts(){
@@ -614,9 +563,11 @@ function updateCounts(){
   countFavs.textContent = `Favoritos: ${favs}`;
 }
 
-/* ======== CONSULTA SERVIDOR (PAGINADA) ======== */
+/* ======== BUSCA PAGINADA ======== */
 function buildQuery(){
-  let q = sb.from(VIEW).select('ean, site, preco, data, descricao, preco_num', { count: 'estimated' }).order('data', { ascending: false });
+  let q = sb.from('vw_precos_com_desc')
+    .select('ean, site, preco, data, descricao, preco_num', { count: 'estimated' })
+    .order('data', { ascending: false });
   if (currentEanQ) q = q.ilike('ean', `%${currentEanQ}%`);
   if (currentDescQ) q = q.ilike('descricao', `%${currentDescQ}%`);
   return q;
@@ -625,7 +576,7 @@ async function fetchNextPage(){
   if (fetching || serverExhausted) return;
   fetching = true; hideErr(); setStatus(`Carregando dados… (offset ${serverOffset})`);
   try{
-    const from = serverOffset, to = serverOffset + PAGE_SIZE - 1;
+    const from = serverOffset, to = serverOffset + 200 - 1;
     const { data, error } = await buildQuery().range(from, to);
     if (error) throw error;
 
@@ -636,81 +587,29 @@ async function fetchNextPage(){
       upsertRowsIntoProdutos(data);
       if (itemsRendered < produtosList.length) renderGeneralChunk();
       renderFavs();
-      if (!favFirstAutoRenderDone) { updateFavHeight(); favFirstAutoRenderDone = true; }
-      serverOffset += PAGE_SIZE;
+      if (!favFirstAutoRenderDone){ updateFavHeight(); favFirstAutoRenderDone = true; }
+      serverOffset += 200;
       setStatus(`Carregados: ${produtosList.length} SKUs (parcial)`);
     }
   } catch(e){ console.error(e); showErr('Falha ao carregar: ' + (e?.message || e)); setStatus('Erro ao carregar.'); }
   finally { fetching = false; updateCounts(); }
 }
 
-/* ======== RESET DE CONSULTA ======== */
+/* ======== RESET ======== */
 function resetAndQuery(){
   produtosMap.clear(); produtosList = []; serverOffset = 0; serverExhausted = false; favFirstAutoRenderDone = false;
-
-  generalBody.innerHTML = '';
-  generalChkMap.clear();
-  itemsRendered = 0;
-  endMarker.textContent = '';
-
-  renderFavs(); updateFavHeight(); updateCounts();
+  resetGeneralDom(); renderFavs(); updateFavHeight(); updateCounts();
   fetchNextPage();
 }
 
-/* ======== EVENTOS UI ======== */
-btnReload.addEventListener('click', async () => {
-  const session = (await sb.auth.getSession()).data.session;
-  if (session?.user?.id) {
-    const planKey = await loadHeaderInfoPlanOnly();
-    await loadUserSitesAndLocks(session.user.id, planKey); // reconstrói cabeçalhos na ordem do user_sites
-  }
-  resetAndQuery();
-});
-const onFilterInput = debounce(() => {
-  currentEanQ = (eanFilter.value || '').trim();
-  currentDescQ = (descFilter.value || '').trim();
-  resetAndQuery();
-}, 500);
-eanFilter.addEventListener('input', onFilterInput);
-descFilter.addEventListener('input', onFilterInput);
-
-/* ======== HEADER / SESSÃO ======== */
+/* ======== HEADER / MENU ======== */
 ddMeusDados.addEventListener('click', () => { window.location.href = 'meusdados.html'; });
 ddPlanos.addEventListener('click', () => { window.location.href = 'planos.html'; });
-btnSair.addEventListener('click', async () => {
-  try { await sb.auth.signOut(); } catch (e) { console.error('Erro ao sair:', e); }
-  finally { localStorage.removeItem('mm_login_date'); window.location.href = CFG.SITE_URL || 'index.html'; }
-});
+userChip.addEventListener('click', (e) => { e.stopPropagation(); userChipWrap.classList.toggle('open'); });
+document.addEventListener('click', (e) => { if (!userChipWrap.contains(e.target)) userChipWrap.classList.remove('open'); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') userChipWrap.classList.remove('open'); });
 
-async function loadHeaderInfo(){
-  const { data: { session } } = await sb.auth.getSession();
-  if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return null; }
-  userChip.textContent = session.user?.email || 'Logado';
-
-  let planKey = 'basico';
-  try{
-    const { data, error } = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
-    if (error) throw error;
-    const planRaw = (data?.plan || 'basico').toString();
-    planKey = planRaw.toLowerCase();
-    const pretty = planRaw.charAt(0).toUpperCase() + planRaw.slice(1);
-    planChip.textContent = `Plano: ${pretty}`;
-  }catch(e){ console.error(e); planChip.textContent = 'Plano: —'; }
-
-  await loadUserSitesAndLocks(session.user.id, planKey);
-  return session;
-}
-async function loadHeaderInfoPlanOnly(){
-  try{
-    const { data: { session } } = await sb.auth.getSession();
-    if (!session) return 'basico';
-    const { data, error } = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
-    if (error) throw error;
-    return (data?.plan || 'basico').toString().toLowerCase();
-  }catch(e){ console.error(e); return 'basico'; }
-}
-
-/* ======== FAV HEIGHT / RESIZER (mantido) ======== */
+/* ======== FAV HEIGHT / RESIZER ======== */
 function measureRowHeight(){ const row = document.querySelector('#favTable tbody tr'); if (!row) return 44; const h = Math.round(row.getBoundingClientRect().height); return Math.max(36, h || 44); }
 function measureHeadHeight(){ const head = document.querySelector('#favTable thead'); if (!head) return 40; const h = Math.round(head.getBoundingClientRect().height); return Math.max(32, h || 40); }
 let favHeightUser = Number(localStorage.getItem('mm_fav_height')) || null;
@@ -733,18 +632,82 @@ function updateFavHeight(){
   favResizer.addEventListener('dblclick', ()=>{ favHeightUser = null; localStorage.removeItem('mm_fav_height'); updateFavHeight(); });
 })();
 
-/* ======== MINI-GRÁFICO (mantido) ======== */
+/* ======== AUTO-REFRESH SOFT ======== */
+(function autoSoftRefresh(){
+  let last = 0;
+  async function check(){
+    try{
+      const { data, error } = await sb.rpc('last_prices_change');
+      if (error) return;
+      const ts = Number(data) || 0;
+      if (ts && ts > last){ last = ts; /* Não forço reload inteiro – usuário pode recarregar no botão */ }
+    }catch{}
+  }
+  setInterval(check, 60 * 1000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+  window.addEventListener('focus', check);
+})();
+
+/* ======== BUSCA PLANO/USER E START ======== */
+(async function init(){
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return; }
+  userChip.textContent = session.user?.email || 'Logado';
+
+  // Plano
+  let planKey = 'basico';
+  try{
+    const { data, error } = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
+    if (!error){
+      const raw = (data?.plan || 'basico').toString();
+      planKey = raw.toLowerCase();
+      planChip.textContent = `Plano: ${raw.charAt(0).toUpperCase()+raw.slice(1)}`;
+    }
+  }catch{}
+
+  // Seleção do usuário -> colunas + bloqueio visual
+  await loadUserSitesAndLocks(session.user.id, planKey);
+
+  // Primeira carga
+  currentEanQ = ''; currentDescQ = '';
+  resetAndQuery();
+  generalWrap.dispatchEvent(new Event('scroll'));
+})();
+
+/* ======== RELOAD / FILTROS ======== */
+btnReload.addEventListener('click', async ()=>{
+  try{
+    const { data: { session } } = await sb.auth.getSession();
+    let planKey = 'basico';
+    if (session?.user?.id){
+      const { data, error } = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
+      if (!error) planKey = (data?.plan || 'basico').toString().toLowerCase();
+      await loadUserSitesAndLocks(session.user.id, planKey);
+    }
+  }catch(e){}
+  resetAndQuery();
+});
+eanFilter.addEventListener('input', debounce(()=>{ currentEanQ=(eanFilter.value||'').trim(); resetAndQuery(); }, 500));
+descFilter.addEventListener('input', debounce(()=>{ currentDescQ=(descFilter.value||'').trim(); resetAndQuery(); }, 500));
+
+/* ======== SAIR ======== */
+btnSair.addEventListener('click', async ()=>{
+  try { await sb.auth.signOut(); } catch(e) {}
+  finally { localStorage.removeItem('mm_login_date'); window.location.href = CFG.SITE_URL || 'index.html'; }
+});
+
+/* ======== MINI-GRÁFICO ======== */
 function closePopover(){ pop.style.display='none'; }
-function positionPopover(x, y){
+function positionPopover(x,y){
   const pad = 12; const vw = window.innerWidth, vh = window.innerHeight;
-  let left = x + pad, top = y + pad; const rectW = 240, rectH = 260;
-  if (left + rectW > vw) left = x - rectW - pad;
-  if (top + rectH > vh) top = y - rectH - pad;
+  let left = x + pad, top = y + pad; const W = 240, H = 260;
+  if (left + W > vw) left = x - W - pad;
+  if (top + H > vh) top = y - H - pad;
   pop.style.left = Math.max(8, left) + 'px';
-  pop.style.top = Math.max(8, top) + 'px';
+  pop.style.top  = Math.max(8, top) + 'px';
 }
-document.addEventListener('click', (ev) => { if (pop.style.display !== 'none' && !pop.contains(ev.target)) closePopover(); });
-document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closePopover(); });
+document.addEventListener('click', (ev)=>{ if (pop.style.display !== 'none' && !pop.contains(ev.target)) closePopover(); });
+document.addEventListener('keydown', (ev)=>{ if (ev.key === 'Escape') closePopover(); });
 popClose.addEventListener('click', closePopover);
 
 function drawSparkline(points){
@@ -753,24 +716,32 @@ function drawSparkline(points){
   popMsg.style.display='none';
   const m = { l: 40, r: 14, t: 12, b: 28 };
   const xs = points.map(p=>p.x.getTime()); const ys = points.map(p=>p.y);
-  const xMin = Math.min(...xs), xMax = Math.max(...xs); const yMin = Math.min(...ys), yMax = Math.max(...ys);
+  const xMin = Math.min(...xs), xMax = Math.max(...xs);
+  const yMin = Math.min(...ys), yMax = Math.max(...ys);
   const xScale = v => m.l + ((v - xMin) / (xMax - xMin || 1)) * (W - m.l - m.r);
   const yScaleRaw = v => H - m.b - ((v - yMin) / (yMax - yMin || 1)) * (H - m.t - m.b);
   const yScale = v => Math.max(m.t+6, Math.min(H - m.b - 6, yScaleRaw(v)));
+
   ctx.strokeStyle = '#232323'; ctx.lineWidth = 1; ctx.beginPath();
   for (let i=0;i<=3;i++){ const yy = m.t + i*(H - m.t - m.b)/3; ctx.moveTo(m.l, yy); ctx.lineTo(W - m.r, yy); }
   ctx.stroke();
+
   ctx.beginPath(); ctx.lineWidth = 3; ctx.strokeStyle = '#00d084';
   points.forEach((p, i)=>{ const x = xScale(p.x.getTime()), y = yScale(p.y); if (i === 0) ctx.moveTo(x,y); else ctx.lineTo(x,y); });
   ctx.stroke();
+
   ctx.fillStyle = '#bfffc1';
   for (const p of points){ const x = xScale(p.x.getTime()), y = yScale(p.y); ctx.beginPath(); ctx.arc(x,y,3.2,0,Math.PI*2); ctx.fill(); }
+
   ctx.fillStyle = '#9aa0a6'; ctx.font = '11px Arial'; ctx.textAlign = 'right';
   const yMaxY = yScale(yMax), yMinY = yScale(yMin);
   ctx.fillText(formatBRL(yMax), m.l-6, Math.max(m.t+10, yMaxY-6));
   ctx.fillText(formatBRL(yMin), m.l-6, Math.min(H - m.b - 2, yMinY+12));
+
   const fmt = (d)=> d.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' });
-  ctx.textAlign = 'center'; ctx.fillText(fmt(points[0].x), Math.max(m.l, 24), H-8); ctx.fillText(fmt(points[points.length-1].x), Math.min(W - m.r, W-24), H-8);
+  ctx.textAlign = 'center';
+  ctx.fillText(fmt(points[0].x), Math.max(m.l, 24), H-8);
+  ctx.fillText(fmt(points[points.length-1].x), Math.min(W - 14, W-24), H-8);
 }
 async function openChartFor(ev, ean, siteLabel){
   ev.stopPropagation();
@@ -781,47 +752,19 @@ async function openChartFor(ev, ean, siteLabel){
   sparkCtx.clearRect(0,0,sparkCanvas.width,sparkCanvas.height);
   pop.style.display='block';
   try{
-    // Usa a view_key conhecida; se não existir, tenta heurística "Preco"+label compacto
-    let viewKey = viewKeyByLabel[siteLabel];
-    if (!viewKey){
-      viewKey = 'Preco' + siteLabel.replace(/[^A-Za-z0-9]/g,'');
-    }
-    const { data, error } = await sb.from(VIEW).select('data, preco_num')
+    const viewKey = Object.entries(siteMap).find(([k,v]) => v === siteLabel)?.[0] || ('Preco' + siteLabel.replace(/[^A-Za-z0-9]/g,''));
+    const { data, error } = await sb.from('vw_precos_com_desc')
+      .select('data, preco_num')
       .eq('ean', ean)
       .eq('site', viewKey)
       .not('preco_num', 'is', null)
-      .order('data', { ascending: true }).limit(60);
+      .order('data', { ascending: true })
+      .limit(60);
     if (error) throw error;
     const points = (data||[]).filter(r => typeof r.preco_num === 'number' && Number.isFinite(r.preco_num)).map(r => ({ x: new Date(r.data), y: r.preco_num }));
     drawSparkline(points);
   } catch(e){ console.error(e); popMsg.style.display='block'; popMsg.textContent = 'Falha ao carregar histórico.'; }
 }
-
-/* ======== INIT ======== */
-(async function init(){
-  const { data: { session } } = await sb.auth.getSession();
-  if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return; }
-
-  // Header + plano
-  userChip.textContent = session.user?.email || 'Logado';
-  let planKey = 'basico';
-  try{
-    const { data, error } = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
-    if (error) throw error;
-    const planRaw = (data?.plan || 'basico').toString();
-    planKey = planRaw.toLowerCase();
-    const pretty = planRaw.charAt(0).toUpperCase() + planRaw.slice(1);
-    planChip.textContent = `Plano: ${pretty}`;
-  }catch(e){ console.error(e); planChip.textContent = 'Plano: —'; }
-
-  // Seleção de sites + cabeçalhos na ordem da seleção
-  await loadUserSitesAndLocks(session.user.id, planKey);
-
-  // Primeira carga
-  currentEanQ = ''; currentDescQ = '';
-  resetAndQuery();
-  generalWrap.dispatchEvent(new Event('scroll'));
-})();
 </script>
 </body>
 </html>
