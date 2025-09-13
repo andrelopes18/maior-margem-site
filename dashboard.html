@@ -16,37 +16,15 @@
   .btn { background:#00b140; color:#fff; border:none; padding:8px 14px; border-radius:6px; cursor:pointer; }
   .btn:hover { background:#009b38; }
 
-  /* Dropdown do usuário */
   .userChipWrap { position: relative; display:inline-block; }
   .dropdown {
-    position: absolute;
-    right: 0;
-    top: calc(100% + 6px);
-    display: none;
-    min-width: 180px;
-    padding: 6px;
-    background: #0f0f0f;
-    border: 1px solid #2a2a2a;
-    border-radius: 10px;
-    box-shadow: 0 10px 30px rgba(0,0,0,.5);
-    z-index: 50;
+    position: absolute; right: 0; top: calc(100% + 6px); display: none; min-width: 180px; padding: 6px;
+    background: #0f0f0f; border: 1px solid #2a2a2a; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.5); z-index: 50;
   }
-  .userChipWrap:hover .dropdown,
-  .userChipWrap.open .dropdown { display: block; }
-  .dd-item {
-    width: 100%;
-    background: transparent;
-    border: none;
-    color: #eee;
-    text-align: left;
-    padding: 10px 12px;
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 14px;
-  }
+  .userChipWrap:hover .dropdown, .userChipWrap.open .dropdown { display: block; }
+  .dd-item { width: 100%; background: transparent; border: none; color: #eee; text-align: left; padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 14px; }
   .dd-item:hover { background: #1b1b1b; }
 
-  /* Painéis */
   .panel { background:#202020; border:1px solid #2a2a2a; border-radius:12px; padding:12px; margin-bottom:18px; }
   .panel-header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }
   .panel-header h2 { margin:0; font-size:18px; color:#d5ffd5; }
@@ -58,15 +36,11 @@
   .status { margin:10px 0; color:#aaa; font-size:12px; }
   .err { display:none; color:#ff5d5d; margin:8px 0; font-size:13px; }
 
-  /* WRAPS com rolagem + base para sticky header */
-  .wrap {
-    overflow:auto; border:1px solid #2a2a2a; border-radius:10px;
-    position: relative; /* base p/ sticky z-index */
-  }
+  .wrap { overflow:auto; border:1px solid #2a2a2a; border-radius:10px; position: relative; }
   #generalWrap { height: 55vh; }
 
-  table { width:100%; border-collapse: separate; border-spacing: 0; } /* <- separate melhora sticky */
-  thead { position: sticky; top: 0; z-index: 3; } /* cabeça fixa */
+  table { width:100%; border-collapse: separate; border-spacing: 0; }
+  thead { position: sticky; top: 0; z-index: 3; }
   thead th { position: sticky; top: 0; background:#0f0f0f; z-index: 4; }
   th, td { border-bottom:1px solid #2a2a2a; padding:10px; text-align:left; font-size:14px; vertical-align:top; }
   tbody tr:hover { background:#1a1a1a; }
@@ -83,38 +57,23 @@
 
   .counts { margin-top:10px; font-size:12px; color:#9aa0a6; display:flex; gap:12px; flex-wrap:wrap; }
 
-  .panel.collapsed .wrap { display:none; }
-  .panel.collapsed .counts { display:none; }
-  .panel.collapsed .resizer { display:none; }
+  .panel.collapsed .wrap, .panel.collapsed .counts, .panel.collapsed .resizer { display:none; }
 
-  .resizer {
-    height: 10px; margin-top: 6px; border: 1px solid #2a2a2a; border-radius: 8px;
-    cursor: ns-resize; background: linear-gradient(180deg, #1c1c1c, #111);
-    display:flex; align-items:center; justify-content:center;
-  }
+  .resizer { height: 10px; margin-top: 6px; border: 1px solid #2a2a2a; border-radius: 8px; cursor: ns-resize; background: linear-gradient(180deg, #1c1c1c, #111); display:flex; align-items:center; justify-content:center; }
   .resizer:after { content: ""; width: 40px; height: 3px; border-radius: 3px; background: #3a3a3a; }
   body.resizing, body.resizing * { cursor: ns-resize !important; user-select: none; }
 
-  /* Botão do gráfico – mais encorpado/visível */
-  .chart-btn {
-    display:inline-flex; align-items:center; justify-content:center;
-    width:28px; height:28px; margin-left:8px; border-radius:6px;
-    border:1.5px solid #2e2e2e; background:#141414; color:#dcdcdc;
-    cursor:pointer; box-shadow: 0 2px 6px rgba(0,0,0,.35);
-  }
+  .chart-btn { display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; margin-left:8px; border-radius:6px; border:1.5px solid #2e2e2e; background:#141414; color:#dcdcdc; cursor:pointer; box-shadow: 0 2px 6px rgba(0,0,0,.35); }
   .chart-btn:hover { background:#1b1b1b; border-color:#3a3a3a; }
   .chart-btn:active { transform: translateY(1px); }
-
   .chart-icon { width:16px; height:16px; display:block; }
 
-  /* Popover do gráfico */
   .chart-popover { position:absolute; z-index:1000; width:240px; padding:10px; background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px; box-shadow: 0 10px 40px rgba(0,0,0,.6); }
   .chart-popover header { font-size:12px; color:#b5b5b5; display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
   .chart-popover .close { background:transparent; border:none; color:#aaa; font-size:16px; cursor:pointer; }
   .chart-popover .msg { font-size:12px; color:#bbb; padding:8px; text-align:center; }
   canvas.spark { width:200px; height:180px; display:block; background:#121212; border:1px solid #232323; border-radius:6px; }
 
-  /* ===== Bloqueio por plano (mantido) ===== */
   th[data-locked="true"] { position: relative; color: #aaa; }
   th[data-locked="true"]::after { content: "🔒"; margin-left: 6px; opacity: .8; font-size: 14px; }
   td.locked-cell .price { filter: blur(3px); }
@@ -188,7 +147,6 @@
   </div>
 </section>
 
-<!-- Popover único para os gráficos -->
 <div id="chartPopover" class="chart-popover" style="display:none;">
   <header>
     <span id="chartTitle">Histórico</span>
@@ -199,23 +157,23 @@
 </div>
 
 <script>
-/* ======== CONFIG / SUPABASE ======== */
+/* ===== Config / Supabase ===== */
 const CFG = window.CONFIG || {};
 const SUPABASE_URL = CFG.SUPABASE_URL;
 const SUPABASE_ANON_KEY = CFG.SUPABASE_ANON_KEY;
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) { alert("Erro de config...config.js não carregado."); throw new Error("CONFIG ausente"); }
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) { alert("config.js não carregado."); throw new Error("CONFIG ausente"); }
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
 
-/* ======== MODO DE BLOQUEIO (apenas referência; blur controlado no CSS) ======== */
-/** "blur" (padrão) – omite o número do preço excedido */
-const BLUR_MODE = "blur";
+/* ===== Constantes do render/paginação ===== */
+const VIEW = 'vw_precos_com_desc';
+const PAGE_SIZE = 200;
+const RENDER_CHUNK = 60; /* <<<<<< CORRIGIDO */
 
-/* ======== ELEMENTOS ======== */
+/* ===== Elementos ===== */
 const statusEl = document.getElementById('status');
 const errEl = document.getElementById('err');
 const userChip = document.getElementById('userChip');
 const planChip = document.getElementById('planChip');
-const userChipWrap = document.getElementById('userChipWrap');
 const ddMeusDados = document.getElementById('ddMeusDados');
 const ddPlanos = document.getElementById('ddPlanos');
 const btnSair = document.getElementById('btnSair');
@@ -223,14 +181,10 @@ const btnReload = document.getElementById('btnReload');
 const eanFilter = document.getElementById('eanFilter');
 const descFilter = document.getElementById('descFilter');
 
-const favPanel = document.getElementById('favPanel');
-const toggleFavBtn = document.getElementById('toggleFav');
 const favWrap = document.getElementById('favWrap');
 const favBody = document.querySelector('#favTable tbody');
 const favResizer = document.getElementById('favResizer');
 
-const generalPanel = document.getElementById('generalPanel');
-const toggleGenBtn = document.getElementById('toggleGen');
 const generalWrap = document.getElementById('generalWrap');
 const generalBody = document.querySelector('#produtosTable tbody');
 const endMarker = document.getElementById('endMarker');
@@ -239,7 +193,10 @@ const countShown = document.getElementById('countShown');
 const countTotal = document.getElementById('countTotal');
 const countFavs  = document.getElementById('countFavs');
 
-/* Popover/Canvas */
+const favHeaderRow = document.getElementById('favHeaderRow');
+const generalHeaderRow = document.getElementById('generalHeaderRow');
+
+/* Popover */
 const pop = document.getElementById('chartPopover');
 const popTitle = document.getElementById('chartTitle');
 const popClose = document.getElementById('chartClose');
@@ -247,7 +204,7 @@ const popMsg = document.getElementById('chartMsg');
 const sparkCanvas = document.getElementById('spark');
 const sparkCtx = sparkCanvas.getContext('2d');
 
-/* ======== ESTADO / MAPAS ======== */
+/* ===== Mapas de sites ===== */
 const siteMap = {
   "PrecoLeroyMerlin": "LeroyMerlin",
   "PrecoQueroQuero": "QueroQuero",
@@ -259,357 +216,343 @@ const siteMap = {
   "PrecoGhaus": "Ghaus"
 };
 const siteOrder = Object.values(siteMap);
+const viewKeyByLabel = Object.fromEntries(Object.entries(siteMap).map(([k,v])=>[v,k]));
 
-/** Ordem real a exibir: sites selecionados pelo usuário (cai em siteOrder se vazio) */
-let chosenSitesAll = [...siteOrder];
+/* ===== Estado ===== */
+const DEFAULT_PLAN_SITE_LIMIT = { trial:2, basico:4, intermediario:5, premium:8 };
 
-/** Bloqueio por plano */
-let unlockedSites = new Set(siteOrder.slice(0, 3));
-let lockedSites   = new Set(siteOrder.slice(3));
+let chosenSitesAll = [];              // labels na ordem do user_sites
+let unlockedSites = new Set();        // liberadas pelo plano
+let lockedSites   = new Set();        // excedentes
 
-/** mapa EAN -> dados agregados */
+let favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
 let produtosMap = new Map();
-/** lista derivada para render em chunks */
 let produtosList = [];
-/** rendered count */
 let itemsRendered = 0;
-/** estado de paginação server-side */
+
 let serverOffset = 0;
 let serverExhausted = false;
 let fetching = false;
 
-/* Controle filtros */
 let currentEanQ = '';
 let currentDescQ = '';
 
-/* Controle render */
 let loadingMore = false;
 let suppressGeneralChange = false;
 const generalChkMap = new Map();
 
-/* Aux para favoritos */
 let favFirstAutoRenderDone = false;
 
-/* ======== LIMITES DO PLANO ======== */
-const DEFAULT_PLAN_SITE_LIMIT = { trial: 2, basico: 3, intermediario: 5, premium: 8 };
-
-function normalizeSiteLabel(x){
-  if (!x) return "";
-  return x.toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-    .replace(/\s+/g,'').replace(/[^a-zA-Z0-9]/g,'').toLowerCase();
-}
-function toDashboardLabel(raw){
-  const n = normalizeSiteLabel(raw);
-  if (n === 'leroymerlin') return 'LeroyMerlin';
-  if (n === 'queroquero')  return 'QueroQuero';
-  if (n === 'cassol' || n === 'cassolcenterlar') return 'Cassol';
-  if (n === 'redemac' || n === 'redemacsuperbem' || n === 'superbem') return 'RedeMac';
-  if (n === 'mestretinho' || n === 'mestrettinho') return 'MestreTinho';
-  if (n === 'tumelero') return 'Tumelero';
-  if (n === 'supremeinox' || n === 'supreme inox') return 'Supremeinox';
-  if (n === 'ghaus' || n === 'g-haus' || n === 'gháus') return 'Ghaus';
-  return '';
-}
-
-/* ======== LIMITE / PLANO ======== */
-async function getSitesLimitForPlan(planKey){
-  const key = (planKey || '').toString().trim().toLowerCase();
-  try{
-    const { data, error } = await sb.from('billing_plans')
-      .select('sites_limit, max_sites')
-      .eq('plan_key', key)
-      .maybeSingle();
-    if (error) throw error;
-    const lim = Number(data?.sites_limit ?? data?.max_sites);
-    if (Number.isFinite(lim) && lim > 0) return lim;
-  } catch(e) {
-    console.warn('billing_plans não encontrado/sem campo sites_limit. Usando fallback.', e);
-  }
-  return DEFAULT_PLAN_SITE_LIMIT[key] ?? 2;
-}
-
-/* ======== SELEÇÃO DO USUÁRIO -> COLUNAS (APENAS ESTA PARTE FOI AJUSTADA) ======== */
-async function loadUserSitesAndLocks(userId, planKey){
-  const maxSites = await getSitesLimitForPlan(planKey);
-
-  // user_sites (ordem de seleção)
-  let siteIds = [];
-  try{
-    const { data: us, error } = await sb
-      .from('user_sites')
-      .select('site_id, created_at, id')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: true, nullsFirst: true })
-      .order('id', { ascending: true });
-    if (error) throw error;
-    siteIds = (us || []).map(r => r.site_id).filter(x => x != null);
-  }catch(e){ console.warn('user_sites ausente? Prosseguindo.', e); }
-
-  // sites -> labels (mantendo a ordem do user_sites)
-  let chosenLabels = [];
-  if (siteIds.length){
-    try{
-      const { data: st, error } = await sb.from('sites').select('id, nome, name, site').in('id', siteIds);
-      if (error) throw error;
-      const ordered = siteIds.map(id => (st||[]).find(s => s.id === id)).filter(Boolean);
-      chosenLabels = ordered
-        .map(s => toDashboardLabel((s?.nome || s?.name || s?.site || '')))
-        .filter(lbl => !!lbl && siteOrder.includes(lbl));
-    } catch(e){ console.warn('Falha ao ler sites por id. Usando padrão.', e); }
-  }
-  if (chosenLabels.length === 0) chosenLabels = [...siteOrder];
-
-  chosenSitesAll = [...new Set(chosenLabels)];
-  unlockedSites = new Set(chosenSitesAll.slice(0, maxSites));
-  lockedSites = new Set(chosenSitesAll.slice(maxSites));
-
-  rebuildHeaders();
-  markLockedHeaders();
-  setStatus(buildSitesStatusMessage());
-}
-
-/* ======== MONTA CABEÇALHOS DINÂMICOS ======== */
-function rebuildHeaders(){
-  const favHeadFixed = `<th class="col-fav">Ação</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
-  const genHeadFixed = `<th class="col-fav">★</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
-  const sitesTh = chosenSitesAll.map(lbl => {
-    const locked = lockedSites.has(lbl) ? ' data-locked="true"' : ' data-locked="false"';
-    return `<th data-site="\${lbl}"\${locked}>${lbl}</th>`;
-  }).join('');
-  const favHeaderRow = document.getElementById('favHeaderRow');
-  const generalHeaderRow = document.getElementById('generalHeaderRow');
-  if (favHeaderRow) favHeaderRow.innerHTML = favHeadFixed + sitesTh;
-  if (generalHeaderRow) generalHeaderRow.innerHTML = genHeadFixed + sitesTh;
-}
-function markLockedHeaders(){
-  const tables = [document.getElementById('produtosTable'), document.getElementById('favTable')];
-  for (const table of tables){
-    const ths = table?.querySelectorAll('thead th[data-site]');
-    if (!ths) continue;
-    ths.forEach(th=>{
-      const s = th.getAttribute('data-site');
-      const locked = lockedSites.has(s);
-      th.setAttribute('data-locked', locked ? 'true' : 'false');
-      th.title = locked ? 'Excedeu o limite do plano' : '';
-      th.style.opacity = locked ? '0.4' : '1';
-    });
-  }
-}
-function buildSitesStatusMessage(){
-  const total = chosenSitesAll.length, lockedCount = lockedSites.size, unlockedCount = unlockedSites.size;
-  const extra = lockedCount > 0 ? ` • ${lockedCount} bloqueado${lockedCount>1?'s':''}` : '';
-  return `Sites selecionados: ${unlockedCount}/${total} liberados${extra}`;
-}
-
-/* ======== UTILS ======== */
-function setStatus(t){ statusEl.textContent = t || ''; }
+/* ===== Helpers ===== */
+function setStatus(t){ statusEl.textContent = t||''; }
 function showErr(e){ errEl.style.display='block'; errEl.textContent = String(e||'').trim(); }
 function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
-function formatBRL(n){ try { return n.toLocaleString('pt-BR', { style:'currency', currency:'BRL' }); } catch { return String(n); } }
-function debounce(fn, delay=400){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),delay); } }
+function formatBRL(n){ try{return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}catch{return String(n)} }
+function debounce(fn,delay=500){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),delay) } }
 function favSave(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet])); }
 function isFav(sku){ return favSet.has(String(sku)); }
 
-/* ======== AGREGAÇÃO ======== */
+function normalizeSiteLabel(x){
+  if (!x) return "";
+  return x.toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,'').replace(/[^a-zA-Z0-9]/g,'').toLowerCase();
+}
+function toDashboardLabel(raw){
+  const n = normalizeSiteLabel(raw);
+  if (n==='leroymerlin') return 'LeroyMerlin';
+  if (n==='queroquero')  return 'QueroQuero';
+  if (n==='cassol'||n==='cassolcenterlar') return 'Cassol';
+  if (n==='redemac'||n==='redemacsuperbem'||n==='superbem') return 'RedeMac';
+  if (n==='mestretinho'||n==='mestrettinho') return 'MestreTinho';
+  if (n==='tumelero') return 'Tumelero';
+  if (n==='supremeinox'||n==='supreme inox') return 'Supremeinox';
+  if (n==='ghaus'||n==='g-haus'||n==='gháus') return 'Ghaus';
+  return '';
+}
+function labelFromViewKey(viewKey){
+  if (!viewKey) return '';
+  const base = String(viewKey).replace(/^Preco/i,'').replace(/_/g,'').trim();
+  return toDashboardLabel(base) || base;
+}
+
+/* ===== Plano ===== */
+async function getSitesLimitForPlan(planKey){
+  const key = (planKey||'').toLowerCase();
+  try{
+    const { data, error } = await sb.from('billing_plans').select('sites_limit, max_sites').eq('plan_key', key).maybeSingle();
+    if (error) throw error;
+    const lim = Number(data?.sites_limit ?? data?.max_sites);
+    if (Number.isFinite(lim) && lim>0) return lim;
+  }catch(e){ console.warn('billing_plans fallback', e); }
+  return DEFAULT_PLAN_SITE_LIMIT[key] ?? 2;
+}
+
+/* ===== Seleção do usuário → colunas ===== */
+async function loadUserSitesAndLocks(userId, planKey){
+  const maxSites = await getSitesLimitForPlan(planKey);
+
+  let siteIds = [];
+  try{
+    const { data: us, error } = await sb.from('user_sites')
+      .select('site_id, created_at, id')
+      .eq('user_id', userId)
+      .order('created_at', { ascending:true, nullsFirst:true })
+      .order('id', { ascending:true });
+    if (error) throw error;
+    siteIds = (us||[]).map(r=>r.site_id).filter(x=>x!=null);
+  }catch(e){ console.warn('user_sites erro', e); }
+
+  let labels = [];
+  if (siteIds.length){
+    try{
+      const { data: st, error } = await sb.from('sites').select('id, view_key, nome, name, site').in('id', siteIds);
+      if (error) throw error;
+      const ordered = siteIds.map(id => (st||[]).find(s => s.id===id)).filter(Boolean);
+      labels = ordered.map(s=>{
+        let lbl = s.view_key ? labelFromViewKey(s.view_key) : '';
+        if (!lbl) lbl = toDashboardLabel(s?.nome || s?.name || s?.site || '');
+        return lbl;
+      }).filter(Boolean);
+    }catch(e){ console.warn('sites erro', e); }
+  }
+  if (!labels.length) labels = [...siteOrder];
+
+  // remove duplicatas mantendo ordem
+  const seen = new Set();
+  chosenSitesAll = labels.filter(l=>{ if(seen.has(l)) return false; seen.add(l); return true; });
+
+  unlockedSites = new Set(chosenSitesAll.slice(0, maxSites));
+  lockedSites   = new Set(chosenSitesAll.slice(maxSites));
+
+  rebuildHeaders();
+  markLockedHeaders();
+
+  setStatus(`Sites selecionados (ordem): ${chosenSitesAll.join(' · ')}`);
+}
+
+/* ===== Cabeçalhos ===== */
+function rebuildHeaders(){
+  const favFixed = `<th class="col-fav">Ação</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
+  const genFixed = `<th class="col-fav">★</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
+  const sitesTh = chosenSitesAll.map(lbl=>{
+    const locked = lockedSites.has(lbl) ? ' data-locked="true"' : ' data-locked="false"';
+    return `<th data-site="${lbl}"${locked}>${lbl}</th>`;
+  }).join('');
+  favHeaderRow.innerHTML = favFixed + sitesTh;
+  generalHeaderRow.innerHTML = genFixed + sitesTh;
+}
+function markLockedHeaders(){
+  document.querySelectorAll('thead th[data-site]').forEach(th=>{
+    const s = th.getAttribute('data-site');
+    const locked = lockedSites.has(s);
+    th.setAttribute('data-locked', locked ? 'true' : 'false');
+    th.style.opacity = locked ? '0.4' : '1';
+  });
+}
+
+/* ===== Agregação (só colunas selecionadas) ===== */
 function upsertRowsIntoProdutos(rows){
-  for (const row of rows){
-    const ean = String(row.ean ?? '');
-    const site = String(row.site ?? '');
-    const precoRaw = row.preco;
-    const precoNum = row.preco_num;
-    const dt = row.data;
-    const desc = row.descricao || '';
+  for (const r of rows){
+    const ean = String(r.ean ?? '');
+    const viewKey = String(r.site ?? '');
+    const lbl = siteMap[viewKey] || labelFromViewKey(viewKey);
+    if (!lbl || !chosenSitesAll.includes(lbl)) continue;
 
-    if (!produtosMap.has(ean)) { produtosMap.set(ean, { sku: ean, desc: desc, sites: {} }); }
+    if (!produtosMap.has(ean)) produtosMap.set(ean, { sku: ean, desc: r.descricao||'', sites:{} });
     const item = produtosMap.get(ean);
-    if (!item.desc && desc) item.desc = desc;
+    if (!item.desc && r.descricao) item.desc = r.descricao;
 
-    const htmlSiteName = siteMap[site];
-    if (htmlSiteName) {
-      const prev = item.sites[htmlSiteName];
-      if (!prev || new Date(dt) > new Date(prev.data)) {
-        item.sites[htmlSiteName] = { precoRaw, precoNum, data: dt };
-      }
+    const prev = item.sites[lbl];
+    if (!prev || new Date(r.data) > new Date(prev.data)){
+      item.sites[lbl] = { precoRaw:r.preco, precoNum:r.preco_num, data:r.data };
     }
   }
   produtosList = Array.from(produtosMap.values());
 }
 
-/* ======== RENDER ======== */
+/* ===== Render ===== */
 function chartButtonSVG(){
-  return `
-    <svg class="chart-icon" viewBox="0 0 24 24" aria-hidden="true">
-      <rect x="3" y="11" width="3" height="7" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>
-      <rect x="9" y="8"  width="3" height="10" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>
-      <rect x="15" y="5" width="3" height="13" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>
-      <path d="M3,18 L7,14 L12,15 L17,8 L21,10" fill="none" stroke="#00d084" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>`;
+  return `<svg class="chart-icon" viewBox="0 0 24 24" aria-hidden="true">
+    <rect x="3" y="11" width="3" height="7" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>
+    <rect x="9" y="8"  width="3" height="10" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>
+    <rect x="15" y="5" width="3" height="13" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>
+    <path d="M3,18 L7,14 L12,15 L17,8 L21,10" fill="none" stroke="#00d084" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`;
 }
 function computeMinMaxForRow(item){
-  let min = { site:null, val: Infinity }, max = { site:null, val: -Infinity };
+  let min = { site:null, val:Infinity }, max={ site:null, val:-Infinity };
   for (const s of chosenSitesAll){
-    if (lockedSites.has(s)) continue; // não considera os ofuscados
+    if (lockedSites.has(s)) continue;
     const d = item.sites[s];
     if (!d || !Number.isFinite(d.precoNum)) continue;
-    if (d.precoNum < min.val) { min = { site:s, val:d.precoNum }; }
-    if (d.precoNum > max.val) { max = { site:s, val:d.precoNum }; }
+    if (d.precoNum < min.val) { min={site:s, val:d.precoNum}; }
+    if (d.precoNum > max.val) { max={site:s, val:d.precoNum}; }
   }
   return { minSite:min.site, maxSite:max.site };
 }
-function createPriceCell(item, siteName, minSite, maxSite){
+function createPriceCell(item, label, minSite, maxSite){
   const td = document.createElement('td');
-  const d = item.sites[siteName];
-  const isLocked = lockedSites.has(siteName);
+  const d = item.sites[label];
+  const isLocked = lockedSites.has(label);
   if (isLocked) td.classList.add('locked-cell');
 
-  if (d) {
-    const dataStr = d.data ? new Date(d.data).toLocaleString('pt-BR') : '';
-    if (Number.isFinite(d.precoNum)) {
-      const display = formatBRL(d.precoNum);
+  if (d){
+    const dtStr = d.data ? new Date(d.data).toLocaleString('pt-BR') : '';
+    if (Number.isFinite(d.precoNum)){
       const span = document.createElement('span');
-      span.className = `price ${!isLocked && siteName===minSite ? 'min' : (!isLocked && siteName===maxSite ? 'max' : '')}`;
-      span.title = isLocked ? 'Excedeu o limite do plano' : (dataStr ? `Atualizado em ${dataStr}` : '');
-      span.textContent = display;
+      span.className = `price ${!isLocked && label===minSite ? 'min' : (!isLocked && label===maxSite ? 'max':'')}`;
+      span.title = isLocked ? 'Excedeu o limite do plano' : (dtStr ? `Atualizado em ${dtStr}` : '');
+      span.textContent = formatBRL(d.precoNum);
       td.appendChild(span);
 
       const b = document.createElement('button');
       b.className='chart-btn'; b.type='button';
       b.title = isLocked ? 'Disponível no upgrade' : 'Ver histórico';
       b.innerHTML = chartButtonSVG();
-      b.addEventListener('click', (ev)=>{
-        if (isLocked){ window.location.href='planos.html'; return; }
-        openChartFor(ev, item.sku, siteName);
-      });
+      b.addEventListener('click',(ev)=>{ if(isLocked){location.href='planos.html';return;} openChartFor(ev, item.sku, label); });
       td.appendChild(b);
 
       if (isLocked){
         const up = document.createElement('button');
         up.className='unlock'; up.type='button'; up.title='Excedeu o limite do plano. Ver planos.'; up.textContent='Ver planos';
-        up.addEventListener('click', ()=> window.location.href='planos.html');
+        up.addEventListener('click', ()=> location.href='planos.html');
         td.appendChild(up);
       }
-    } else {
+    }else{
       const span = document.createElement('span');
       span.className='price';
-      span.title = isLocked ? 'Excedeu o limite do plano' : (dataStr ? `Atualizado em ${dataStr}` : '');
-      span.textContent = (d.precoRaw ?? '').toString();
+      span.title = isLocked ? 'Excedeu o limite do plano' : (dtStr ? `Atualizado em ${dtStr}` : '');
+      span.textContent = (d.precoRaw??'').toString();
       td.appendChild(span);
     }
-  } else {
+  }else{
     td.innerHTML = `<span class="muted">—</span>`;
   }
   return td;
 }
 function renderRowInto(tr, item){
   const tdFav = document.createElement('td'); tdFav.className='col-fav';
-  const chk = document.createElement('input'); chk.type='checkbox'; chk.checked=isFav(item.sku); chk.title='Marcar como favorito';
-  chk.addEventListener('change', ()=>{ if (suppressGeneralChange) return; if (chk.checked) favSet.add(item.sku); else favSet.delete(item.sku); favSave(); renderFavs(); updateFavHeight(); updateCounts(); });
+  const chk = document.createElement('input'); chk.type='checkbox'; chk.checked=isFav(item.sku);
+  chk.addEventListener('change', ()=>{ if(chk.checked) favSet.add(item.sku); else favSet.delete(item.sku); favSave(); renderFavs(); updateFavHeight(); updateCounts(); });
   tdFav.appendChild(chk); tr.appendChild(tdFav); generalChkMap.set(item.sku, chk);
 
   const tdSku = document.createElement('td'); tdSku.className='col-sku'; tdSku.textContent=item.sku; tr.appendChild(tdSku);
   const tdDesc= document.createElement('td'); tdDesc.className='col-desc'; tdDesc.innerHTML=(item.desc||'').replace(/</g,'&lt;'); tr.appendChild(tdDesc);
 
-  const { minSite, maxSite } = computeMinMaxForRow(item);
-  for (const s of chosenSitesAll) { tr.appendChild(createPriceCell(item, s, minSite, maxSite)); }
+  const {minSite,maxSite} = computeMinMaxForRow(item);
+  for (const lbl of chosenSitesAll){ tr.appendChild(createPriceCell(item, lbl, minSite, maxSite)); }
 }
 function renderGeneralChunk(){
   const end = Math.min(itemsRendered + RENDER_CHUNK, produtosList.length);
   const frag = document.createDocumentFragment();
-  for (let i = itemsRendered; i < end; i++){ const item = produtosList[i]; const tr = document.createElement('tr'); renderRowInto(tr, item); frag.appendChild(tr); }
+  for (let i=itemsRendered;i<end;i++){ const it = produtosList[i]; const tr = document.createElement('tr'); renderRowInto(tr, it); frag.appendChild(tr); }
   generalBody.appendChild(frag);
   itemsRendered = end;
   endMarker.textContent = (serverExhausted && itemsRendered >= produtosList.length) ? 'Fim da lista' : '';
   updateCounts();
 }
-function resetGeneralDom(){ generalBody.innerHTML = ''; generalChkMap.clear(); itemsRendered = 0; endMarker.textContent=''; }
+function resetGeneralDom(){ generalBody.innerHTML=''; generalChkMap.clear(); itemsRendered=0; endMarker.textContent=''; }
 function onGeneralScroll(){
   if (loadingMore) return;
   const nearBottom = generalWrap.scrollTop + generalWrap.clientHeight >= generalWrap.scrollHeight - 100;
-  if (nearBottom && itemsRendered < produtosList.length){ loadingMore = true; setTimeout(()=>{ renderGeneralChunk(); loadingMore = false; }, 30); return; }
+  if (nearBottom && itemsRendered < produtosList.length){ loadingMore=true; setTimeout(()=>{ renderGeneralChunk(); loadingMore=false; }, 30); return; }
   if (nearBottom && !serverExhausted && !fetching){ fetchNextPage(); }
 }
 generalWrap.addEventListener('scroll', onGeneralScroll);
 
-/* ======== FAVORITOS ======== */
-let favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
+/* ===== Favoritos ===== */
 function renderFavs(){
-  favBody.innerHTML = '';
-  const favList = produtosList.filter(p => favSet.has(p.sku));
+  favBody.innerHTML='';
+  const favList = produtosList.filter(p=>isFav(p.sku));
   const frag = document.createDocumentFragment();
   for (const item of favList){
     const tr = document.createElement('tr');
 
-    const tdAct = document.createElement('td'); tdAct.className='col-fav';
-    const btn = document.createElement('button'); btn.className='trash-btn'; btn.title='Remover'; btn.innerHTML='🗑️';
+    const tdAct=document.createElement('td'); tdAct.className='col-fav';
+    const btn=document.createElement('button'); btn.className='trash-btn'; btn.title='Remover'; btn.innerHTML='🗑️';
     btn.addEventListener('click', ()=>{ favSet.delete(item.sku); favSave(); const chk=generalChkMap.get(item.sku); if (chk){ suppressGeneralChange=true; chk.checked=false; suppressGeneralChange=false; } renderFavs(); updateFavHeight(); updateCounts(); });
     tdAct.appendChild(btn); tr.appendChild(tdAct);
 
-    const tdSku = document.createElement('td'); tdSku.className='col-sku'; tdSku.textContent=item.sku; tr.appendChild(tdSku);
-    const tdDesc = document.createElement('td'); tdDesc.className='col-desc'; tdDesc.innerHTML=(item.desc||'').replace(/</g,'&lt;'); tr.appendChild(tdDesc);
+    const tdSku=document.createElement('td'); tdSku.className='col-sku'; tdSku.textContent=item.sku; tr.appendChild(tdSku);
+    const tdDesc=document.createElement('td'); tdDesc.className='col-desc'; tdDesc.innerHTML=(item.desc||'').replace(/</g,'&lt;'); tr.appendChild(tdDesc);
 
-    const { minSite, maxSite } = computeMinMaxForRow(item);
-    for (const s of chosenSitesAll){ tr.appendChild(createPriceCell(item, s, minSite, maxSite)); }
+    const {minSite,maxSite}=computeMinMaxForRow(item);
+    for (const lbl of chosenSitesAll){ tr.appendChild(createPriceCell(item, lbl, minSite, maxSite)); }
 
     frag.appendChild(tr);
   }
   favBody.appendChild(frag);
 }
 
-/* ======== CONTADORES ======== */
+/* ===== Contadores ===== */
 function updateCounts(){
-  const favs = favSet.size;
+  const favs=favSet.size;
   countShown.textContent = `Exibindo ${itemsRendered} de ${produtosList.length} no Geral (carregados)`;
   countTotal.textContent = serverExhausted ? `Total de SKUs carregados: ${produtosList.length}` : `Carregando… (${produtosList.length}+ )`;
-  countFavs.textContent = `Favoritos: ${favs}`;
+  countFavs.textContent  = `Favoritos: ${favs}`;
 }
 
-/* ======== BUSCA PAGINADA ======== */
+/* ===== Query paginada ===== */
 function buildQuery(){
-  let q = sb.from('vw_precos_com_desc')
-    .select('ean, site, preco, data, descricao, preco_num', { count: 'estimated' })
-    .order('data', { ascending: false });
-  if (currentEanQ) q = q.ilike('ean', `%${currentEanQ}%`);
+  let q = sb.from(VIEW).select('ean, site, preco, data, descricao, preco_num', { count:'estimated' }).order('data', { ascending:false });
+  if (currentEanQ)  q = q.ilike('ean', `%${currentEanQ}%`);
   if (currentDescQ) q = q.ilike('descricao', `%${currentDescQ}%`);
   return q;
 }
 async function fetchNextPage(){
   if (fetching || serverExhausted) return;
-  fetching = true; hideErr(); setStatus(`Carregando dados… (offset ${serverOffset})`);
+  fetching = true; hideErr(); setStatus(`Carregando… (offset ${serverOffset})`);
   try{
-    const from = serverOffset, to = serverOffset + 200 - 1;
+    const from = serverOffset, to = serverOffset + PAGE_SIZE - 1;
     const { data, error } = await buildQuery().range(from, to);
     if (error) throw error;
 
-    if (!data || data.length === 0) {
+    if (!data || data.length===0){
       serverExhausted = true; setStatus('Todos os dados carregados.');
       if (itemsRendered >= produtosList.length) endMarker.textContent = 'Fim da lista';
-    } else {
+    }else{
       upsertRowsIntoProdutos(data);
       if (itemsRendered < produtosList.length) renderGeneralChunk();
       renderFavs();
-      if (!favFirstAutoRenderDone){ updateFavHeight(); favFirstAutoRenderDone = true; }
-      serverOffset += 200;
+      if (!favFirstAutoRenderDone){ updateFavHeight(); favFirstAutoRenderDone=true; }
+      serverOffset += PAGE_SIZE;
       setStatus(`Carregados: ${produtosList.length} SKUs (parcial)`);
     }
-  } catch(e){ console.error(e); showErr('Falha ao carregar: ' + (e?.message || e)); setStatus('Erro ao carregar.'); }
-  finally { fetching = false; updateCounts(); }
+  }catch(e){ console.error(e); showErr('Falha ao carregar: ' + (e?.message || e)); setStatus('Erro ao carregar.'); }
+  finally { fetching=false; updateCounts(); }
 }
 
-/* ======== RESET ======== */
+/* ===== Reset ===== */
 function resetAndQuery(){
-  produtosMap.clear(); produtosList = []; serverOffset = 0; serverExhausted = false; favFirstAutoRenderDone = false;
-  resetGeneralDom(); renderFavs(); updateFavHeight(); updateCounts();
+  produtosMap.clear(); produtosList=[]; serverOffset=0; serverExhausted=false; favFirstAutoRenderDone=false;
+  resetGeneralDom();
+  renderFavs(); updateFavHeight(); updateCounts();
   fetchNextPage();
 }
 
-/* ======== HEADER / MENU ======== */
-ddMeusDados.addEventListener('click', () => { window.location.href = 'meusdados.html'; });
-ddPlanos.addEventListener('click', () => { window.location.href = 'planos.html'; });
-userChip.addEventListener('click', (e) => { e.stopPropagation(); userChipWrap.classList.toggle('open'); });
-document.addEventListener('click', (e) => { if (!userChipWrap.contains(e.target)) userChipWrap.classList.remove('open'); });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') userChipWrap.classList.remove('open'); });
+/* ===== Navegação / filtros ===== */
+ddMeusDados.addEventListener('click', ()=> location.href='meusdados.html');
+ddPlanos.addEventListener('click', ()=> location.href='planos.html');
+btnSair.addEventListener('click', async ()=>{ try{ await sb.auth.signOut(); }finally{ localStorage.removeItem('mm_login_date'); location.href = CFG.SITE_URL || 'index.html'; } });
 
-/* ======== FAV HEIGHT / RESIZER ======== */
+const onFilterInput = debounce(()=>{ currentEanQ=(eanFilter.value||'').trim(); currentDescQ=(descFilter.value||'').trim(); resetAndQuery(); }, 500);
+eanFilter.addEventListener('input', onFilterInput);
+descFilter.addEventListener('input', onFilterInput);
+
+btnReload.addEventListener('click', async ()=>{
+  const s=(await sb.auth.getSession()).data.session;
+  if (s?.user?.id){
+    let planKey = 'basico';
+    try{
+      const { data, error } = await sb.from('profiles').select('plan').eq('id', s.user.id).maybeSingle();
+      if (!error) planKey = (data?.plan || 'basico').toString().toLowerCase();
+      planChip.textContent = `Plano: ${planKey.charAt(0).toUpperCase()+planKey.slice(1)}`;
+    }catch{}
+    await loadUserSitesAndLocks(s.user.id, planKey);
+  }
+  resetAndQuery();
+});
+
+/* ===== Favoritos height / resizer ===== */
 function measureRowHeight(){ const row = document.querySelector('#favTable tbody tr'); if (!row) return 44; const h = Math.round(row.getBoundingClientRect().height); return Math.max(36, h || 44); }
 function measureHeadHeight(){ const head = document.querySelector('#favTable thead'); if (!head) return 40; const h = Math.round(head.getBoundingClientRect().height); return Math.max(32, h || 40); }
 let favHeightUser = Number(localStorage.getItem('mm_fav_height')) || null;
@@ -632,29 +575,57 @@ function updateFavHeight(){
   favResizer.addEventListener('dblclick', ()=>{ favHeightUser = null; localStorage.removeItem('mm_fav_height'); updateFavHeight(); });
 })();
 
-/* ======== AUTO-REFRESH SOFT ======== */
-(function autoSoftRefresh(){
-  let last = 0;
-  async function check(){
-    try{
-      const { data, error } = await sb.rpc('last_prices_change');
-      if (error) return;
-      const ts = Number(data) || 0;
-      if (ts && ts > last){ last = ts; /* Não forço reload inteiro – usuário pode recarregar no botão */ }
-    }catch{}
-  }
-  setInterval(check, 60 * 1000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
-  window.addEventListener('focus', check);
-})();
+/* ===== Gráfico ===== */
+function closePopover(){ pop.style.display='none'; }
+function positionPopover(x,y){
+  const pad=12, vw=innerWidth, vh=innerHeight; let left=x+pad, top=y+pad; const W=240, H=260;
+  if (left+W>vw) left=x-W-pad; if (top+H>vh) top=y-H-pad;
+  pop.style.left=Math.max(8,left)+'px'; pop.style.top=Math.max(8,top)+'px';
+}
+document.addEventListener('click', (ev)=>{ if(pop.style.display!=='none' && !pop.contains(ev.target)) closePopover(); });
+document.addEventListener('keydown', (ev)=>{ if(ev.key==='Escape') closePopover(); });
+popClose.addEventListener('click', closePopover);
 
-/* ======== BUSCA PLANO/USER E START ======== */
+function drawSparkline(points){
+  const ctx=sparkCtx, W=sparkCanvas.width, H=sparkCanvas.height; ctx.clearRect(0,0,W,H);
+  if(!points||points.length<3){ popMsg.style.display='block'; popMsg.textContent='Histórico insuficiente (≥3 pontos).'; return; }
+  popMsg.style.display='none';
+  const m={l:40,r:14,t:12,b:28};
+  const xs=points.map(p=>p.x.getTime()), ys=points.map(p=>p.y);
+  const xMin=Math.min(...xs), xMax=Math.max(...xs), yMin=Math.min(...ys), yMax=Math.max(...ys);
+  const xS=v=>m.l+((v-xMin)/(xMax-xMin||1))*(W-m.l-m.r);
+  const yR=v=>H-m.b-((v-yMin)/(yMax-yMin||1))*(H-m.t-m.b);
+  const yS=v=>Math.max(m.t+6, Math.min(H-m.b-6, yR(v)));
+  ctx.strokeStyle='#232323'; ctx.lineWidth=1; ctx.beginPath();
+  for(let i=0;i<=3;i++){ const yy=m.t+i*(H-m.t-m.b)/3; ctx.moveTo(m.l,yy); ctx.lineTo(W-m.r,yy); } ctx.stroke();
+  ctx.beginPath(); ctx.lineWidth=3; ctx.strokeStyle='#00d084';
+  points.forEach((p,i)=>{ const x=xS(p.x.getTime()), y=yS(p.y); if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); }); ctx.stroke();
+  ctx.fillStyle='#bfffc1'; for(const p of points){ const x=xS(p.x.getTime()), y=yS(p.y); ctx.beginPath(); ctx.arc(x,y,3.2,0,Math.PI*2); ctx.fill(); }
+  ctx.fillStyle='#9aa0a6'; ctx.font='11px Arial'; ctx.textAlign='right';
+  const yMaxY=yS(yMax), yMinY=yS(yMin); ctx.fillText(formatBRL(yMax), m.l-6, Math.max(m.t+10, yMaxY-6)); ctx.fillText(formatBRL(yMin), m.l-6, Math.min(H-m.b-2, yMinY+12));
+  const fmt=d=>d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}); ctx.textAlign='center'; ctx.fillText(fmt(points[0].x), Math.max(m.l,24), H-8); ctx.fillText(fmt(points.at(-1).x), Math.min(W-14,W-24), H-8);
+}
+async function openChartFor(ev, ean, label){
+  ev.stopPropagation();
+  const rect = ev.currentTarget.getBoundingClientRect(); positionPopover(rect.right, rect.bottom);
+  popTitle.textContent = `${label} • ${ean}`;
+  popMsg.style.display='block'; popMsg.textContent='Carregando…'; sparkCtx.clearRect(0,0,sparkCanvas.width,sparkCanvas.height); pop.style.display='block';
+  try{
+    const viewKey = viewKeyByLabel[label] || ('Preco' + label.replace(/[^A-Za-z0-9]/g,''));
+    const { data, error } = await sb.from(VIEW).select('data, preco_num')
+      .eq('ean', ean).eq('site', viewKey).not('preco_num','is',null).order('data',{ascending:true}).limit(60);
+    if (error) throw error;
+    const pts = (data||[]).filter(r=>typeof r.preco_num==='number'&&Number.isFinite(r.preco_num)).map(r=>({x:new Date(r.data), y:r.preco_num}));
+    drawSparkline(pts);
+  }catch(e){ console.error(e); popMsg.style.display='block'; popMsg.textContent='Falha ao carregar histórico.'; }
+}
+
+/* ===== Init ===== */
 (async function init(){
   const { data: { session } } = await sb.auth.getSession();
   if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return; }
   userChip.textContent = session.user?.email || 'Logado';
 
-  // Plano
   let planKey = 'basico';
   try{
     const { data, error } = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
@@ -665,106 +636,12 @@ function updateFavHeight(){
     }
   }catch{}
 
-  // Seleção do usuário -> colunas + bloqueio visual
   await loadUserSitesAndLocks(session.user.id, planKey);
 
-  // Primeira carga
   currentEanQ = ''; currentDescQ = '';
   resetAndQuery();
   generalWrap.dispatchEvent(new Event('scroll'));
 })();
-
-/* ======== RELOAD / FILTROS ======== */
-btnReload.addEventListener('click', async ()=>{
-  try{
-    const { data: { session } } = await sb.auth.getSession();
-    let planKey = 'basico';
-    if (session?.user?.id){
-      const { data, error } = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
-      if (!error) planKey = (data?.plan || 'basico').toString().toLowerCase();
-      await loadUserSitesAndLocks(session.user.id, planKey);
-    }
-  }catch(e){}
-  resetAndQuery();
-});
-eanFilter.addEventListener('input', debounce(()=>{ currentEanQ=(eanFilter.value||'').trim(); resetAndQuery(); }, 500));
-descFilter.addEventListener('input', debounce(()=>{ currentDescQ=(descFilter.value||'').trim(); resetAndQuery(); }, 500));
-
-/* ======== SAIR ======== */
-btnSair.addEventListener('click', async ()=>{
-  try { await sb.auth.signOut(); } catch(e) {}
-  finally { localStorage.removeItem('mm_login_date'); window.location.href = CFG.SITE_URL || 'index.html'; }
-});
-
-/* ======== MINI-GRÁFICO ======== */
-function closePopover(){ pop.style.display='none'; }
-function positionPopover(x,y){
-  const pad = 12; const vw = window.innerWidth, vh = window.innerHeight;
-  let left = x + pad, top = y + pad; const W = 240, H = 260;
-  if (left + W > vw) left = x - W - pad;
-  if (top + H > vh) top = y - H - pad;
-  pop.style.left = Math.max(8, left) + 'px';
-  pop.style.top  = Math.max(8, top) + 'px';
-}
-document.addEventListener('click', (ev)=>{ if (pop.style.display !== 'none' && !pop.contains(ev.target)) closePopover(); });
-document.addEventListener('keydown', (ev)=>{ if (ev.key === 'Escape') closePopover(); });
-popClose.addEventListener('click', closePopover);
-
-function drawSparkline(points){
-  const ctx = sparkCtx; const W = sparkCanvas.width, H = sparkCanvas.height; ctx.clearRect(0,0,W,H);
-  if (!points || points.length < 3){ popMsg.style.display='block'; popMsg.textContent = 'Histórico insuficiente (precisa de 3 preços).'; return; }
-  popMsg.style.display='none';
-  const m = { l: 40, r: 14, t: 12, b: 28 };
-  const xs = points.map(p=>p.x.getTime()); const ys = points.map(p=>p.y);
-  const xMin = Math.min(...xs), xMax = Math.max(...xs);
-  const yMin = Math.min(...ys), yMax = Math.max(...ys);
-  const xScale = v => m.l + ((v - xMin) / (xMax - xMin || 1)) * (W - m.l - m.r);
-  const yScaleRaw = v => H - m.b - ((v - yMin) / (yMax - yMin || 1)) * (H - m.t - m.b);
-  const yScale = v => Math.max(m.t+6, Math.min(H - m.b - 6, yScaleRaw(v)));
-
-  ctx.strokeStyle = '#232323'; ctx.lineWidth = 1; ctx.beginPath();
-  for (let i=0;i<=3;i++){ const yy = m.t + i*(H - m.t - m.b)/3; ctx.moveTo(m.l, yy); ctx.lineTo(W - m.r, yy); }
-  ctx.stroke();
-
-  ctx.beginPath(); ctx.lineWidth = 3; ctx.strokeStyle = '#00d084';
-  points.forEach((p, i)=>{ const x = xScale(p.x.getTime()), y = yScale(p.y); if (i === 0) ctx.moveTo(x,y); else ctx.lineTo(x,y); });
-  ctx.stroke();
-
-  ctx.fillStyle = '#bfffc1';
-  for (const p of points){ const x = xScale(p.x.getTime()), y = yScale(p.y); ctx.beginPath(); ctx.arc(x,y,3.2,0,Math.PI*2); ctx.fill(); }
-
-  ctx.fillStyle = '#9aa0a6'; ctx.font = '11px Arial'; ctx.textAlign = 'right';
-  const yMaxY = yScale(yMax), yMinY = yScale(yMin);
-  ctx.fillText(formatBRL(yMax), m.l-6, Math.max(m.t+10, yMaxY-6));
-  ctx.fillText(formatBRL(yMin), m.l-6, Math.min(H - m.b - 2, yMinY+12));
-
-  const fmt = (d)=> d.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' });
-  ctx.textAlign = 'center';
-  ctx.fillText(fmt(points[0].x), Math.max(m.l, 24), H-8);
-  ctx.fillText(fmt(points[points.length-1].x), Math.min(W - 14, W-24), H-8);
-}
-async function openChartFor(ev, ean, siteLabel){
-  ev.stopPropagation();
-  const rect = ev.currentTarget.getBoundingClientRect();
-  positionPopover(rect.right, rect.bottom);
-  popTitle.textContent = `${siteLabel} • ${ean}`;
-  popMsg.style.display='block'; popMsg.textContent = 'Carregando histórico…';
-  sparkCtx.clearRect(0,0,sparkCanvas.width,sparkCanvas.height);
-  pop.style.display='block';
-  try{
-    const viewKey = Object.entries(siteMap).find(([k,v]) => v === siteLabel)?.[0] || ('Preco' + siteLabel.replace(/[^A-Za-z0-9]/g,''));
-    const { data, error } = await sb.from('vw_precos_com_desc')
-      .select('data, preco_num')
-      .eq('ean', ean)
-      .eq('site', viewKey)
-      .not('preco_num', 'is', null)
-      .order('data', { ascending: true })
-      .limit(60);
-    if (error) throw error;
-    const points = (data||[]).filter(r => typeof r.preco_num === 'number' && Number.isFinite(r.preco_num)).map(r => ({ x: new Date(r.data), y: r.preco_num }));
-    drawSparkline(points);
-  } catch(e){ console.error(e); popMsg.style.display='block'; popMsg.textContent = 'Falha ao carregar histórico.'; }
-}
 </script>
 </body>
 </html>
