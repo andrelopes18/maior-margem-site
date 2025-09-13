@@ -352,7 +352,7 @@ const generalChkMap = new Map();
 let favFirstAutoRenderDone = false;
 
 /* ======== LIMITES DO PLANO ======== */
-const DEFAULT_PLAN_SITE_LIMIT = { trial: 2, basico: 3, intermediario: 5, premium: 8 };
+const DEFAULT_PLAN_SITE_LIMIT = { trial: 2, basico: 4, intermediario: 5, premium: 8 }; // <<< AJUSTADO: Básico = 4
 
 function normalizeSiteLabel(x){
   if (!x) return "";
@@ -423,6 +423,7 @@ function markLockedHeaders(){
       const s = th.getAttribute('data-site');
       const locked = lockedSites.has(s);
       th.setAttribute('data-locked', locked ? 'true' : 'false');
+      th.style.opacity = locked ? '0.4' : '1';   // <<< NOVO: ofusca o nome da coluna quando bloqueada
       th.title = locked ? 'Excedeu o limite do plano' : '';
     });
   }
