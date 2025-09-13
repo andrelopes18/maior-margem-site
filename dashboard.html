@@ -167,7 +167,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { pers
 /* ===== Constantes do render/paginação ===== */
 const VIEW = 'vw_precos_com_desc';
 const PAGE_SIZE = 200;
-const RENDER_CHUNK = 60; /* <<<<<< CORRIGIDO */
+const RENDER_CHUNK = 60;
 
 /* ===== Elementos ===== */
 const statusEl = document.getElementById('status');
@@ -204,24 +204,10 @@ const popMsg = document.getElementById('chartMsg');
 const sparkCanvas = document.getElementById('spark');
 const sparkCtx = sparkCanvas.getContext('2d');
 
-/* ===== Mapas de sites ===== */
-const siteMap = {
-  "PrecoLeroyMerlin": "LeroyMerlin",
-  "PrecoQueroQuero": "QueroQuero",
-  "PrecoCassol": "Cassol",
-  "PrecoRedeMac": "RedeMac",
-  "PrecoMestreTinho": "MestreTinho",
-  "PrecoTumelero": "Tumelero",
-  "PrecoSupremeinox": "Supremeinox",
-  "PrecoGhaus": "Ghaus"
-};
-const siteOrder = Object.values(siteMap);
-const viewKeyByLabel = Object.fromEntries(Object.entries(siteMap).map(([k,v])=>[v,k]));
-
 /* ===== Estado ===== */
 const DEFAULT_PLAN_SITE_LIMIT = { trial:2, basico:4, intermediario:5, premium:8 };
 
-let chosenSitesAll = [];              // labels na ordem do user_sites
+let chosenSitesAll = [];              // rótulos na ordem do user_sites
 let unlockedSites = new Set();        // liberadas pelo plano
 let lockedSites   = new Set();        // excedentes
 
@@ -252,81 +238,30 @@ function debounce(fn,delay=500){ let t; return (...a)=>{ clearTimeout(t); t=setT
 function favSave(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet])); }
 function isFav(sku){ return favSet.has(String(sku)); }
 
-function normalizeSiteLabel(x){
-  if (!x) return "";
-  return x.toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,'').replace(/[^a-zA-Z0-9]/g,'').toLowerCase();
+/* Normalização + rótulos */
+function norm(s){
+  return (s||'').toString()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/\s+/g,'').replace(/[^a-zA-Z0-9]/g,'')
+    .toLowerCase();
 }
 function toDashboardLabel(raw){
-  const n = normalizeSiteLabel(raw);
+  const n = norm(raw);
   if (n==='leroymerlin') return 'LeroyMerlin';
   if (n==='queroquero')  return 'QueroQuero';
   if (n==='cassol'||n==='cassolcenterlar') return 'Cassol';
   if (n==='redemac'||n==='redemacsuperbem'||n==='superbem') return 'RedeMac';
   if (n==='mestretinho'||n==='mestrettinho') return 'MestreTinho';
   if (n==='tumelero') return 'Tumelero';
-  if (n==='supremeinox'||n==='supreme inox') return 'Supremeinox';
+  if (n==='supremeinox'||n==='supremeinoxloja'||n==='supreme inox') return 'Supremeinox';
   if (n==='ghaus'||n==='g-haus'||n==='gháus') return 'Ghaus';
-  return '';
+  return (raw||'').toString().replace(/\s+/g,'').replace(/[^\w]/g,'');
 }
+/* De view_key para rótulo final do dashboard */
 function labelFromViewKey(viewKey){
   if (!viewKey) return '';
   const base = String(viewKey).replace(/^Preco/i,'').replace(/_/g,'').trim();
   return toDashboardLabel(base) || base;
-}
-
-/* ===== Plano ===== */
-async function getSitesLimitForPlan(planKey){
-  const key = (planKey||'').toLowerCase();
-  try{
-    const { data, error } = await sb.from('billing_plans').select('sites_limit, max_sites').eq('plan_key', key).maybeSingle();
-    if (error) throw error;
-    const lim = Number(data?.sites_limit ?? data?.max_sites);
-    if (Number.isFinite(lim) && lim>0) return lim;
-  }catch(e){ console.warn('billing_plans fallback', e); }
-  return DEFAULT_PLAN_SITE_LIMIT[key] ?? 2;
-}
-
-/* ===== Seleção do usuário → colunas ===== */
-async function loadUserSitesAndLocks(userId, planKey){
-  const maxSites = await getSitesLimitForPlan(planKey);
-
-  let siteIds = [];
-  try{
-    const { data: us, error } = await sb.from('user_sites')
-      .select('site_id, created_at, id')
-      .eq('user_id', userId)
-      .order('created_at', { ascending:true, nullsFirst:true })
-      .order('id', { ascending:true });
-    if (error) throw error;
-    siteIds = (us||[]).map(r=>r.site_id).filter(x=>x!=null);
-  }catch(e){ console.warn('user_sites erro', e); }
-
-  let labels = [];
-  if (siteIds.length){
-    try{
-      const { data: st, error } = await sb.from('sites').select('id, view_key, nome, name, site').in('id', siteIds);
-      if (error) throw error;
-      const ordered = siteIds.map(id => (st||[]).find(s => s.id===id)).filter(Boolean);
-      labels = ordered.map(s=>{
-        let lbl = s.view_key ? labelFromViewKey(s.view_key) : '';
-        if (!lbl) lbl = toDashboardLabel(s?.nome || s?.name || s?.site || '');
-        return lbl;
-      }).filter(Boolean);
-    }catch(e){ console.warn('sites erro', e); }
-  }
-  if (!labels.length) labels = [...siteOrder];
-
-  // remove duplicatas mantendo ordem
-  const seen = new Set();
-  chosenSitesAll = labels.filter(l=>{ if(seen.has(l)) return false; seen.add(l); return true; });
-
-  unlockedSites = new Set(chosenSitesAll.slice(0, maxSites));
-  lockedSites   = new Set(chosenSitesAll.slice(maxSites));
-
-  rebuildHeaders();
-  markLockedHeaders();
-
-  setStatus(`Sites selecionados (ordem): ${chosenSitesAll.join(' · ')}`);
 }
 
 /* ===== Cabeçalhos ===== */
@@ -349,12 +284,85 @@ function markLockedHeaders(){
   });
 }
 
-/* ===== Agregação (só colunas selecionadas) ===== */
+/* ===== Plano ===== */
+async function getSitesLimitForPlan(planKey){
+  const key = (planKey||'').toLowerCase();
+  try{
+    const { data, error } = await sb.from('billing_plans').select('sites_limit, max_sites').eq('plan_key', key).maybeSingle();
+    if (error) throw error;
+    const lim = Number(data?.sites_limit ?? data?.max_sites);
+    if (Number.isFinite(lim) && lim>0) return lim;
+  }catch(e){ console.warn('billing_plans fallback', e); }
+  return DEFAULT_PLAN_SITE_LIMIT[key] ?? 2;
+}
+
+/* ===== Seleção do usuário → colunas (ordem preservada) ===== */
+async function loadUserSitesAndLocks(userId, planKey){
+  const maxSites = await getSitesLimitForPlan(planKey);
+
+  // 1) Lê user_sites na ordem de criação
+  let userRows = [];
+  try{
+    const { data, error } = await sb.from('user_sites')
+      .select('site_id, created_at, id')
+      .eq('user_id', userId)
+      .order('created_at', { ascending:true, nullsFirst:true })
+      .order('id', { ascending:true });
+    if (error) throw error;
+    userRows = data || [];
+  }catch(e){ console.warn('user_sites erro', e); }
+
+  if (!userRows.length){
+    chosenSitesAll = [];
+    unlockedSites = new Set();
+    lockedSites = new Set();
+    rebuildHeaders(); markLockedHeaders();
+    setStatus('Nenhum site selecionado em Meus Dados.');
+    return;
+  }
+
+  // 2) Busca APENAS id + view_key dos sites referenciados
+  const ids = userRows.map(r=>r.site_id).filter(x=>x!=null);
+  let sites = [];
+  try{
+    const { data, error } = await sb.from('sites')
+      .select('id, view_key, nome, name, site')
+      .in('id', ids);
+    if (error) throw error;
+    sites = data || [];
+  }catch(e){ console.warn('sites erro', e); }
+
+  // 3) Monta labels preservando a ordem de user_sites
+  const byId = new Map(sites.map(s=>[s.id, s]));
+  const labels = [];
+  for (const r of userRows){
+    const s = byId.get(r.site_id);
+    if (!s) continue;
+    let lbl = s.view_key ? labelFromViewKey(s.view_key) : '';
+    if (!lbl) lbl = toDashboardLabel(s?.nome || s?.name || s?.site || '');
+    if (lbl) labels.push(lbl);
+  }
+
+  // 4) Remove duplicados mantendo ordem
+  const seen = new Set();
+  chosenSitesAll = labels.filter(l=>{ if(seen.has(l)) return false; seen.add(l); return true; });
+
+  // 5) Aplica limite do plano (as primeiras ficam liberadas; resto ofuscado)
+  unlockedSites = new Set(chosenSitesAll.slice(0, maxSites));
+  lockedSites   = new Set(chosenSitesAll.slice(maxSites));
+
+  rebuildHeaders();
+  markLockedHeaders();
+
+  setStatus(`Sites selecionados (ordem do usuário): ${chosenSitesAll.join(' · ')}`);
+}
+
+/* ===== Agregação (usa label derivado do view_key dos dados) ===== */
 function upsertRowsIntoProdutos(rows){
   for (const r of rows){
     const ean = String(r.ean ?? '');
     const viewKey = String(r.site ?? '');
-    const lbl = siteMap[viewKey] || labelFromViewKey(viewKey);
+    const lbl = labelFromViewKey(viewKey); // <- DERIVA DO VIEW_KEY, não força mapa fixo
     if (!lbl || !chosenSitesAll.includes(lbl)) continue;
 
     if (!produtosMap.has(ean)) produtosMap.set(ean, { sku: ean, desc: r.descricao||'', sites:{} });
@@ -611,7 +619,7 @@ async function openChartFor(ev, ean, label){
   popTitle.textContent = `${label} • ${ean}`;
   popMsg.style.display='block'; popMsg.textContent='Carregando…'; sparkCtx.clearRect(0,0,sparkCanvas.width,sparkCanvas.height); pop.style.display='block';
   try{
-    const viewKey = viewKeyByLabel[label] || ('Preco' + label.replace(/[^A-Za-z0-9]/g,''));
+    const viewKey = 'Preco' + label.replace(/[^A-Za-z0-9]/g,''); // coerente com labelFromViewKey
     const { data, error } = await sb.from(VIEW).select('data, preco_num')
       .eq('ean', ean).eq('site', viewKey).not('preco_num','is',null).order('data',{ascending:true}).limit(60);
     if (error) throw error;
