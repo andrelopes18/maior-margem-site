@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MaiorMargem - Tabela de Produtos</title>
+<title>MaiorMargem — Dashboard</title>
 <style>
   :root { color-scheme: dark; }
-  body { margin:0; font-family: Arial, sans-serif; background-color:#121212; color:white; padding:20px; }
+  body { margin:0; font-family: Arial, sans-serif; background:#121212; color:#fff; padding:20px; }
   header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; gap:12px; flex-wrap:wrap; }
   h1 { color:#00b140; margin:0; }
 
@@ -54,7 +54,7 @@
   .toggle-btn:hover { background:#1b1b1b; }
 
   .filters { display:grid; grid-template-columns: 1fr 1fr auto; gap:12px; margin:16px 0; }
-  .filters input { padding:10px 12px; border-radius:6px; border:1px solid #333; background-color:#1e1e1e; color:white; }
+  .filters input { padding:10px 12px; border-radius:6px; border:1px solid #333; background:#1e1e1e; color:#fff; }
   .status { margin:10px 0; color:#aaa; font-size:12px; }
   .err { display:none; color:#ff5d5d; margin:8px 0; font-size:13px; }
 
@@ -98,7 +98,6 @@
     cursor:pointer; box-shadow: 0 2px 6px rgba(0,0,0,.35);
   }
   .chart-btn:hover { background:#1b1b1b; border-color:#3a3a3a; }
-  .chart-btn:active { transform: translateY(1px); }
   .chart-icon { width:16px; height:16px; display:block; }
 
   /* Popover do gráfico */
@@ -108,7 +107,7 @@
   .chart-popover .msg { font-size:12px; color:#bbb; padding:8px; text-align:center; }
   canvas.spark { width:200px; height:180px; display:block; background:#121212; border:1px solid #232323; border-radius:6px; }
 
-  /* ===== Bloqueio por plano ===== */
+  /* ===== Bloqueio por plano (mantido) ===== */
   th[data-locked="true"] { position: relative; color: #aaa; }
   th[data-locked="true"]::after { content: "🔒"; margin-left: 6px; opacity: .8; font-size: 14px; }
   td.locked-cell .price { filter: blur(3px); }
@@ -127,7 +126,7 @@
 <header>
   <h1>MaiorMargem — Dashboard</h1>
   <div class="userbox">
-    <span id="planChip" class="chip plan" title="Plano atual">Plano: —</span>
+    <span id="planChip" class="chip plan">Plano: —</span>
     <div class="userChipWrap">
       <span id="userChip" class="chip">Usuário</span>
       <div id="userDropdown" class="dropdown" role="menu" aria-hidden="true">
@@ -197,11 +196,15 @@
 </div>
 
 <script>
+/* ======== AJUDA: Mostra erros no topo em vez de “sumir” ======== */
+window.addEventListener('error', e => { const el=document.getElementById('err'); el.style.display='block'; el.textContent='Erro JS: '+e.message; });
+window.addEventListener('unhandledrejection', e => { const el=document.getElementById('err'); el.style.display='block'; el.textContent='Erro assíncrono: '+(e.reason?.message||e.reason); });
+
 /* ======== CONFIG / SUPABASE ======== */
 const CFG = window.CONFIG || {};
 const SUPABASE_URL = CFG.SUPABASE_URL;
 const SUPABASE_ANON_KEY = CFG.SUPABASE_ANON_KEY;
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) { alert("Erro de configuração: config.js não carregado."); throw new Error("CONFIG ausente"); }
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) { const el=document.getElementById('err'); el.style.display='block'; el.textContent="Erro de configuração: config.js não carregado."; throw new Error("CONFIG ausente"); }
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
 
 /* ======== CONSTANTES ======== */
@@ -233,7 +236,7 @@ const countShown = document.getElementById('countShown');
 const countTotal = document.getElementById('countTotal');
 const countFavs  = document.getElementById('countFavs');
 
-/* NOVO: referências para cabeçalhos dinâmicos */
+/* Cabeçalhos dinâmicos */
 const favHeaderRow = document.getElementById('favHeaderRow');
 const generalHeaderRow = document.getElementById('generalHeaderRow');
 
@@ -245,7 +248,7 @@ const popMsg = document.getElementById('chartMsg');
 const sparkCanvas = document.getElementById('spark');
 const sparkCtx = sparkCanvas.getContext('2d');
 
-/* ======== MAPAS ======== */
+/* ======== MAPA DE VIEW->LABEL (deve casar com VIEW) ======== */
 const siteMap = {
   "PrecoLeroyMerlin": "LeroyMerlin",
   "PrecoQueroQuero": "QueroQuero",
@@ -256,15 +259,15 @@ const siteMap = {
   "PrecoSupremeinox": "Supremeinox",
   "PrecoGhaus": "Ghaus"
 };
-const siteOrder = Object.values(siteMap);
+const siteOrder = Object.values(siteMap); // labels conhecidos (para fallback)
 
 /* ======== ESTADO ======== */
-let chosenSitesAll = [...siteOrder];      // ordem dos sites SELECIONADOS pelo usuário
-let unlockedSites = new Set(siteOrder);   // subset liberado (máx do plano)
-let lockedSites = new Set();              // subset excedente (escolhidos mas bloqueados)
+let chosenSitesAll = [...siteOrder];      // ordem dos sites SELECIONADOS (de user_sites)
+let unlockedSites = new Set(siteOrder);   // mantido (plano)
+let lockedSites = new Set();              // mantido
 
 let favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
-let produtosMap = new Map();
+let produtosMap = new Map();              // Map<ean, { sku, desc, sites: { [label]: {...} } }>
 let produtosList = [];
 let itemsRendered = 0;
 
@@ -281,7 +284,7 @@ const generalChkMap = new Map();
 
 let favFirstAutoRenderDone = false;
 
-/* ======== LIMITES (fallback) ======== */
+/* ======== LIMITES (fallback, mantido) ======== */
 const DEFAULT_PLAN_SITE_LIMIT = { trial: 2, basico: 4, intermediario: 5, premium: 8 };
 
 /* ======== HELPERS ======== */
@@ -300,7 +303,6 @@ function normalizeSiteLabel(x){
 }
 function toDashboardLabel(raw){
   const n = normalizeSiteLabel(raw);
-  // Casos conhecidos
   if (n === 'leroymerlin') return 'LeroyMerlin';
   if (n === 'queroquero') return 'QueroQuero';
   if (n === 'cassol' || n === 'cassolcenterlar') return 'Cassol';
@@ -309,16 +311,17 @@ function toDashboardLabel(raw){
   if (n === 'tumelero') return 'Tumelero';
   if (n === 'supremeinox' || n === 'supreme inox') return 'Supremeinox';
   if (n === 'ghaus' || n === 'g-haus' || n === 'gháus') return 'Ghaus';
-  // Match por lista
   for (const lbl of siteOrder){ if (normalizeSiteLabel(lbl) === n) return lbl; }
   return '';
 }
 
-/* ======== construir cabeçalhos dinamicamente ======== */
+/* ======== 1) Cabeçalhos dinâmicos conforme seleção ======== */
 function buildHeaders(){
+  // colunas fixas:
   const favHeadFixed = `<th class="col-fav">Ação</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
   const genHeadFixed = `<th class="col-fav">★</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
 
+  // sites conforme seleção
   const sitesTh = chosenSitesAll.map(s => {
     const locked = lockedSites.has(s) ? ' data-locked="true"' : ' data-locked="false"';
     return `<th data-site="${s}"${locked}>${s}</th>`;
@@ -327,40 +330,17 @@ function buildHeaders(){
   favHeaderRow.innerHTML = favHeadFixed + sitesTh;
   generalHeaderRow.innerHTML = genHeadFixed + sitesTh;
 }
-
-/* ======== VISUAL ======== */
-function applyHeaderVisibility(){
-  const tables = [document.getElementById('produtosTable'), document.getElementById('favTable')];
-  for (const table of tables){
-    const ths = table?.querySelectorAll('thead th[data-site]');
-    if (!ths) continue;
-    ths.forEach(th=>{
-      const s = th.getAttribute('data-site');
-      const selected = chosenSitesAll.includes(s);
-      th.style.display = selected ? '' : 'none';
-    });
-  }
-}
 function markLockedHeaders(){
-  const tables = [document.getElementById('produtosTable'), document.getElementById('favTable')];
-  for (const table of tables){
-    const ths = table?.querySelectorAll('thead th[data-site]');
-    if (!ths) continue;
-    ths.forEach(th=>{
-      const s = th.getAttribute('data-site');
-      const locked = lockedSites.has(s);
-      th.setAttribute('data-locked', locked ? 'true' : 'false');
-      th.style.opacity = locked ? '0.4' : '1';
-    });
-  }
-}
-function buildSitesStatusMessage(){
-  const total = chosenSitesAll.length, lockedCount = lockedSites.size, unlockedCount = unlockedSites.size;
-  const extra = lockedCount > 0 ? ` • ${lockedCount} bloqueado${lockedCount>1?'s':''}` : '';
-  return `Sites selecionados: ${unlockedCount}/${total} liberados${extra}`;
+  const ths = document.querySelectorAll('thead th[data-site]');
+  ths.forEach(th=>{
+    const s = th.getAttribute('data-site');
+    const locked = lockedSites.has(s);
+    th.setAttribute('data-locked', locked ? 'true' : 'false');
+    th.style.opacity = locked ? '0.4' : '1';
+  });
 }
 
-/* ======== LIMITES DO PLANO (dinâmico) ======== */
+/* ======== 2) Carregar seleção do usuário em user_sites ======== */
 async function getSitesLimitForPlan(planKey){
   const key = (planKey || '').toString().trim().toLowerCase();
   try {
@@ -371,17 +351,14 @@ async function getSitesLimitForPlan(planKey){
     if (error) throw error;
     const lim = Number(data?.sites_limit ?? data?.max_sites);
     if (Number.isFinite(lim) && lim > 0) return lim;
-  } catch(e) {
-    console.warn('billing_plans sem valor, usando fallback.', e);
-  }
+  } catch(e) { console.warn('billing_plans sem valor; usando fallback.', e); }
   return DEFAULT_PLAN_SITE_LIMIT[key] ?? 2;
 }
 
-/* ======== CARREGA SELEÇÃO DO USUÁRIO + APLICA LIMITE ======== */
 async function loadUserSitesAndLocks(userId, planKey){
   const maxSites = await getSitesLimitForPlan(planKey);
 
-  // 1) Lê user_sites do usuário
+  // 1) Lê user_sites do usuário (ordem por id; se tiver "position", pode trocar aqui)
   let siteIds = [];
   try{
     const { data: us, error } = await sb.from('user_sites')
@@ -395,66 +372,58 @@ async function loadUserSitesAndLocks(userId, planKey){
       .filter(x => x != null);
   }catch(e){ console.warn('user_sites ausente? Prosseguindo.', e); }
 
-  // 2) Converte para labels do dashboard (preservando a ordem marcada)
+  // 2) Converte IDs -> labels do dashboard preservando ordem
   let chosenLabels = [];
   if (siteIds.length){
     try{
-      const { data: st, error } = await sb.from('sites')
-        .select('id, nome, name, site')
-        .in('id', siteIds);
+      const { data: st, error } = await sb.from('sites').select('id, nome, name, site').in('id', siteIds);
       if (error) throw error;
       const ordered = siteIds.map(id => (st||[]).find(s => s.id === id)).filter(Boolean);
       chosenLabels = ordered
         .map(s => toDashboardLabel(s?.nome || s?.name || s?.site || ''))
         .filter(lbl => !!lbl && siteOrder.includes(lbl));
-    } catch(e){ console.warn('Falha ao ler sites por id. Usando padrão.', e); }
+    }catch(e){ console.warn('Falha ao ler sites por id. Usando padrão.', e); }
   }
 
-  // 3) Se por algum motivo não veio nada, cai no padrão (todas as colunas)
+  // 3) Fallback: todas conhecidas (se usuário não selecionou nada)
   if (chosenLabels.length === 0) chosenLabels = [...siteOrder];
 
-  // 4) Aplica seleção + limite do plano
-  chosenSitesAll = [...new Set(chosenLabels)];     // remove duplicatas preservando ordem
+  // 4) Aplica seleção e calcula bloqueadas (mantido)
+  chosenSitesAll = [...new Set(chosenLabels)];
   unlockedSites = new Set(chosenSitesAll.slice(0, maxSites));
   lockedSites = new Set(chosenSitesAll.slice(maxSites));
 
-  // 5) Monta cabeçalhos dinamicamente
+  // 5) Monta cabeçalhos dinâmicos e marca bloqueios
   buildHeaders();
-  // 6) Ajusta opacidade dos bloqueados no header
   markLockedHeaders();
 
-  setStatus(buildSitesStatusMessage());
+  setStatus(`Sites selecionados: ${unlockedSites.size}/${chosenSitesAll.length}` + (lockedSites.size ? ` • ${lockedSites.size} bloqueado(s)` : ''));
 }
 
-/* ======== AGREGAÇÃO ======== */
-/* >>> AJUSTE PRINCIPAL: só armazenar preços dos sites SELECIONADOS (na ordem do usuário) */
+/* ======== 3) Agregar dados por EAN, gravando por label selecionado ======== */
 function upsertRowsIntoProdutos(rows){
   for (const row of rows){
     const ean = String(row.ean ?? '');
-    const siteKey = String(row.site ?? ''); // ex: PrecoLeroyMerlin
-    const siteLabel = siteMap[siteKey];     // ex: LeroyMerlin
+    const viewKey = String(row.site ?? '');  // ex.: "PrecoLeroyMerlin"
+    const label = siteMap[viewKey];          // ex.: "LeroyMerlin"
+    if (!label) continue;                    // ignora sites não mapeados na view
+    if (!chosenSitesAll.includes(label)) continue; // ignora se não está selecionado
 
-    // ignora qualquer site que não esteja selecionado para exibição
-    if (!siteLabel || !chosenSitesAll.includes(siteLabel)) continue;
-
-    const precoRaw = row.preco;
-    const precoNum = row.preco_num;
-    const dt = row.data;
-    const desc = row.descricao || '';
-
-    if (!produtosMap.has(ean)) { produtosMap.set(ean, { sku: ean, desc: desc, sites: {} }); }
+    if (!produtosMap.has(ean)) {
+      produtosMap.set(ean, { sku: ean, desc: row.descricao || '', sites: {} });
+    }
     const item = produtosMap.get(ean);
-    if (!item.desc && desc) item.desc = desc;
+    if (!item.desc && row.descricao) item.desc = row.descricao;
 
-    const prev = item.sites[siteLabel];
-    if (!prev || new Date(dt) > new Date(prev.data)) {
-      item.sites[siteLabel] = { precoRaw, precoNum, data: dt };
+    const prev = item.sites[label];
+    if (!prev || new Date(row.data) > new Date(prev.data)) {
+      item.sites[label] = { precoRaw: row.preco, precoNum: row.preco_num, data: row.data };
     }
   }
   produtosList = Array.from(produtosMap.values());
 }
 
-/* ======== RENDER ======== */
+/* ======== 4) Render: só cria TD para sites selecionados, na ordem ======== */
 function chartButtonSVG(){
   return `
     <svg class="chart-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -464,9 +433,21 @@ function chartButtonSVG(){
       <path d="M3,18 L7,14 L12,15 L17,8 L21,10" fill="none" stroke="#00d084" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>`;
 }
+function computeMinMaxForRow(item){
+  let min = { site:null, val: Infinity }, max = { site:null, val: -Infinity };
+  for (const s of chosenSitesAll) {
+    if (lockedSites.has(s)) continue; // ignora bloqueadas
+    const d = item.sites[s];
+    if (!d || !Number.isFinite(d.precoNum)) continue;
+    if (d.precoNum < min.val) { min = { site:s, val:d.precoNum }; }
+    if (d.precoNum > max.val) { max = { site:s, val:d.precoNum }; }
+  }
+  return { minSite: min.site, maxSite: max.site };
+}
 function createPriceCell(item, siteName, minSite, maxSite){
   const td = document.createElement('td');
-  if (!chosenSitesAll.includes(siteName)) { td.style.display = 'none'; return td; } // segurança
+  if (!chosenSitesAll.includes(siteName)) return td; // segurança
+
   const d = item.sites[siteName];
   const isLocked = lockedSites.has(siteName);
   if (isLocked) td.classList.add('locked-cell');
@@ -490,7 +471,7 @@ function createPriceCell(item, siteName, minSite, maxSite){
       btn.innerHTML = chartButtonSVG();
       btn.addEventListener('click', (ev) => {
         if (isLocked) { window.location.href = 'planos.html'; return; }
-        openChartFor(ev, item.sku, siteName, item.desc);
+        openChartFor(ev, item.sku, siteName);
       });
       td.appendChild(btn);
 
@@ -516,17 +497,6 @@ function createPriceCell(item, siteName, minSite, maxSite){
   }
   return td;
 }
-function computeMinMaxForRow(item){
-  let min = { site:null, val: Infinity }, max = { site:null, val: -Infinity };
-  for (const s of chosenSitesAll) {
-    if (lockedSites.has(s)) continue; // ignora bloqueadas
-    const d = item.sites[s];
-    if (!d || !Number.isFinite(d.precoNum)) continue;
-    if (d.precoNum < min.val) { min = { site:s, val:d.precoNum }; }
-    if (d.precoNum > max.val) { max = { site:s, val:d.precoNum }; }
-  }
-  return { minSite: min.site, maxSite: max.site };
-}
 function renderRowInto(tr, item){
   // Fav
   const tdFav = document.createElement('td');
@@ -548,7 +518,7 @@ function renderRowInto(tr, item){
   // Descrição
   const tdDesc = document.createElement('td'); tdDesc.className = 'col-desc'; tdDesc.innerHTML = (item.desc || '').replace(/</g,'&lt;'); tr.appendChild(tdDesc);
 
-  // Sites (somente selecionados, na ordem escolhida)
+  // Sites (somente os selecionados, na ordem escolhida)
   const { minSite, maxSite } = computeMinMaxForRow(item);
   for (const s of chosenSitesAll) {
     tr.appendChild(createPriceCell(item, s, minSite, maxSite));
@@ -584,7 +554,7 @@ function renderFavs(){
 
     const tdAct = document.createElement('td'); tdAct.className = 'col-fav';
     const btn = document.createElement('button'); btn.className = 'trash-btn'; btn.title = 'Remover dos favoritos';
-    btn.innerHTML = `<svg class="trash-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" width="16" height="16"><path d="M9 3h6a1 1 0 0 1 1 1v1h4v2h-1l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 7H4V5h4V4a1 1 0 0 1 1-1zm2 0v1h2V3h-2zM7 7l1 14h8l1-14H7z"></path></svg>`;
+    btn.innerHTML = '🗑️';
     btn.addEventListener('click', () => {
       favSet.delete(item.sku); favSave();
       const chk = generalChkMap.get(item.sku);
@@ -661,10 +631,7 @@ async function fetchNextPage(){
 function resetAndQuery(){
   produtosMap.clear(); produtosList = []; serverOffset = 0; serverExhausted = false; favFirstAutoRenderDone = false;
 
-  // Agora os cabeçalhos e as células só consideram os sites selecionados
-  applyHeaderVisibility();
-  markLockedHeaders();
-
+  // Cabeçalhos já estão corretos (dinâmicos)
   generalBody.innerHTML = '';
   generalChkMap.clear();
   itemsRendered = 0;
@@ -704,4 +671,137 @@ async function loadHeaderInfo(){
   if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return null; }
   userChip.textContent = session.user?.email || 'Logado';
 
- 
+  let planKey = 'basico';
+  try{
+    const { data, error } = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
+    if (error) throw error;
+    const planRaw = (data?.plan || 'basico').toString();
+    planKey = planRaw.toLowerCase();
+    const pretty = planRaw.charAt(0).toUpperCase() + planRaw.slice(1);
+    planChip.textContent = `Plano: ${pretty}`;
+  }catch(e){ console.error(e); planChip.textContent = 'Plano: —'; }
+
+  await loadUserSitesAndLocks(session.user.id, planKey);
+  return session;
+}
+async function loadHeaderInfoPlanOnly(){
+  try{
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) return 'basico';
+    const { data, error } = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
+    if (error) throw error;
+    return (data?.plan || 'basico').toString().toLowerCase();
+  }catch(e){ console.error(e); return 'basico'; }
+}
+
+/* ======== FAV HEIGHT / RESIZER (mantido) ======== */
+function measureRowHeight(){ const row = document.querySelector('#favTable tbody tr'); if (!row) return 44; const h = Math.round(row.getBoundingClientRect().height); return Math.max(36, h || 44); }
+function measureHeadHeight(){ const head = document.querySelector('#favTable thead'); if (!head) return 40; const h = Math.round(head.getBoundingClientRect().height); return Math.max(32, h || 40); }
+let favHeightUser = Number(localStorage.getItem('mm_fav_height')) || null;
+function applyFavHeight(px){ if (!px || !Number.isFinite(px)) return; const maxPx = Math.round(window.innerHeight * 0.85); const clamped = Math.max(120, Math.min(px, maxPx)); favWrap.style.height = clamped + 'px'; }
+function updateFavHeight(){
+  if (favHeightUser) { applyFavHeight(favHeightUser); return; }
+  const rowsLen = favBody.children.length;
+  const rows = Math.min(rowsLen, 20);
+  const rowH = measureRowHeight();
+  const headH = measureHeadHeight();
+  const pad = 8;
+  const target = headH + rows * rowH + pad;
+  applyFavHeight(target);
+}
+(function initResizer(){
+  let startY = 0, startH = 0;
+  function onMove(ev){ const dy = ev.clientY - startY; favHeightUser = startH + dy; localStorage.setItem('mm_fav_height', String(favHeightUser)); applyFavHeight(favHeightUser); }
+  function stop(){ document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', stop); document.body.classList.remove('resizing'); }
+  favResizer.addEventListener('mousedown', (ev)=>{ startY = ev.clientY; startH = favWrap.offsetHeight; document.body.classList.add('resizing'); document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', stop); });
+  favResizer.addEventListener('dblclick', ()=>{ favHeightUser = null; localStorage.removeItem('mm_fav_height'); updateFavHeight(); });
+})();
+
+/* ======== MINI-GRÁFICO (mantido) ======== */
+function closePopover(){ pop.style.display='none'; }
+function positionPopover(x, y){
+  const pad = 12; const vw = window.innerWidth, vh = window.innerHeight;
+  let left = x + pad, top = y + pad; const rectW = 240, rectH = 260;
+  if (left + rectW > vw) left = x - rectW - pad;
+  if (top + rectH > vh) top = y - rectH - pad;
+  pop.style.left = Math.max(8, left) + 'px';
+  pop.style.top = Math.max(8, top) + 'px';
+}
+document.addEventListener('click', (ev) => { if (pop.style.display !== 'none' && !pop.contains(ev.target)) closePopover(); });
+document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closePopover(); });
+popClose.addEventListener('click', closePopover);
+
+function drawSparkline(points){
+  const ctx = sparkCtx; const W = sparkCanvas.width, H = sparkCanvas.height; ctx.clearRect(0,0,W,H);
+  if (!points || points.length < 3){ popMsg.style.display='block'; popMsg.textContent = 'Histórico insuficiente (precisa de 3 preços).'; return; }
+  popMsg.style.display='none';
+  const m = { l: 40, r: 14, t: 12, b: 28 };
+  const xs = points.map(p=>p.x.getTime()); const ys = points.map(p=>p.y);
+  const xMin = Math.min(...xs), xMax = Math.max(...xs); const yMin = Math.min(...ys), yMax = Math.max(...ys);
+  const xScale = v => m.l + ((v - xMin) / (xMax - xMin || 1)) * (W - m.l - m.r);
+  const yScaleRaw = v => H - m.b - ((v - yMin) / (yMax - yMin || 1)) * (H - m.t - m.b);
+  const yScale = v => Math.max(m.t+6, Math.min(H - m.b - 6, yScaleRaw(v)));
+  ctx.strokeStyle = '#232323'; ctx.lineWidth = 1; ctx.beginPath();
+  for (let i=0;i<=3;i++){ const yy = m.t + i*(H - m.t - m.b)/3; ctx.moveTo(m.l, yy); ctx.lineTo(W - m.r, yy); }
+  ctx.stroke();
+  ctx.beginPath(); ctx.lineWidth = 3; ctx.strokeStyle = '#00d084';
+  points.forEach((p, i)=>{ const x = xScale(p.x.getTime()), y = yScale(p.y); if (i === 0) ctx.moveTo(x,y); else ctx.lineTo(x,y); });
+  ctx.stroke();
+  ctx.fillStyle = '#bfffc1';
+  for (const p of points){ const x = xScale(p.x.getTime()), y = yScale(p.y); ctx.beginPath(); ctx.arc(x,y,3.2,0,Math.PI*2); ctx.fill(); }
+  ctx.fillStyle = '#9aa0a6'; ctx.font = '11px Arial'; ctx.textAlign = 'right';
+  const yMaxY = yScale(yMax), yMinY = yScale(yMin);
+  ctx.fillText(formatBRL(yMax), m.l-6, Math.max(m.t+10, yMaxY-6));
+  ctx.fillText(formatBRL(yMin), m.l-6, Math.min(H - m.b - 2, yMinY+12));
+  const fmt = (d)=> d.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' });
+  ctx.textAlign = 'center'; ctx.fillText(fmt(points[0].x), Math.max(m.l, 24), H-8); ctx.fillText(fmt(points[points.length-1].x), Math.min(W - m.r, W-24), H-8);
+}
+async function openChartFor(ev, ean, siteLabel){
+  ev.stopPropagation();
+  const rect = ev.currentTarget.getBoundingClientRect();
+  positionPopover(rect.right, rect.bottom);
+  popTitle.textContent = `${siteLabel} • ${ean}`;
+  popMsg.style.display='block'; popMsg.textContent = 'Carregando histórico…';
+  sparkCtx.clearRect(0,0,sparkCanvas.width,sparkCanvas.height);
+  pop.style.display='block';
+  try{
+    const viewKey = Object.keys(siteMap).find(k => siteMap[k] === siteLabel);
+    const { data, error } = await sb.from(VIEW).select('data, preco_num')
+      .eq('ean', ean)
+      .eq('site', viewKey)
+      .not('preco_num', 'is', null)
+      .order('data', { ascending: true }).limit(60);
+    if (error) throw error;
+    const points = (data||[]).filter(r => typeof r.preco_num === 'number' && Number.isFinite(r.preco_num)).map(r => ({ x: new Date(r.data), y: r.preco_num }));
+    drawSparkline(points);
+  } catch(e){ console.error(e); popMsg.style.display='block'; popMsg.textContent = 'Falha ao carregar histórico.'; }
+}
+
+/* ======== INIT ======== */
+(async function init(){
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return; }
+
+  // Header + plano
+  userChip.textContent = session.user?.email || 'Logado';
+  let planKey = 'basico';
+  try{
+    const { data, error } = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
+    if (error) throw error;
+    const planRaw = (data?.plan || 'basico').toString();
+    planKey = planRaw.toLowerCase();
+    const pretty = planRaw.charAt(0).toUpperCase() + planRaw.slice(1);
+    planChip.textContent = `Plano: ${pretty}`;
+  }catch(e){ console.error(e); planChip.textContent = 'Plano: —'; }
+
+  // Seleção de sites + limites + constrói cabeçalhos
+  await loadUserSitesAndLocks(session.user.id, planKey);
+
+  // Primeira carga
+  currentEanQ = ''; currentDescQ = '';
+  resetAndQuery();
+  generalWrap.dispatchEvent(new Event('scroll'));
+})();
+</script>
+</body>
+</html>
