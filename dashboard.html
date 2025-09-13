@@ -77,6 +77,7 @@
   .chart-popover .msg { font-size:12px; color:#bbb; padding:8px; text-align:center; }
   canvas.spark { width:200px; height:180px; display:block; background:#121212; border:1px solid #232323; border-radius:6px; }
 
+  /* Ofuscar excedente do plano */
   th[data-locked="true"] { color:#aaa; }
   th[data-locked="true"]::after { content: "🔒"; margin-left: 6px; opacity:.8; font-size: 14px; }
   td.locked-cell .price { filter: blur(3px); }
@@ -157,40 +158,39 @@
 </div>
 
 <script>
-/* ===== Captura de erros visível ===== */
+/* =============== Erros visíveis =============== */
 window.addEventListener('error', e => { const el=document.getElementById('err'); el.style.display='block'; el.textContent='Erro JS: '+e.message; });
 window.addEventListener('unhandledrejection', e => { const el=document.getElementById('err'); el.style.display='block'; el.textContent='Erro assíncrono: '+(e.reason?.message||e.reason); });
 
-/* ===== Supabase ===== */
+/* =============== Supabase =============== */
 const CFG = window.CONFIG || {};
 if (!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY) { const el=document.getElementById('err'); el.style.display='block'; el.textContent='config.js não carregado.'; throw new Error('CONFIG ausente'); }
 const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth:{ persistSession:true, autoRefreshToken:true, detectSessionInUrl:true } });
 
-/* ===== Constantes ===== */
+/* =============== Constantes/Elementos =============== */
 const VIEW = 'vw_precos_com_desc';
 const PAGE_SIZE = 200;
 const RENDER_CHUNK = 60;
 
-/* ===== Elementos ===== */
-const statusEl = document.getElementById('status');
-const errEl    = document.getElementById('err');
-const userChip = document.getElementById('userChip');
-const planChip = document.getElementById('planChip');
-const ddMeusDados = document.getElementById('ddMeusDados');
-const ddPlanos    = document.getElementById('ddPlanos');
-const btnSair     = document.getElementById('btnSair');
-const btnReload   = document.getElementById('btnReload');
-const eanFilter   = document.getElementById('eanFilter');
-const descFilter  = document.getElementById('descFilter');
+const statusEl   = document.getElementById('status');
+const errEl      = document.getElementById('err');
+const userChip   = document.getElementById('userChip');
+const planChip   = document.getElementById('planChip');
+const ddMeusDados= document.getElementById('ddMeusDados');
+const ddPlanos   = document.getElementById('ddPlanos');
+const btnSair    = document.getElementById('btnSair');
+const btnReload  = document.getElementById('btnReload');
+const eanFilter  = document.getElementById('eanFilter');
+const descFilter = document.getElementById('descFilter');
 
-const favHeaderRow     = document.getElementById('favHeaderRow');
-const favBody          = document.querySelector('#favTable tbody');
-const favResizer       = document.getElementById('favResizer');
+const favHeaderRow    = document.getElementById('favHeaderRow');
+const favBody         = document.querySelector('#favTable tbody');
+const favResizer      = document.getElementById('favResizer');
 
-const generalHeaderRow = document.getElementById('generalHeaderRow');
-const generalBody      = document.querySelector('#produtosTable tbody');
-const generalWrap      = document.getElementById('generalWrap');
-const endMarker        = document.getElementById('endMarker');
+const generalHeaderRow= document.getElementById('generalHeaderRow');
+const generalBody     = document.querySelector('#produtosTable tbody');
+const generalWrap     = document.getElementById('generalWrap');
+const endMarker       = document.getElementById('endMarker');
 
 const countShown = document.getElementById('countShown');
 const countTotal = document.getElementById('countTotal');
@@ -204,7 +204,7 @@ const popMsg     = document.getElementById('chartMsg');
 const sparkCanvas= document.getElementById('spark');
 const sparkCtx   = sparkCanvas.getContext('2d');
 
-/* ===== Helpers ===== */
+/* =============== Helpers =============== */
 function setStatus(t){ statusEl.textContent = t||''; }
 function showErr(e){ errEl.style.display='block'; errEl.textContent = String(e||'').trim(); }
 function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
@@ -219,37 +219,37 @@ function norm(s){
     .replace(/\s+/g,'').replace(/[^a-zA-Z0-9]/g,'')
     .toLowerCase();
 }
-function toLabelFromName(raw){
+function canonicalLabel(raw){
   const n = norm(raw);
   if (n==='leroymerlin') return 'LeroyMerlin';
   if (n==='queroquero')  return 'QueroQuero';
   if (n==='cassol'||n==='cassolcenterlar') return 'Cassol';
-  if (n==='redemac'||n==='superbem'||n==='redemacsuperbem') return 'RedeMac';
+  if (n==='redemac'||n==='redemacsuperbem'||n==='superbem') return 'RedeMac';
   if (n==='mestretinho'||n==='mestrettinho') return 'MestreTinho';
   if (n==='tumelero') return 'Tumelero';
   if (n==='supremeinox'||n==='supreme') return 'Supremeinox';
   if (n==='ghaus'||n==='g-haus'||n==='gháus') return 'Ghaus';
-  const fallback = (raw||'').toString().replace(/\s+/g,'').replace(/[^\w]/g,'');
-  return fallback || '';
+  return ''; // desconhecido
 }
 function labelFromViewKey(viewKey){ // "PrecoLeroyMerlin" -> "LeroyMerlin"
   if (!viewKey) return '';
-  return String(viewKey).replace(/^Preco/i,'').replace(/_/g,'').trim();
+  const base = String(viewKey).replace(/^Preco/i,'').replace(/_/g,'').trim();
+  return canonicalLabel(base) || base;
 }
 
-/* ===== Mapas dinâmicos (preenchidos a partir do banco) ===== */
-const viewToLabel = {};  // { "PrecoLeroyMerlin": "LeroyMerlin" }
-const labelToView = {};  // { "LeroyMerlin": "PrecoLeroyMerlin" }
+/* Mapas: view_key <-> label (populados ao ler "sites") */
+const viewToLabel = {};
+const labelToView = {};
 
-/* ===== Estado ===== */
+/* =============== Estado =============== */
 const DEFAULT_PLAN_SITE_LIMIT = { trial:2, basico:4, intermediario:5, premium:8 };
 
-let chosenLabels = [];          // labels selecionados pelo usuário (ordem de user_sites)
-let unlockedSites = new Set();  // subset liberado (<= limite do plano)
-let lockedSites   = new Set();  // subset excedente
+let chosenLabels = [];          // labels selecionados (ordem do user_sites)
+let unlockedSites = new Set();  // liberadas pelo plano
+let lockedSites   = new Set();  // excedentes do plano
 
 let favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
-let produtosMap = new Map();  // Map<ean, { sku, desc, sites: { [label]: {precoRaw, precoNum, data} } }>
+let produtosMap = new Map();    // Map<ean, { sku, desc, sites: { [label]: {precoRaw, precoNum, data} } }>
 let produtosList = [];
 let itemsRendered = 0;
 
@@ -266,7 +266,7 @@ const generalChkMap = new Map();
 
 let favFirstAutoRenderDone = false;
 
-/* ===== Cabeçalhos ===== */
+/* =============== Cabeçalhos =============== */
 function buildHeaders(){
   const fixedFav = `<th class="col-fav">★</th>`;
   const fixedSku = `<th class="col-sku">EAN</th>`;
@@ -287,7 +287,7 @@ function refreshHeaderLocks(){
   });
 }
 
-/* ===== Limite do plano ===== */
+/* =============== Limite do plano =============== */
 async function getSitesLimitForPlan(planKey){
   const key = (planKey||'').toLowerCase();
   try{
@@ -302,36 +302,28 @@ async function getSitesLimitForPlan(planKey){
   return DEFAULT_PLAN_SITE_LIMIT[key] ?? 2;
 }
 
-/* ===== Lê user_sites (ordem real). Se não houver "position", faz fallback. ===== */
+/* =============== user_sites (ordem created_at, id) =============== */
 async function fetchUserSitesOrdered(userId){
-  // 1ª tentativa: com position
-  try{
-    const { data, error } = await sb.from('user_sites')
-      .select('site_id, enabled, position, id')
-      .eq('user_id', userId)
-      .order('position', { ascending: true, nullsFirst: true })
-      .order('id', { ascending: true });
-    if (error) throw error;
-    return (data||[]).filter(r => r.enabled !== false);
-  }catch(e1){
-    console.warn('user_sites (com position) falhou, tentando sem position:', e1?.message || e1);
-    // 2ª tentativa: sem position
-    const { data, error } = await sb.from('user_sites')
-      .select('site_id, enabled, id')
-      .eq('user_id', userId)
-      .order('id', { ascending: true });
-    if (error) throw error;
-    return (data||[]).filter(r => r.enabled !== false);
-  }
+  const { data, error } = await sb.from('user_sites')
+    .select('site_id, created_at, id')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: true, nullsFirst: true })
+    .order('id', { ascending: true });
+  if (error) throw error;
+  return data || [];
 }
 
+/* =============== Seleção + bloqueios =============== */
 async function loadUserSelectionAndLocks(userId, planKey){
   const limit = await getSitesLimitForPlan(planKey);
 
   let rows = [];
   try{
     rows = await fetchUserSitesOrdered(userId);
-  }catch(e){ console.warn('Falha lendo user_sites:', e); rows = []; }
+  }catch(e){
+    console.warn('Falha lendo user_sites:', e);
+    rows = [];
+  }
 
   if (!rows.length){
     chosenLabels = [];
@@ -342,7 +334,7 @@ async function loadUserSelectionAndLocks(userId, planKey){
     return;
   }
 
-  // Resolve labels + view_key preservando ordem
+  // resolve labels + view_key (mantém ordem dos rows)
   let labels = [];
   try{
     const ids = rows.map(r=>r.site_id).filter(x=>x!=null);
@@ -356,39 +348,42 @@ async function loadUserSelectionAndLocks(userId, planKey){
     }
     ids.forEach(id=>{
       const s = sites.find(x=>x.id===id);
-      if (!s){ labels.push(`Site${id}`); return; }
+      if (!s) return;
+      let lbl = '';
       if (s.view_key){
-        const lbl = labelFromViewKey(s.view_key);
-        if (lbl){ viewToLabel[s.view_key]=lbl; labelToView[lbl]=s.view_key; labels.push(lbl); return; }
+        lbl = labelFromViewKey(s.view_key);
+        if (lbl){ viewToLabel[s.view_key]=lbl; labelToView[lbl]=s.view_key; }
       }
-      const lbl2 = toLabelFromName(s?.nome || s?.name || s?.site || '');
-      labels.push(lbl2 || `Site${id}`);
+      if (!lbl){
+        lbl = canonicalLabel(s?.nome || s?.name || s?.site || '');
+      }
+      if (lbl) labels.push(lbl);
     });
-  }catch(e){ console.warn('Falha lendo sites:', e); labels = rows.map(r=>`Site${r.site_id??''}`); }
+  }catch(e){ console.warn('Falha lendo sites:', e); }
 
-  // Remove duplicatas preservando ordem
-  const uniqueLabels = [...new Set(labels)];
-  chosenLabels = uniqueLabels;
+  // remove duplicatas preservando ordem
+  const uniq = [];
+  const seen = new Set();
+  for (const l of labels){ if (l && !seen.has(l)){ seen.add(l); uniq.push(l); } }
+  chosenLabels = uniq;
 
-  // bloqueio visual por plano (não esconde colunas)
-  unlockedSites = new Set(uniqueLabels.slice(0, limit));
-  lockedSites   = new Set(uniqueLabels.slice(limit));
+  // bloqueio visual por plano
+  unlockedSites = new Set(uniq.slice(0, limit));
+  lockedSites   = new Set(uniq.slice(limit));
 
   buildHeaders();
   refreshHeaderLocks();
 
-  setStatus(`Sites selecionados: ${unlockedSites.size}/${chosenLabels.length}` + (lockedSites.size?` • ${lockedSites.size} bloqueado(s)`:''));analysis
+  setStatus(`Sites selecionados (ordem): ${chosenLabels.join(' • ')}`);
 }
 
-/* ===== Agregação dos dados ===== */
+/* =============== Agregação (só colunas selecionadas) =============== */
 function upsertRowsIntoProdutos(rows){
   for (const r of rows){
     const ean = String(r.ean??'');
     const viewKey = String(r.site??''); // ex.: "PrecoLeroyMerlin"
     const lbl = viewToLabel[viewKey] || labelFromViewKey(viewKey);
-
-    // Só carrega se o usuário selecionou essa coluna
-    if (!chosenLabels.includes(lbl)) continue;
+    if (!chosenLabels.includes(lbl)) continue; // ignora não selecionados
 
     if (!produtosMap.has(ean)) produtosMap.set(ean, { sku: ean, desc: r.descricao||'', sites:{} });
     const item = produtosMap.get(ean);
@@ -402,7 +397,7 @@ function upsertRowsIntoProdutos(rows){
   produtosList = Array.from(produtosMap.values());
 }
 
-/* ===== Render ===== */
+/* =============== Renderização =============== */
 function chartButtonSVG(){
   return `<svg class="chart-icon" viewBox="0 0 24 24" aria-hidden="true">
     <rect x="3" y="11" width="3" height="7" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>
@@ -424,8 +419,6 @@ function computeMinMaxForRow(item){
 }
 function createPriceCell(item, label, minSite, maxSite){
   const td = document.createElement('td');
-  if (!chosenLabels.includes(label)) return td;
-
   const d = item.sites[label];
   const isLocked = lockedSites.has(label);
   if (isLocked) td.classList.add('locked-cell');
@@ -497,7 +490,7 @@ function onGeneralScroll(){
 }
 generalWrap.addEventListener('scroll', onGeneralScroll);
 
-/* ===== Favoritos ===== */
+/* =============== Favoritos =============== */
 function renderFavs(){
   favBody.innerHTML='';
   const favList = produtosList.filter(p=>isFav(p.sku));
@@ -521,7 +514,7 @@ function renderFavs(){
   favBody.appendChild(frag);
 }
 
-/* ===== Contadores ===== */
+/* =============== Contadores =============== */
 function updateCounts(){
   const favs=favSet.size;
   countShown.textContent = `Exibindo ${itemsRendered} de ${produtosList.length}`;
@@ -529,7 +522,7 @@ function updateCounts(){
   countFavs.textContent  = `Favoritos: ${favs}`;
 }
 
-/* ===== Consulta paginada ===== */
+/* =============== Consulta paginada =============== */
 function buildQuery(){
   let q = sb.from(VIEW).select('ean, site, preco, data, descricao, preco_num', { count:'estimated' }).order('data', { ascending:false });
   if (currentEanQ)  q = q.ilike('ean', `%${currentEanQ}%`);
@@ -559,7 +552,7 @@ async function fetchNextPage(){
   finally { fetching=false; updateCounts(); }
 }
 
-/* ===== Reset / Reload ===== */
+/* =============== Reset / Reload =============== */
 function resetAndQuery(){
   produtosMap.clear(); produtosList=[]; serverOffset=0; serverExhausted=false; favFirstAutoRenderDone=false;
   resetGeneralDom();
@@ -567,7 +560,7 @@ function resetAndQuery(){
   fetchNextPage();
 }
 
-/* ===== Navegação / filtros ===== */
+/* =============== Navegação / filtros =============== */
 ddMeusDados.addEventListener('click', ()=> location.href='meusdados.html');
 ddPlanos.addEventListener('click', ()=> location.href='planos.html');
 btnSair.addEventListener('click', async ()=>{ try{ await sb.auth.signOut(); }finally{ localStorage.removeItem('mm_login_date'); location.href = CFG.SITE_URL || 'index.html'; } });
@@ -585,7 +578,7 @@ btnReload.addEventListener('click', async ()=>{
   resetAndQuery();
 });
 
-/* ===== Plano do usuário (chip) ===== */
+/* =============== Plano do usuário (chip) =============== */
 async function getUserPlanKey(userId){
   try{
     const { data, error } = await sb.from('profiles').select('plan').eq('id', userId).maybeSingle();
@@ -597,7 +590,7 @@ async function getUserPlanKey(userId){
   }catch(e){ console.warn(e); planChip.textContent='Plano: —'; return 'basico'; }
 }
 
-/* ===== Mini gráfico ===== */
+/* =============== Mini gráfico =============== */
 function closePopover(){ pop.style.display='none'; }
 function positionPopover(x,y){
   const pad=12, vw=innerWidth, vh=innerHeight; let left=x+pad, top=y+pad; const W=240, H=260;
@@ -643,7 +636,7 @@ async function openChartFor(ev, ean, label){
   }catch(e){ console.error(e); popMsg.style.display='block'; popMsg.textContent='Falha ao carregar histórico.'; }
 }
 
-/* ===== Altura do painel de Favoritos (restabelecido) ===== */
+/* =============== Altura do painel de Favoritos =============== */
 function measureRowHeight(){ const row = document.querySelector('#favTable tbody tr'); if (!row) return 44; const h = Math.round(row.getBoundingClientRect().height); return Math.max(36, h || 44); }
 function measureHeadHeight(){ const head = document.querySelector('#favTable thead'); if (!head) return 40; const h = Math.round(head.getBoundingClientRect().height); return Math.max(32, h || 40); }
 let favHeightUser = Number(localStorage.getItem('mm_fav_height')) || null;
@@ -667,17 +660,16 @@ function updateFavHeight(){
   favResizer.addEventListener('dblclick', ()=>{ favHeightUser = null; localStorage.removeItem('mm_fav_height'); updateFavHeight(); });
 })();
 
-/* ===== INIT ===== */
+/* =============== INIT =============== */
 (async function init(){
   const { data: { session } } = await sb.auth.getSession();
   if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return; }
   userChip.textContent = session.user?.email || 'Logado';
 
-  // Plano + seleção de sites (somente o que está em user_sites)
   const planKey = await getUserPlanKey(session.user.id);
   await loadUserSelectionAndLocks(session.user.id, planKey);
 
-  // Primeira carga
+  // primeira carga
   currentEanQ = ''; currentDescQ = '';
   resetAndQuery();
   generalWrap.dispatchEvent(new Event('scroll'));
