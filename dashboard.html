@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MaiorMargem - Tabela de Produtos</title>
+<title>MaiorMargem — Dashboard</title>
 <style>
   :root { color-scheme: dark; }
-  body { margin:0; font-family: Arial, sans-serif; background-color:#121212; color:white; padding:20px; }
+  body { margin:0; font-family: Arial, sans-serif; background:#121212; color:#fff; padding:20px; }
   header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; gap:12px; flex-wrap:wrap; }
   h1 { color:#00b140; margin:0; }
 
@@ -16,15 +16,24 @@
   .btn { background:#00b140; color:#fff; border:none; padding:8px 14px; border-radius:6px; cursor:pointer; }
   .btn:hover { background:#009b38; }
 
+  /* Dropdown do usuário */
   .userChipWrap { position: relative; display:inline-block; }
   .dropdown {
-    position: absolute; right: 0; top: calc(100% + 6px); display: none; min-width: 180px; padding: 6px;
-    background: #0f0f0f; border: 1px solid #2a2a2a; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.5); z-index: 50;
+    position: absolute;
+    right: 0; top: calc(100% + 6px); display: none;
+    min-width: 180px; padding: 6px; background: #0f0f0f;
+    border: 1px solid #2a2a2a; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.5);
+    z-index: 50;
   }
-  .userChipWrap:hover .dropdown, .userChipWrap.open .dropdown { display: block; }
-  .dd-item { width: 100%; background: transparent; border: none; color: #eee; text-align: left; padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 14px; }
+  .userChipWrap:hover .dropdown,
+  .userChipWrap.open .dropdown { display: block; }
+  .dd-item {
+    width: 100%; background: transparent; border: none; color: #eee; text-align: left;
+    padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 14px;
+  }
   .dd-item:hover { background: #1b1b1b; }
 
+  /* Painéis */
   .panel { background:#202020; border:1px solid #2a2a2a; border-radius:12px; padding:12px; margin-bottom:18px; }
   .panel-header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }
   .panel-header h2 { margin:0; font-size:18px; color:#d5ffd5; }
@@ -32,10 +41,11 @@
   .toggle-btn:hover { background:#1b1b1b; }
 
   .filters { display:grid; grid-template-columns: 1fr 1fr auto; gap:12px; margin:16px 0; }
-  .filters input { padding:10px 12px; border-radius:6px; border:1px solid #333; background-color:#1e1e1e; color:white; }
+  .filters input { padding:10px 12px; border-radius:6px; border:1px solid #333; background:#1e1e1e; color:#fff; }
   .status { margin:10px 0; color:#aaa; font-size:12px; }
   .err { display:none; color:#ff5d5d; margin:8px 0; font-size:13px; }
 
+  /* WRAPS + sticky header */
   .wrap { overflow:auto; border:1px solid #2a2a2a; border-radius:10px; position: relative; }
   #generalWrap { height: 55vh; }
 
@@ -59,21 +69,32 @@
 
   .panel.collapsed .wrap, .panel.collapsed .counts, .panel.collapsed .resizer { display:none; }
 
-  .resizer { height: 10px; margin-top: 6px; border: 1px solid #2a2a2a; border-radius: 8px; cursor: ns-resize; background: linear-gradient(180deg, #1c1c1c, #111); display:flex; align-items:center; justify-content:center; }
+  .resizer {
+    height: 10px; margin-top: 6px; border: 1px solid #2a2a2a; border-radius: 8px;
+    cursor: ns-resize; background: linear-gradient(180deg, #1c1c1c, #111);
+    display:flex; align-items:center; justify-content:center;
+  }
   .resizer:after { content: ""; width: 40px; height: 3px; border-radius: 3px; background: #3a3a3a; }
   body.resizing, body.resizing * { cursor: ns-resize !important; user-select: none; }
 
-  .chart-btn { display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; margin-left:8px; border-radius:6px; border:1.5px solid #2e2e2e; background:#141414; color:#dcdcdc; cursor:pointer; box-shadow: 0 2px 6px rgba(0,0,0,.35); }
+  /* Botão do gráfico */
+  .chart-btn {
+    display:inline-flex; align-items:center; justify-content:center;
+    width:28px; height:28px; margin-left:8px; border-radius:6px;
+    border:1.5px solid #2e2e2e; background:#141414; color:#dcdcdc;
+    cursor:pointer; box-shadow: 0 2px 6px rgba(0,0,0,.35);
+  }
   .chart-btn:hover { background:#1b1b1b; border-color:#3a3a3a; }
-  .chart-btn:active { transform: translateY(1px); }
   .chart-icon { width:16px; height:16px; display:block; }
 
+  /* Popover do gráfico */
   .chart-popover { position:absolute; z-index:1000; width:240px; padding:10px; background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px; box-shadow: 0 10px 40px rgba(0,0,0,.6); }
   .chart-popover header { font-size:12px; color:#b5b5b5; display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
   .chart-popover .close { background:transparent; border:none; color:#aaa; font-size:16px; cursor:pointer; }
   .chart-popover .msg { font-size:12px; color:#bbb; padding:8px; text-align:center; }
   canvas.spark { width:200px; height:180px; display:block; background:#121212; border:1px solid #232323; border-radius:6px; }
 
+  /* Bloqueio por plano */
   th[data-locked="true"] { position: relative; color: #aaa; }
   th[data-locked="true"]::after { content: "🔒"; margin-left: 6px; opacity: .8; font-size: 14px; }
   td.locked-cell .price { filter: blur(3px); }
@@ -90,10 +111,10 @@
 </head>
 <body>
 <header>
-  <h1>MaiorMargem - Tabela de Produtos</h1>
+  <h1>MaiorMargem — Dashboard</h1>
   <div class="userbox">
     <span id="planChip" class="chip plan">Plano: —</span>
-    <div class="userChipWrap" id="userChipWrap">
+    <div class="userChipWrap">
       <span id="userChip" class="chip">Usuário</span>
       <div id="userDropdown" class="dropdown" role="menu" aria-hidden="true">
         <button class="dd-item" id="ddMeusDados">Meus dados</button>
@@ -111,34 +132,38 @@
     <button id="btnReload" class="btn">Recarregar</button>
   </div>
   <div class="status"><span id="status"></span></div>
-  <div class="err" id="err"></div>
+  <div id="err" class="err"></div>
 </div>
 
-<section class="panel" id="favPanel">
+<section id="favPanel" class="panel">
   <div class="panel-header">
     <h2>Favoritos</h2>
-    <button class="toggle-btn" id="toggleFav" aria-expanded="true">Minimizar</button>
+    <button id="toggleFav" class="toggle-btn" aria-expanded="true">Minimizar</button>
   </div>
-  <div class="wrap" id="favWrap">
+  <div id="favWrap" class="wrap">
     <table id="favTable">
-      <thead><tr id="favHeaderRow"></tr></thead>
+      <thead>
+        <tr id="favHeaderRow"><!-- via JS --></tr>
+      </thead>
       <tbody></tbody>
     </table>
   </div>
-  <div class="resizer" id="favResizer" title="Arraste para redimensionar. Duplo clique: voltar ao auto."></div>
+  <div id="favResizer" class="resizer" title="Arraste para redimensionar. Duplo clique: voltar ao auto."></div>
 </section>
 
-<section class="panel" id="generalPanel">
+<section id="generalPanel" class="panel">
   <div class="panel-header">
     <h2>Geral</h2>
-    <button class="toggle-btn" id="toggleGen" aria-expanded="true">Minimizar</button>
+    <button id="toggleGen" class="toggle-btn" aria-expanded="true">Minimizar</button>
   </div>
-  <div class="wrap" id="generalWrap">
+  <div id="generalWrap" class="wrap">
     <table id="produtosTable">
-      <thead><tr id="generalHeaderRow"></tr></thead>
+      <thead>
+        <tr id="generalHeaderRow"><!-- via JS --></tr>
+      </thead>
       <tbody></tbody>
     </table>
-    <div class="end-marker" id="endMarker"></div>
+    <div id="endMarker" class="end-marker"></div>
   </div>
   <div class="counts">
     <span id="countShown"></span>
@@ -147,6 +172,7 @@
   </div>
 </section>
 
+<!-- Popover único para gráficos -->
 <div id="chartPopover" class="chart-popover" style="display:none;">
   <header>
     <span id="chartTitle">Histórico</span>
@@ -157,62 +183,70 @@
 </div>
 
 <script>
-/* ===== Config / Supabase ===== */
+/* ======== ERROS VISÍVEIS ======== */
+window.addEventListener('error', e => { const el=document.getElementById('err'); el.style.display='block'; el.textContent='Erro JS: '+e.message; });
+window.addEventListener('unhandledrejection', e => { const el=document.getElementById('err'); el.style.display='block'; el.textContent='Erro assíncrono: '+(e.reason?.message||e.reason); });
+
+/* ======== CONFIG / SUPABASE ======== */
 const CFG = window.CONFIG || {};
 const SUPABASE_URL = CFG.SUPABASE_URL;
 const SUPABASE_ANON_KEY = CFG.SUPABASE_ANON_KEY;
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) { alert("config.js não carregado."); throw new Error("CONFIG ausente"); }
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) { const el=document.getElementById('err'); el.style.display='block'; el.textContent="Erro de configuração: config.js não carregado."; throw new Error("CONFIG ausente"); }
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
 
-/* ===== Constantes do render/paginação ===== */
-const VIEW = 'vw_precos_com_desc';
+/* ======== CONSTANTES ======== */
+const VIEW = "vw_precos_com_desc";
 const PAGE_SIZE = 200;
 const RENDER_CHUNK = 60;
 
-/* ===== Elementos ===== */
+/* ======== ELEMENTOS ======== */
 const statusEl = document.getElementById('status');
-const errEl = document.getElementById('err');
+const errEl    = document.getElementById('err');
 const userChip = document.getElementById('userChip');
 const planChip = document.getElementById('planChip');
 const ddMeusDados = document.getElementById('ddMeusDados');
-const ddPlanos = document.getElementById('ddPlanos');
-const btnSair = document.getElementById('btnSair');
-const btnReload = document.getElementById('btnReload');
-const eanFilter = document.getElementById('eanFilter');
-const descFilter = document.getElementById('descFilter');
+const ddPlanos    = document.getElementById('ddPlanos');
+const btnSair     = document.getElementById('btnSair');
+const btnReload   = document.getElementById('btnReload');
+const eanFilter   = document.getElementById('eanFilter');
+const descFilter  = document.getElementById('descFilter');
 
-const favWrap = document.getElementById('favWrap');
-const favBody = document.querySelector('#favTable tbody');
+const favWrap  = document.getElementById('favWrap');
+const favBody  = document.querySelector('#favTable tbody');
 const favResizer = document.getElementById('favResizer');
 
 const generalWrap = document.getElementById('generalWrap');
 const generalBody = document.querySelector('#produtosTable tbody');
-const endMarker = document.getElementById('endMarker');
+const endMarker   = document.getElementById('endMarker');
 
-const countShown = document.getElementById('countShown');
-const countTotal = document.getElementById('countTotal');
-const countFavs  = document.getElementById('countFavs');
+const countShown  = document.getElementById('countShown');
+const countTotal  = document.getElementById('countTotal');
+const countFavs   = document.getElementById('countFavs');
 
-const favHeaderRow = document.getElementById('favHeaderRow');
+const favHeaderRow     = document.getElementById('favHeaderRow');
 const generalHeaderRow = document.getElementById('generalHeaderRow');
 
-/* Popover */
-const pop = document.getElementById('chartPopover');
-const popTitle = document.getElementById('chartTitle');
-const popClose = document.getElementById('chartClose');
-const popMsg = document.getElementById('chartMsg');
-const sparkCanvas = document.getElementById('spark');
-const sparkCtx = sparkCanvas.getContext('2d');
+/* Popover/Canvas */
+const pop        = document.getElementById('chartPopover');
+const popTitle   = document.getElementById('chartTitle');
+const popClose   = document.getElementById('chartClose');
+const popMsg     = document.getElementById('chartMsg');
+const sparkCanvas= document.getElementById('spark');
+const sparkCtx   = sparkCanvas.getContext('2d');
 
-/* ===== Estado ===== */
+/* ======== ESTADO COM CHAVES POR site_id ======== */
 const DEFAULT_PLAN_SITE_LIMIT = { trial:2, basico:4, intermediario:5, premium:8 };
 
-let chosenSitesAll = [];              // rótulos na ordem do user_sites
-let unlockedSites = new Set();        // liberadas pelo plano
-let lockedSites   = new Set();        // excedentes
+let chosenSiteIds = [];            // [site_id] na ordem do user_sites
+let idToLabel     = new Map();     // site_id -> nome para exibir (sites.nome/name/site)
+let idToViewKey   = new Map();     // site_id -> view_key (ex.: "PrecoLeroyMerlin")
+let viewKeyToId   = new Map();     // view_key -> site_id
+
+let unlockedSiteIds = new Set();   // liberadas pelo plano
+let lockedSiteIds   = new Set();   // excedentes do plano
 
 let favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
-let produtosMap = new Map();
+let produtosMap = new Map();       // Map<ean, { sku, desc, sites: { [site_id]: {precoRaw, precoNum, data} } }>
 let produtosList = [];
 let itemsRendered = 0;
 
@@ -229,74 +263,54 @@ const generalChkMap = new Map();
 
 let favFirstAutoRenderDone = false;
 
-/* ===== Helpers ===== */
-function setStatus(t){ statusEl.textContent = t||''; }
+/* ======== HELPERS ======== */
+function setStatus(t){ statusEl.textContent = t || ''; }
 function showErr(e){ errEl.style.display='block'; errEl.textContent = String(e||'').trim(); }
 function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
-function formatBRL(n){ try{return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}catch{return String(n)} }
-function debounce(fn,delay=500){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),delay) } }
+function formatBRL(n){ try { return n.toLocaleString('pt-BR', { style:'currency', currency:'BRL' }); } catch { return String(n); } }
+function debounce(fn, delay=500){ let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args),delay); }; }
 function favSave(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet])); }
 function isFav(sku){ return favSet.has(String(sku)); }
 
-/* Normalização + rótulos */
-function norm(s){
-  return (s||'').toString()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-    .replace(/\s+/g,'').replace(/[^a-zA-Z0-9]/g,'')
-    .toLowerCase();
-}
-function toDashboardLabel(raw){
-  const n = norm(raw);
-  if (n==='leroymerlin') return 'LeroyMerlin';
-  if (n==='queroquero')  return 'QueroQuero';
-  if (n==='cassol'||n==='cassolcenterlar') return 'Cassol';
-  if (n==='redemac'||n==='redemacsuperbem'||n==='superbem') return 'RedeMac';
-  if (n==='mestretinho'||n==='mestrettinho') return 'MestreTinho';
-  if (n==='tumelero') return 'Tumelero';
-  if (n==='supremeinox'||n==='supremeinoxloja'||n==='supreme inox') return 'Supremeinox';
-  if (n==='ghaus'||n==='g-haus'||n==='gháus') return 'Ghaus';
-  return (raw||'').toString().replace(/\s+/g,'').replace(/[^\w]/g,'');
-}
-/* De view_key para rótulo final do dashboard */
-function labelFromViewKey(viewKey){
-  if (!viewKey) return '';
-  const base = String(viewKey).replace(/^Preco/i,'').replace(/_/g,'').trim();
-  return toDashboardLabel(base) || base;
-}
+/* ======== CABEÇALHOS ======== */
+function buildHeaders(){
+  const favHeadFixed = `<th class="col-fav">Ação</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
+  const genHeadFixed = `<th class="col-fav">★</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
 
-/* ===== Cabeçalhos ===== */
-function rebuildHeaders(){
-  const favFixed = `<th class="col-fav">Ação</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
-  const genFixed = `<th class="col-fav">★</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
-  const sitesTh = chosenSitesAll.map(lbl=>{
-    const locked = lockedSites.has(lbl) ? ' data-locked="true"' : ' data-locked="false"';
-    return `<th data-site="${lbl}"${locked}>${lbl}</th>`;
+  const sitesTh = chosenSiteIds.map(id => {
+    const label = idToLabel.get(id) || `Site ${id}`;
+    const locked = lockedSiteIds.has(id) ? ' data-locked="true"' : ' data-locked="false"';
+    return `<th data-siteid="${id}"${locked}>${label}</th>`;
   }).join('');
-  favHeaderRow.innerHTML = favFixed + sitesTh;
-  generalHeaderRow.innerHTML = genFixed + sitesTh;
-}
-function markLockedHeaders(){
-  document.querySelectorAll('thead th[data-site]').forEach(th=>{
-    const s = th.getAttribute('data-site');
-    const locked = lockedSites.has(s);
+
+  favHeaderRow.innerHTML = favHeadFixed + sitesTh;
+  generalHeaderRow.innerHTML = genHeadFixed + sitesTh;
+
+  // aplica opacidade/lock
+  document.querySelectorAll('thead th[data-siteid]').forEach(th=>{
+    const id = Number(th.getAttribute('data-siteid'));
+    const locked = lockedSiteIds.has(id);
     th.setAttribute('data-locked', locked ? 'true' : 'false');
     th.style.opacity = locked ? '0.4' : '1';
   });
 }
 
-/* ===== Plano ===== */
+/* ======== LIMITE DO PLANO ======== */
 async function getSitesLimitForPlan(planKey){
-  const key = (planKey||'').toLowerCase();
-  try{
-    const { data, error } = await sb.from('billing_plans').select('sites_limit, max_sites').eq('plan_key', key).maybeSingle();
+  const key = (planKey || '').toString().trim().toLowerCase();
+  try {
+    const { data, error } = await sb.from('billing_plans')
+      .select('sites_limit, max_sites')
+      .eq('plan_key', key)
+      .maybeSingle();
     if (error) throw error;
     const lim = Number(data?.sites_limit ?? data?.max_sites);
-    if (Number.isFinite(lim) && lim>0) return lim;
-  }catch(e){ console.warn('billing_plans fallback', e); }
+    if (Number.isFinite(lim) && lim > 0) return lim;
+  } catch(e) { console.warn('billing_plans sem valor; usando fallback.', e); }
   return DEFAULT_PLAN_SITE_LIMIT[key] ?? 2;
 }
 
-/* ===== Seleção do usuário → colunas (ordem preservada) ===== */
+/* ======== SELEÇÃO DO USUÁRIO (user_sites) → COLUNAS ======== */
 async function loadUserSitesAndLocks(userId, planKey){
   const maxSites = await getSitesLimitForPlan(planKey);
 
@@ -306,22 +320,25 @@ async function loadUserSitesAndLocks(userId, planKey){
     const { data, error } = await sb.from('user_sites')
       .select('site_id, created_at, id')
       .eq('user_id', userId)
-      .order('created_at', { ascending:true, nullsFirst:true })
-      .order('id', { ascending:true });
+      .order('created_at', { ascending: true, nullsFirst: true })
+      .order('id', { ascending: true });
     if (error) throw error;
     userRows = data || [];
-  }catch(e){ console.warn('user_sites erro', e); }
+  }catch(e){
+    console.warn('user_sites: falha de leitura', e);
+  }
 
   if (!userRows.length){
-    chosenSitesAll = [];
-    unlockedSites = new Set();
-    lockedSites = new Set();
-    rebuildHeaders(); markLockedHeaders();
     setStatus('Nenhum site selecionado em Meus Dados.');
+    chosenSiteIds = [];
+    unlockedSiteIds = new Set();
+    lockedSiteIds = new Set();
+    idToLabel.clear(); idToViewKey.clear(); viewKeyToId.clear();
+    buildHeaders();
     return;
   }
 
-  // 2) Busca APENAS id + view_key dos sites referenciados
+  // 2) Busca dados dos sites referenciados
   const ids = userRows.map(r=>r.site_id).filter(x=>x!=null);
   let sites = [];
   try{
@@ -330,85 +347,98 @@ async function loadUserSitesAndLocks(userId, planKey){
       .in('id', ids);
     if (error) throw error;
     sites = data || [];
-  }catch(e){ console.warn('sites erro', e); }
+  }catch(e){
+    console.warn('sites: falha de leitura', e);
+  }
 
-  // 3) Monta labels preservando a ordem de user_sites
-  const byId = new Map(sites.map(s=>[s.id, s]));
-  const labels = [];
+  // 3) Indexa e monta ordem final por site_id (sem duplicar)
+  idToLabel.clear(); idToViewKey.clear(); viewKeyToId.clear();
+  const byId = new Map(sites.map(s => [s.id, s]));
+  const order = [];
+  const seen = new Set();
   for (const r of userRows){
     const s = byId.get(r.site_id);
     if (!s) continue;
-    let lbl = s.view_key ? labelFromViewKey(s.view_key) : '';
-    if (!lbl) lbl = toDashboardLabel(s?.nome || s?.name || s?.site || '');
-    if (lbl) labels.push(lbl);
+    if (seen.has(s.id)) continue;
+    seen.add(s.id);
+    order.push(s.id);
+
+    const label = (s.nome || s.name || s.site || `Site ${s.id}`).toString();
+    idToLabel.set(s.id, label);
+    if (s.view_key){
+      idToViewKey.set(s.id, s.view_key);
+      viewKeyToId.set(s.view_key, s.id);
+    }
   }
+  chosenSiteIds = order;
 
-  // 4) Remove duplicados mantendo ordem
-  const seen = new Set();
-  chosenSitesAll = labels.filter(l=>{ if(seen.has(l)) return false; seen.add(l); return true; });
+  // 4) Bloqueio por plano
+  unlockedSiteIds = new Set(chosenSiteIds.slice(0, maxSites));
+  lockedSiteIds   = new Set(chosenSiteIds.slice(maxSites));
 
-  // 5) Aplica limite do plano (as primeiras ficam liberadas; resto ofuscado)
-  unlockedSites = new Set(chosenSitesAll.slice(0, maxSites));
-  lockedSites   = new Set(chosenSitesAll.slice(maxSites));
+  // 5) Cabeçalhos
+  buildHeaders();
 
-  rebuildHeaders();
-  markLockedHeaders();
-
-  setStatus(`Sites selecionados (ordem do usuário): ${chosenSitesAll.join(' · ')}`);
+  setStatus(`Sites selecionados (ordem do usuário): ${chosenSiteIds.map(id=>idToLabel.get(id)).join(' · ')}`);
 }
 
-/* ===== Agregação (usa label derivado do view_key dos dados) ===== */
+/* ======== AGREGAÇÃO (usa site_id como chave) ======== */
 function upsertRowsIntoProdutos(rows){
-  for (const r of rows){
-    const ean = String(r.ean ?? '');
-    const viewKey = String(r.site ?? '');
-    const lbl = labelFromViewKey(viewKey); // <- DERIVA DO VIEW_KEY, não força mapa fixo
-    if (!lbl || !chosenSitesAll.includes(lbl)) continue;
+  for (const row of rows){
+    const ean = String(row.ean ?? '');
+    const viewKey = String(row.site ?? '');   // exemplo: "PrecoLeroyMerlin"
+    const siteId = viewKeyToId.get(viewKey);
 
-    if (!produtosMap.has(ean)) produtosMap.set(ean, { sku: ean, desc: r.descricao||'', sites:{} });
+    // só agrega se esse site estiver entre os selecionados pelo usuário
+    if (!siteId || !chosenSiteIds.includes(siteId)) continue;
+
+    if (!produtosMap.has(ean)) {
+      produtosMap.set(ean, { sku: ean, desc: row.descricao || '', sites: {} });
+    }
     const item = produtosMap.get(ean);
-    if (!item.desc && r.descricao) item.desc = r.descricao;
+    if (!item.desc && row.descricao) item.desc = row.descricao;
 
-    const prev = item.sites[lbl];
-    if (!prev || new Date(r.data) > new Date(prev.data)){
-      item.sites[lbl] = { precoRaw:r.preco, precoNum:r.preco_num, data:r.data };
+    const prev = item.sites[siteId];
+    if (!prev || new Date(row.data) > new Date(prev.data)) {
+      item.sites[siteId] = { precoRaw: row.preco, precoNum: row.preco_num, data: row.data };
     }
   }
   produtosList = Array.from(produtosMap.values());
 }
 
-/* ===== Render ===== */
+/* ======== RENDER ======== */
 function chartButtonSVG(){
-  return `<svg class="chart-icon" viewBox="0 0 24 24" aria-hidden="true">
-    <rect x="3" y="11" width="3" height="7" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>
-    <rect x="9" y="8"  width="3" height="10" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>
-    <rect x="15" y="5" width="3" height="13" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>
-    <path d="M3,18 L7,14 L12,15 L17,8 L21,10" fill="none" stroke="#00d084" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-  </svg>`;
+  return `
+    <svg class="chart-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="3" y="11" width="3" height="7" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>
+      <rect x="9" y="8"  width="3" height="10" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>
+      <rect x="15" y="5" width="3" height="13" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>
+      <path d="M3,18 L7,14 L12,15 L17,8 L21,10" fill="none" stroke="#00d084" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`;
 }
 function computeMinMaxForRow(item){
-  let min = { site:null, val:Infinity }, max={ site:null, val:-Infinity };
-  for (const s of chosenSitesAll){
-    if (lockedSites.has(s)) continue;
-    const d = item.sites[s];
+  let min = { id:null, val: Infinity }, max = { id:null, val: -Infinity };
+  for (const id of chosenSiteIds) {
+    if (lockedSiteIds.has(id)) continue;
+    const d = item.sites[id];
     if (!d || !Number.isFinite(d.precoNum)) continue;
-    if (d.precoNum < min.val) { min={site:s, val:d.precoNum}; }
-    if (d.precoNum > max.val) { max={site:s, val:d.precoNum}; }
+    if (d.precoNum < min.val) { min = { id:id, val:d.precoNum }; }
+    if (d.precoNum > max.val) { max = { id:id, val:d.precoNum }; }
   }
-  return { minSite:min.site, maxSite:max.site };
+  return { minId: min.id, maxId: max.id };
 }
-function createPriceCell(item, label, minSite, maxSite){
+function createPriceCell(item, siteId, minId, maxId){
   const td = document.createElement('td');
-  const d = item.sites[label];
-  const isLocked = lockedSites.has(label);
+  const d = item.sites[siteId];
+  const isLocked = lockedSiteIds.has(siteId);
   if (isLocked) td.classList.add('locked-cell');
 
-  if (d){
-    const dtStr = d.data ? new Date(d.data).toLocaleString('pt-BR') : '';
-    if (Number.isFinite(d.precoNum)){
+  if (d) {
+    const dataStr = d.data ? new Date(d.data).toLocaleString('pt-BR') : '';
+    if (Number.isFinite(d.precoNum)) {
       const span = document.createElement('span');
-      span.className = `price ${!isLocked && label===minSite ? 'min' : (!isLocked && label===maxSite ? 'max':'')}`;
-      span.title = isLocked ? 'Excedeu o limite do plano' : (dtStr ? `Atualizado em ${dtStr}` : '');
+      span.className = `price ${!isLocked && siteId===minId ? 'min' : (!isLocked && siteId===maxId ? 'max':'')}`;
+      span.title = isLocked ? 'Excedeu o limite do plano' : (dataStr ? `Atualizado em ${dataStr}` : '');
       span.textContent = formatBRL(d.precoNum);
       td.appendChild(span);
 
@@ -416,38 +446,41 @@ function createPriceCell(item, label, minSite, maxSite){
       b.className='chart-btn'; b.type='button';
       b.title = isLocked ? 'Disponível no upgrade' : 'Ver histórico';
       b.innerHTML = chartButtonSVG();
-      b.addEventListener('click',(ev)=>{ if(isLocked){location.href='planos.html';return;} openChartFor(ev, item.sku, label); });
+      b.addEventListener('click', (ev)=>{
+        if (isLocked){ window.location.href='planos.html'; return; }
+        openChartFor(ev, item.sku, siteId);
+      });
       td.appendChild(b);
 
       if (isLocked){
         const up = document.createElement('button');
         up.className='unlock'; up.type='button'; up.title='Excedeu o limite do plano. Ver planos.'; up.textContent='Ver planos';
-        up.addEventListener('click', ()=> location.href='planos.html');
+        up.addEventListener('click', ()=> window.location.href='planos.html');
         td.appendChild(up);
       }
-    }else{
+    } else {
       const span = document.createElement('span');
       span.className='price';
-      span.title = isLocked ? 'Excedeu o limite do plano' : (dtStr ? `Atualizado em ${dtStr}` : '');
+      span.title = isLocked ? 'Excedeu o limite do plano' : (dataStr ? `Atualizado em ${dataStr}` : '');
       span.textContent = (d.precoRaw??'').toString();
       td.appendChild(span);
     }
-  }else{
+  } else {
     td.innerHTML = `<span class="muted">—</span>`;
   }
   return td;
 }
 function renderRowInto(tr, item){
   const tdFav = document.createElement('td'); tdFav.className='col-fav';
-  const chk = document.createElement('input'); chk.type='checkbox'; chk.checked=isFav(item.sku);
-  chk.addEventListener('change', ()=>{ if(chk.checked) favSet.add(item.sku); else favSet.delete(item.sku); favSave(); renderFavs(); updateFavHeight(); updateCounts(); });
+  const chk = document.createElement('input'); chk.type='checkbox'; chk.checked=isFav(item.sku); chk.title='Marcar como favorito';
+  chk.addEventListener('change', ()=>{ if (suppressGeneralChange) return; if (chk.checked) favSet.add(item.sku); else favSet.delete(item.sku); favSave(); renderFavs(); updateFavHeight(); updateCounts(); });
   tdFav.appendChild(chk); tr.appendChild(tdFav); generalChkMap.set(item.sku, chk);
 
   const tdSku = document.createElement('td'); tdSku.className='col-sku'; tdSku.textContent=item.sku; tr.appendChild(tdSku);
   const tdDesc= document.createElement('td'); tdDesc.className='col-desc'; tdDesc.innerHTML=(item.desc||'').replace(/</g,'&lt;'); tr.appendChild(tdDesc);
 
-  const {minSite,maxSite} = computeMinMaxForRow(item);
-  for (const lbl of chosenSitesAll){ tr.appendChild(createPriceCell(item, lbl, minSite, maxSite)); }
+  const {minId,maxId} = computeMinMaxForRow(item);
+  for (const id of chosenSiteIds){ tr.appendChild(createPriceCell(item, id, minId, maxId)); }
 }
 function renderGeneralChunk(){
   const end = Math.min(itemsRendered + RENDER_CHUNK, produtosList.length);
@@ -467,7 +500,7 @@ function onGeneralScroll(){
 }
 generalWrap.addEventListener('scroll', onGeneralScroll);
 
-/* ===== Favoritos ===== */
+/* ======== FAVORITOS ======== */
 function renderFavs(){
   favBody.innerHTML='';
   const favList = produtosList.filter(p=>isFav(p.sku));
@@ -483,15 +516,15 @@ function renderFavs(){
     const tdSku=document.createElement('td'); tdSku.className='col-sku'; tdSku.textContent=item.sku; tr.appendChild(tdSku);
     const tdDesc=document.createElement('td'); tdDesc.className='col-desc'; tdDesc.innerHTML=(item.desc||'').replace(/</g,'&lt;'); tr.appendChild(tdDesc);
 
-    const {minSite,maxSite}=computeMinMaxForRow(item);
-    for (const lbl of chosenSitesAll){ tr.appendChild(createPriceCell(item, lbl, minSite, maxSite)); }
+    const {minId,maxId}=computeMinMaxForRow(item);
+    for (const id of chosenSiteIds){ tr.appendChild(createPriceCell(item, id, minId, maxId)); }
 
     frag.appendChild(tr);
   }
   favBody.appendChild(frag);
 }
 
-/* ===== Contadores ===== */
+/* ======== CONTADORES ======== */
 function updateCounts(){
   const favs=favSet.size;
   countShown.textContent = `Exibindo ${itemsRendered} de ${produtosList.length} no Geral (carregados)`;
@@ -499,37 +532,37 @@ function updateCounts(){
   countFavs.textContent  = `Favoritos: ${favs}`;
 }
 
-/* ===== Query paginada ===== */
+/* ======== CONSULTA (paginação) ======== */
 function buildQuery(){
-  let q = sb.from(VIEW).select('ean, site, preco, data, descricao, preco_num', { count:'estimated' }).order('data', { ascending:false });
-  if (currentEanQ)  q = q.ilike('ean', `%${currentEanQ}%`);
+  let q = sb.from(VIEW).select('ean, site, preco, data, descricao, preco_num', { count: 'estimated' }).order('data', { ascending: false });
+  if (currentEanQ) q = q.ilike('ean', `%${currentEanQ}%`);
   if (currentDescQ) q = q.ilike('descricao', `%${currentDescQ}%`);
   return q;
 }
 async function fetchNextPage(){
   if (fetching || serverExhausted) return;
-  fetching = true; hideErr(); setStatus(`Carregando… (offset ${serverOffset})`);
+  fetching = true; hideErr(); setStatus(`Carregando dados… (offset ${serverOffset})`);
   try{
     const from = serverOffset, to = serverOffset + PAGE_SIZE - 1;
     const { data, error } = await buildQuery().range(from, to);
     if (error) throw error;
 
-    if (!data || data.length===0){
+    if (!data || data.length === 0) {
       serverExhausted = true; setStatus('Todos os dados carregados.');
       if (itemsRendered >= produtosList.length) endMarker.textContent = 'Fim da lista';
-    }else{
+    } else {
       upsertRowsIntoProdutos(data);
       if (itemsRendered < produtosList.length) renderGeneralChunk();
       renderFavs();
-      if (!favFirstAutoRenderDone){ updateFavHeight(); favFirstAutoRenderDone=true; }
+      if (!favFirstAutoRenderDone) { updateFavHeight(); favFirstAutoRenderDone = true; }
       serverOffset += PAGE_SIZE;
       setStatus(`Carregados: ${produtosList.length} SKUs (parcial)`);
     }
-  }catch(e){ console.error(e); showErr('Falha ao carregar: ' + (e?.message || e)); setStatus('Erro ao carregar.'); }
-  finally { fetching=false; updateCounts(); }
+  } catch(e){ console.error(e); showErr('Falha ao carregar: ' + (e?.message || e)); setStatus('Erro ao carregar.'); }
+  finally { fetching = false; updateCounts(); }
 }
 
-/* ===== Reset ===== */
+/* ======== RESET ======== */
 function resetAndQuery(){
   produtosMap.clear(); produtosList=[]; serverOffset=0; serverExhausted=false; favFirstAutoRenderDone=false;
   resetGeneralDom();
@@ -537,30 +570,36 @@ function resetAndQuery(){
   fetchNextPage();
 }
 
-/* ===== Navegação / filtros ===== */
-ddMeusDados.addEventListener('click', ()=> location.href='meusdados.html');
-ddPlanos.addEventListener('click', ()=> location.href='planos.html');
-btnSair.addEventListener('click', async ()=>{ try{ await sb.auth.signOut(); }finally{ localStorage.removeItem('mm_login_date'); location.href = CFG.SITE_URL || 'index.html'; } });
-
-const onFilterInput = debounce(()=>{ currentEanQ=(eanFilter.value||'').trim(); currentDescQ=(descFilter.value||'').trim(); resetAndQuery(); }, 500);
+/* ======== NAVEGAÇÃO / FILTROS ======== */
+ddMeusDados.addEventListener('click', () => { window.location.href = 'meusdados.html'; });
+ddPlanos.addEventListener('click', () => { window.location.href = 'planos.html'; });
+btnSair.addEventListener('click', async () => {
+  try { await sb.auth.signOut(); } catch (e) { console.error('Erro ao sair:', e); }
+  finally { localStorage.removeItem('mm_login_date'); window.location.href = CFG.SITE_URL || 'index.html'; }
+});
+const onFilterInput = debounce(() => {
+  currentEanQ = (eanFilter.value || '').trim();
+  currentDescQ = (descFilter.value || '').trim();
+  resetAndQuery();
+}, 500);
 eanFilter.addEventListener('input', onFilterInput);
 descFilter.addEventListener('input', onFilterInput);
 
-btnReload.addEventListener('click', async ()=>{
-  const s=(await sb.auth.getSession()).data.session;
-  if (s?.user?.id){
+btnReload.addEventListener('click', async () => {
+  const session = (await sb.auth.getSession()).data.session;
+  if (session?.user?.id) {
     let planKey = 'basico';
     try{
-      const { data, error } = await sb.from('profiles').select('plan').eq('id', s.user.id).maybeSingle();
+      const { data, error } = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
       if (!error) planKey = (data?.plan || 'basico').toString().toLowerCase();
       planChip.textContent = `Plano: ${planKey.charAt(0).toUpperCase()+planKey.slice(1)}`;
-    }catch{}
-    await loadUserSitesAndLocks(s.user.id, planKey);
+    }catch(e){}
+    await loadUserSitesAndLocks(session.user.id, planKey);
   }
   resetAndQuery();
 });
 
-/* ===== Favoritos height / resizer ===== */
+/* ======== FAVORITOS: altura e resizer ======== */
 function measureRowHeight(){ const row = document.querySelector('#favTable tbody tr'); if (!row) return 44; const h = Math.round(row.getBoundingClientRect().height); return Math.max(36, h || 44); }
 function measureHeadHeight(){ const head = document.querySelector('#favTable thead'); if (!head) return 40; const h = Math.round(head.getBoundingClientRect().height); return Math.max(32, h || 40); }
 let favHeightUser = Number(localStorage.getItem('mm_fav_height')) || null;
@@ -583,69 +622,87 @@ function updateFavHeight(){
   favResizer.addEventListener('dblclick', ()=>{ favHeightUser = null; localStorage.removeItem('mm_fav_height'); updateFavHeight(); });
 })();
 
-/* ===== Gráfico ===== */
+/* ======== MINI-GRÁFICO ======== */
 function closePopover(){ pop.style.display='none'; }
-function positionPopover(x,y){
-  const pad=12, vw=innerWidth, vh=innerHeight; let left=x+pad, top=y+pad; const W=240, H=260;
-  if (left+W>vw) left=x-W-pad; if (top+H>vh) top=y-H-pad;
-  pop.style.left=Math.max(8,left)+'px'; pop.style.top=Math.max(8,top)+'px';
+function positionPopover(x, y){
+  const pad = 12; const vw = window.innerWidth, vh = window.innerHeight;
+  let left = x + pad, top = y + pad; const rectW = 240, rectH = 260;
+  if (left + rectW > vw) left = x - rectW - pad;
+  if (top + rectH > vh) top = y - rectH - pad;
+  pop.style.left = Math.max(8, left) + 'px';
+  pop.style.top  = Math.max(8, top) + 'px';
 }
-document.addEventListener('click', (ev)=>{ if(pop.style.display!=='none' && !pop.contains(ev.target)) closePopover(); });
-document.addEventListener('keydown', (ev)=>{ if(ev.key==='Escape') closePopover(); });
+document.addEventListener('click', (ev) => { if (pop.style.display !== 'none' && !pop.contains(ev.target)) closePopover(); });
+document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closePopover(); });
 popClose.addEventListener('click', closePopover);
 
 function drawSparkline(points){
-  const ctx=sparkCtx, W=sparkCanvas.width, H=sparkCanvas.height; ctx.clearRect(0,0,W,H);
-  if(!points||points.length<3){ popMsg.style.display='block'; popMsg.textContent='Histórico insuficiente (≥3 pontos).'; return; }
+  const ctx = sparkCtx; const W = sparkCanvas.width, H = sparkCanvas.height; ctx.clearRect(0,0,W,H);
+  if (!points || points.length < 3){ popMsg.style.display='block'; popMsg.textContent = 'Histórico insuficiente (precisa de 3 preços).'; return; }
   popMsg.style.display='none';
-  const m={l:40,r:14,t:12,b:28};
-  const xs=points.map(p=>p.x.getTime()), ys=points.map(p=>p.y);
-  const xMin=Math.min(...xs), xMax=Math.max(...xs), yMin=Math.min(...ys), yMax=Math.max(...ys);
-  const xS=v=>m.l+((v-xMin)/(xMax-xMin||1))*(W-m.l-m.r);
-  const yR=v=>H-m.b-((v-yMin)/(yMax-yMin||1))*(H-m.t-m.b);
-  const yS=v=>Math.max(m.t+6, Math.min(H-m.b-6, yR(v)));
-  ctx.strokeStyle='#232323'; ctx.lineWidth=1; ctx.beginPath();
-  for(let i=0;i<=3;i++){ const yy=m.t+i*(H-m.t-m.b)/3; ctx.moveTo(m.l,yy); ctx.lineTo(W-m.r,yy); } ctx.stroke();
-  ctx.beginPath(); ctx.lineWidth=3; ctx.strokeStyle='#00d084';
-  points.forEach((p,i)=>{ const x=xS(p.x.getTime()), y=yS(p.y); if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); }); ctx.stroke();
-  ctx.fillStyle='#bfffc1'; for(const p of points){ const x=xS(p.x.getTime()), y=yS(p.y); ctx.beginPath(); ctx.arc(x,y,3.2,0,Math.PI*2); ctx.fill(); }
-  ctx.fillStyle='#9aa0a6'; ctx.font='11px Arial'; ctx.textAlign='right';
-  const yMaxY=yS(yMax), yMinY=yS(yMin); ctx.fillText(formatBRL(yMax), m.l-6, Math.max(m.t+10, yMaxY-6)); ctx.fillText(formatBRL(yMin), m.l-6, Math.min(H-m.b-2, yMinY+12));
-  const fmt=d=>d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}); ctx.textAlign='center'; ctx.fillText(fmt(points[0].x), Math.max(m.l,24), H-8); ctx.fillText(fmt(points.at(-1).x), Math.min(W-14,W-24), H-8);
+  const m = { l: 40, r: 14, t: 12, b: 28 };
+  const xs = points.map(p=>p.x.getTime()); const ys = points.map(p=>p.y);
+  const xMin = Math.min(...xs), xMax = Math.max(...xs); const yMin = Math.min(...ys), yMax = Math.max(...ys);
+  const xScale = v => m.l + ((v - xMin) / (xMax - xMin || 1)) * (W - m.l - m.r);
+  const yScaleRaw = v => H - m.b - ((v - yMin) / (yMax - yMin || 1)) * (H - m.t - m.b);
+  const yScale = v => Math.max(m.t+6, Math.min(H - m.b - 6, yScaleRaw(v)));
+  ctx.strokeStyle = '#232323'; ctx.lineWidth = 1; ctx.beginPath();
+  for (let i=0;i<=3;i++){ const yy = m.t + i*(H - m.t - m.b)/3; ctx.moveTo(m.l, yy); ctx.lineTo(W - m.r, yy); }
+  ctx.stroke();
+  ctx.beginPath(); ctx.lineWidth = 3; ctx.strokeStyle = '#00d084';
+  points.forEach((p, i)=>{ const x = xScale(p.x.getTime()), y = yScale(p.y); if (i === 0) ctx.moveTo(x,y); else ctx.lineTo(x,y); });
+  ctx.stroke();
+  ctx.fillStyle = '#bfffc1';
+  for (const p of points){ const x = xScale(p.x.getTime()), y = yScale(p.y); ctx.beginPath(); ctx.arc(x,y,3.2,0,Math.PI*2); ctx.fill(); }
+  ctx.fillStyle = '#9aa0a6'; ctx.font = '11px Arial'; ctx.textAlign = 'right';
+  const yMaxY = yScale(yMax), yMinY = yScale(yMin);
+  ctx.fillText(formatBRL(yMax), m.l-6, Math.max(m.t+10, yMaxY-6));
+  ctx.fillText(formatBRL(yMin), m.l-6, Math.min(H - m.b - 2, yMinY+12));
+  const fmt = (d)=> d.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' });
+  ctx.textAlign = 'center'; ctx.fillText(fmt(points[0].x), Math.max(m.l, 24), H-8); ctx.fillText(fmt(points[points.length-1].x), Math.min(W - m.r, W-24), H-8);
 }
-async function openChartFor(ev, ean, label){
+async function openChartFor(ev, ean, siteId){
   ev.stopPropagation();
-  const rect = ev.currentTarget.getBoundingClientRect(); positionPopover(rect.right, rect.bottom);
+  const rect = ev.currentTarget.getBoundingClientRect();
+  positionPopover(rect.right, rect.bottom);
+  const label = idToLabel.get(siteId) || `Site ${siteId}`;
   popTitle.textContent = `${label} • ${ean}`;
-  popMsg.style.display='block'; popMsg.textContent='Carregando…'; sparkCtx.clearRect(0,0,sparkCanvas.width,sparkCanvas.height); pop.style.display='block';
+  popMsg.style.display='block'; popMsg.textContent = 'Carregando histórico…';
+  sparkCtx.clearRect(0,0,sparkCanvas.width,sparkCanvas.height);
+  pop.style.display='block';
   try{
-    const viewKey = 'Preco' + label.replace(/[^A-Za-z0-9]/g,''); // coerente com labelFromViewKey
+    const viewKey = idToViewKey.get(siteId) || '';
+    if (!viewKey) { popMsg.style.display='block'; popMsg.textContent = 'Site sem view_key mapeada.'; return; }
     const { data, error } = await sb.from(VIEW).select('data, preco_num')
-      .eq('ean', ean).eq('site', viewKey).not('preco_num','is',null).order('data',{ascending:true}).limit(60);
+      .eq('ean', ean)
+      .eq('site', viewKey)
+      .not('preco_num', 'is', null)
+      .order('data', { ascending: true }).limit(60);
     if (error) throw error;
-    const pts = (data||[]).filter(r=>typeof r.preco_num==='number'&&Number.isFinite(r.preco_num)).map(r=>({x:new Date(r.data), y:r.preco_num}));
-    drawSparkline(pts);
-  }catch(e){ console.error(e); popMsg.style.display='block'; popMsg.textContent='Falha ao carregar histórico.'; }
+    const points = (data||[]).filter(r => typeof r.preco_num === 'number' && Number.isFinite(r.preco_num)).map(r => ({ x: new Date(r.data), y: r.preco_num }));
+    drawSparkline(points);
+  } catch(e){ console.error(e); popMsg.style.display='block'; popMsg.textContent = 'Falha ao carregar histórico.'; }
 }
 
-/* ===== Init ===== */
+/* ======== INIT ======== */
 (async function init(){
   const { data: { session } } = await sb.auth.getSession();
   if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return; }
-  userChip.textContent = session.user?.email || 'Logado';
 
+  userChip.textContent = session.user?.email || 'Logado';
   let planKey = 'basico';
   try{
     const { data, error } = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
-    if (!error){
-      const raw = (data?.plan || 'basico').toString();
-      planKey = raw.toLowerCase();
-      planChip.textContent = `Plano: ${raw.charAt(0).toUpperCase()+raw.slice(1)}`;
-    }
-  }catch{}
+    if (error) throw error;
+    const planRaw = (data?.plan || 'basico').toString();
+    planKey = planRaw.toLowerCase();
+    planChip.textContent = `Plano: ${planRaw.charAt(0).toUpperCase() + planRaw.slice(1)}`;
+  }catch(e){ console.error(e); planChip.textContent = 'Plano: —'; }
 
+  // Seleção de sites + cabeçalhos na ordem da seleção
   await loadUserSitesAndLocks(session.user.id, planKey);
 
+  // Primeira carga
   currentEanQ = ''; currentDescQ = '';
   resetAndQuery();
   generalWrap.dispatchEvent(new Event('scroll'));
