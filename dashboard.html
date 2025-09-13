@@ -196,7 +196,7 @@
 </div>
 
 <script>
-/* ======== ERROS VISÍVEIS ======== */
+/* ======== AJUDA: Mostra erros no topo ======== */
 window.addEventListener('error', e => { const el=document.getElementById('err'); el.style.display='block'; el.textContent='Erro JS: '+e.message; });
 window.addEventListener('unhandledrejection', e => { const el=document.getElementById('err'); el.style.display='block'; el.textContent='Erro assíncrono: '+(e.reason?.message||e.reason); });
 
@@ -214,38 +214,39 @@ const RENDER_CHUNK = 60;
 
 /* ======== ELEMENTOS ======== */
 const statusEl = document.getElementById('status');
-const errEl    = document.getElementById('err');
+const errEl = document.getElementById('err');
 const userChip = document.getElementById('userChip');
 const planChip = document.getElementById('planChip');
 const ddMeusDados = document.getElementById('ddMeusDados');
-const ddPlanos    = document.getElementById('ddPlanos');
-const btnSair     = document.getElementById('btnSair');
-const btnReload   = document.getElementById('btnReload');
-const eanFilter   = document.getElementById('eanFilter');
-const descFilter  = document.getElementById('descFilter');
+const ddPlanos = document.getElementById('ddPlanos');
+const btnSair = document.getElementById('btnSair');
+const btnReload = document.getElementById('btnReload');
+const eanFilter = document.getElementById('eanFilter');
+const descFilter = document.getElementById('descFilter');
 
-const favWrap  = document.getElementById('favWrap');
-const favBody  = document.querySelector('#favTable tbody');
+const favWrap = document.getElementById('favWrap');
+const favBody = document.querySelector('#favTable tbody');
 const favResizer = document.getElementById('favResizer');
 
 const generalWrap = document.getElementById('generalWrap');
 const generalBody = document.querySelector('#produtosTable tbody');
-const endMarker   = document.getElementById('endMarker');
+const endMarker = document.getElementById('endMarker');
 
-const countShown  = document.getElementById('countShown');
-const countTotal  = document.getElementById('countTotal');
-const countFavs   = document.getElementById('countFavs');
+const countShown = document.getElementById('countShown');
+const countTotal = document.getElementById('countTotal');
+const countFavs  = document.getElementById('countFavs');
 
-const favHeaderRow     = document.getElementById('favHeaderRow');
+/* Cabeçalhos dinâmicos */
+const favHeaderRow = document.getElementById('favHeaderRow');
 const generalHeaderRow = document.getElementById('generalHeaderRow');
 
 /* Popover/Canvas */
-const pop        = document.getElementById('chartPopover');
-const popTitle   = document.getElementById('chartTitle');
-const popClose   = document.getElementById('chartClose');
-const popMsg     = document.getElementById('chartMsg');
-const sparkCanvas= document.getElementById('spark');
-const sparkCtx   = sparkCanvas.getContext('2d');
+const pop = document.getElementById('chartPopover');
+const popTitle = document.getElementById('chartTitle');
+const popClose = document.getElementById('chartClose');
+const popMsg = document.getElementById('chartMsg');
+const sparkCanvas = document.getElementById('spark');
+const sparkCtx = sparkCanvas.getContext('2d');
 
 /* ======== MAPA view_key -> label, e inverso ======== */
 const siteMap = {
@@ -258,19 +259,16 @@ const siteMap = {
   "PrecoSupremeinox": "Supremeinox",
   "PrecoGhaus": "Ghaus"
 };
-// inverso dinâmico (vamos preenchendo)
 const viewKeyByLabel = Object.fromEntries(Object.entries(siteMap).map(([k,v])=>[v,k]));
 const KNOWN_LABELS = Object.values(siteMap);
 
 /* ======== ESTADO ======== */
-const DEFAULT_PLAN_SITE_LIMIT = { trial:2, basico:4, intermediario:5, premium:8 };
-
-let chosenSitesAll = [];          // labels na ordem do user_sites
-let unlockedSites = new Set();    // liberadas pelo plano
-let lockedSites   = new Set();    // excedentes do plano
+let chosenSitesAll = [];          // labels exatamente como o usuário selecionou (ordem do user_sites)
+let unlockedSites = new Set(KNOWN_LABELS); // mantido (plano) — não tratamos limite aqui
+let lockedSites = new Set();               // mantido
 
 let favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
-let produtosMap = new Map();      // Map<ean, { sku, desc, sites: { [label]: {...} } }>
+let produtosMap = new Map();              // Map<ean, { sku, desc, sites: { [label]: {...} } }>
 let produtosList = [];
 let itemsRendered = 0;
 
@@ -287,14 +285,17 @@ const generalChkMap = new Map();
 
 let favFirstAutoRenderDone = false;
 
+/* ======== LIMITES (fallback, mantido) ======== */
+const DEFAULT_PLAN_SITE_LIMIT = { trial: 2, basico: 4, intermediario: 5, premium: 8 };
+
 /* ======== HELPERS ======== */
 function setStatus(t){ statusEl.textContent = t || ''; }
 function showErr(e){ errEl.style.display='block'; errEl.textContent = String(e||'').trim(); }
 function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
 function formatBRL(n){ try { return n.toLocaleString('pt-BR', { style:'currency', currency:'BRL' }); } catch { return String(n); } }
-function debounce(fn, delay=500){ let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args),delay); }; }
 function favSave(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet])); }
 function isFav(sku){ return favSet.has(String(sku)); }
+function debounce(fn, delay=500){ let t; return (...args)=>{ clearTimeout(t); t = setTimeout(()=>fn(...args), delay); }; }
 
 function normalizeSiteLabel(x){
   if (!x) return "";
@@ -304,27 +305,19 @@ function normalizeSiteLabel(x){
 function toDashboardLabel(raw){
   const n = normalizeSiteLabel(raw);
   if (n === 'leroymerlin') return 'LeroyMerlin';
-  if (n === 'queroquero')  return 'QueroQuero';
+  if (n === 'queroquero') return 'QueroQuero';
   if (n === 'cassol' || n === 'cassolcenterlar') return 'Cassol';
-  if (n === 'redemac' || n === 'redemacsuperbem' || n === 'superbem') return 'RedeMac';
+  if (n === 'redemac' || n === 'redemacsuperbem' || n === 'superbem' || n === 'redemacsuperbem') return 'RedeMac';
   if (n === 'mestretinho' || n === 'mestrettinho') return 'MestreTinho';
   if (n === 'tumelero') return 'Tumelero';
   if (n === 'supremeinox' || n === 'supreme inox') return 'Supremeinox';
   if (n === 'ghaus' || n === 'g-haus' || n === 'gháus') return 'Ghaus';
+  // Se não casar, retorna string "colável" como rótulo mesmo assim
   const fallback = (raw||'').toString().replace(/\s+/g,'').replace(/[^\w]/g,'');
   return fallback || '';
 }
-function labelFromViewKey(viewKey){
-  if (!viewKey) return '';
-  const base = String(viewKey).replace(/^Preco/i,'').replace(/_/g,'').trim();
-  const map = {
-    LeroyMerlin:'LeroyMerlin', QueroQuero:'QueroQuero', Cassol:'Cassol', RedeMac:'RedeMac',
-    MestreTinho:'MestreTinho', Tumelero:'Tumelero', Supremeinox:'Supremeinox', Ghaus:'Ghaus'
-  };
-  return map[base] || base;
-}
 
-/* ======== CABEÇALHOS ======== */
+/* ======== 1) Cabeçalhos dinâmicos conforme seleção ======== */
 function buildHeaders(){
   const favHeadFixed = `<th class="col-fav">Ação</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
   const genHeadFixed = `<th class="col-fav">★</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
@@ -338,7 +331,8 @@ function buildHeaders(){
   generalHeaderRow.innerHTML = genHeadFixed + sitesTh;
 }
 function markLockedHeaders(){
-  document.querySelectorAll('thead th[data-site]').forEach(th=>{
+  const ths = document.querySelectorAll('thead th[data-site]');
+  ths.forEach(th=>{
     const s = th.getAttribute('data-site');
     const locked = lockedSites.has(s);
     th.setAttribute('data-locked', locked ? 'true' : 'false');
@@ -346,7 +340,7 @@ function markLockedHeaders(){
   });
 }
 
-/* ======== LIMITE DO PLANO ======== */
+/* ======== 2) Carregar seleção do usuário em user_sites (ordem real) ======== */
 async function getSitesLimitForPlan(planKey){
   const key = (planKey || '').toString().trim().toLowerCase();
   try {
@@ -361,25 +355,22 @@ async function getSitesLimitForPlan(planKey){
   return DEFAULT_PLAN_SITE_LIMIT[key] ?? 2;
 }
 
-/* ======== >>> SELEÇÃO DO USUÁRIO (user_sites) — AJUSTADO AO SEU SCHEMA <<< ======== */
 async function loadUserSitesAndLocks(userId, planKey){
   const maxSites = await getSitesLimitForPlan(planKey);
 
-  // lê user_sites NA SUA ESTRUTURA REAL: user_id, site_id, created_at, id
+  // 1) Lê user_sites na ordem real do usuário (position, depois id)
   let userRows = [];
   try{
     const { data, error } = await sb.from('user_sites')
-      .select('site_id, created_at, id')
+      .select('site_id, enabled, position, id')
       .eq('user_id', userId)
-      .order('created_at', { ascending: true, nullsFirst: true })
+      .order('position', { ascending: true, nullsFirst: true })
       .order('id', { ascending: true });
     if (error) throw error;
-    userRows = data || [];
-  }catch(e){
-    console.warn('user_sites: falha de leitura', e);
-  }
+    userRows = (data || []).filter(r => r.enabled !== false);
+  }catch(e){ console.warn('user_sites: falha de leitura', e); }
 
-  // converte site_id -> label usando tabela sites (mantendo a ORDEM do user_sites)
+  // 2) Converte para labels preservando ordem do user_sites
   let labels = [];
   if (userRows.length){
     const ids = userRows.map(r=>r.site_id).filter(x=>x!=null);
@@ -392,52 +383,48 @@ async function loadUserSitesAndLocks(userId, planKey){
       const ordered = ids.map(id => (sites||[]).find(s => s.id === id)).filter(Boolean);
       ordered.forEach(s => {
         let lbl = '';
-        if (s.view_key){
-          lbl = labelFromViewKey(s.view_key);
-          if (lbl){ viewKeyByLabel[lbl] = s.view_key; } // guarda inverso pra gráficos
-        }
-        if (!lbl){
+        // Preferência: usar view_key mapeado
+        if (s.view_key && siteMap[s.view_key]) {
+          lbl = siteMap[s.view_key];
+          // guarda inverso para gráficos
+          viewKeyByLabel[lbl] = s.view_key;
+        } else {
+          // Heurística pelo nome
           lbl = toDashboardLabel(s?.nome || s?.name || s?.site || '');
+          // se já conhecemos a view_key dessa label, mantemos; senão, fica sem vínculo (só cabeçalho)
         }
         if (lbl) labels.push(lbl);
       });
     }catch(e){ console.warn('sites: falha de leitura', e); }
   }
 
-  // se usuário não tem seleção, não vamos mostrar tudo — mas deixamos um fallback gentil
+  // 3) Se não há seleção válida, fallback = todos conhecidos (apenas para garantir que a página abra)
   if (!labels.length){
-    setStatus('Nenhum site selecionado em Meus Dados.');
-    chosenSitesAll = [];
-    unlockedSites = new Set();
-    lockedSites = new Set();
-    buildHeaders(); markLockedHeaders();
-    return;
+    labels = [...KNOWN_LABELS]; // ordem padrão apenas quando não há seleção
   }
 
-  // remove duplicatas preservando ordem
-  const uniq = [];
-  const seen = new Set();
-  for (const l of labels){ if (l && !seen.has(l)){ seen.add(l); uniq.push(l); } }
-  chosenSitesAll = uniq;
+  // 4) Remove duplicatas preservando ordem
+  chosenSitesAll = [...new Set(labels)];
 
-  // bloqueio por plano: primeiras N colunas liberadas; demais ficam ofuscadas
-  unlockedSites = new Set(uniq.slice(0, maxSites));
-  lockedSites   = new Set(uniq.slice(maxSites));
+  // 5) (Bloqueio por plano — mantido, sem mudanças de regra)
+  unlockedSites = new Set(chosenSitesAll.slice(0, maxSites));
+  lockedSites   = new Set(chosenSitesAll.slice(maxSites));
 
+  // 6) Monta cabeçalhos na exata ordem da seleção
   buildHeaders();
   markLockedHeaders();
 
   setStatus(`Sites selecionados (ordem do usuário): ${chosenSitesAll.join(' · ')}`);
 }
 
-/* ======== AGREGAÇÃO (só colunas selecionadas) ======== */
+/* ======== 3) Agregar dados por EAN, gravando por label selecionado ======== */
 function upsertRowsIntoProdutos(rows){
   for (const row of rows){
     const ean = String(row.ean ?? '');
-    const viewKey = String(row.site ?? '');      // ex.: "PrecoLeroyMerlin"
-    const lbl = siteMap[viewKey] || labelFromViewKey(viewKey);
-    if (!lbl) continue;
-    if (!chosenSitesAll.includes(lbl)) continue; // mostra só o que o usuário escolheu
+    const viewKey = String(row.site ?? '');           // ex.: "PrecoLeroyMerlin"
+    const label = siteMap[viewKey];                   // ex.: "LeroyMerlin"
+    if (!label) continue;                             // ignora sites não mapeados na view
+    if (!chosenSitesAll.includes(label)) continue;    // ignora se usuário não selecionou essa coluna
 
     if (!produtosMap.has(ean)) {
       produtosMap.set(ean, { sku: ean, desc: row.descricao || '', sites: {} });
@@ -445,15 +432,15 @@ function upsertRowsIntoProdutos(rows){
     const item = produtosMap.get(ean);
     if (!item.desc && row.descricao) item.desc = row.descricao;
 
-    const prev = item.sites[lbl];
+    const prev = item.sites[label];
     if (!prev || new Date(row.data) > new Date(prev.data)) {
-      item.sites[lbl] = { precoRaw: row.preco, precoNum: row.preco_num, data: row.data };
+      item.sites[label] = { precoRaw: row.preco, precoNum: row.preco_num, data: row.data };
     }
   }
   produtosList = Array.from(produtosMap.values());
 }
 
-/* ======== RENDER ======== */
+/* ======== 4) Render: só cria TD para sites selecionados, na ordem ======== */
 function chartButtonSVG(){
   return `
     <svg class="chart-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -466,7 +453,7 @@ function chartButtonSVG(){
 function computeMinMaxForRow(item){
   let min = { site:null, val: Infinity }, max = { site:null, val: -Infinity };
   for (const s of chosenSitesAll) {
-    if (lockedSites.has(s)) continue;
+    if (lockedSites.has(s)) continue; // ignora bloqueadas
     const d = item.sites[s];
     if (!d || !Number.isFinite(d.precoNum)) continue;
     if (d.precoNum < min.val) { min = { site:s, val:d.precoNum }; }
@@ -476,6 +463,8 @@ function computeMinMaxForRow(item){
 }
 function createPriceCell(item, siteName, minSite, maxSite){
   const td = document.createElement('td');
+  if (!chosenSitesAll.includes(siteName)) return td; // segurança
+
   const d = item.sites[siteName];
   const isLocked = lockedSites.has(siteName);
   if (isLocked) td.classList.add('locked-cell');
@@ -483,33 +472,41 @@ function createPriceCell(item, siteName, minSite, maxSite){
   if (d) {
     const dataStr = d.data ? new Date(d.data).toLocaleString('pt-BR') : '';
     if (Number.isFinite(d.precoNum)) {
-      const span = document.createElement('span');
-      span.className = `price ${!isLocked && siteName===minSite ? 'min' : (!isLocked && siteName===maxSite ? 'max':'')}`;
-      span.title = isLocked ? 'Excedeu o limite do plano' : (dataStr ? `Atualizado em ${dataStr}` : '');
-      span.textContent = formatBRL(d.precoNum);
-      td.appendChild(span);
+      const display = formatBRL(d.precoNum);
+      const cls = (!isLocked && siteName === minSite) ? 'min' : (!isLocked && siteName === maxSite ? 'max' : '');
+      const priceSpan = document.createElement('span');
+      priceSpan.className = `price ${cls}`;
+      priceSpan.title = isLocked ? 'Excedeu o limite do plano' : (dataStr ? `Atualizado em ${dataStr}` : '');
+      priceSpan.textContent = display;
 
-      const b = document.createElement('button');
-      b.className='chart-btn'; b.type='button';
-      b.title = isLocked ? 'Disponível no upgrade' : 'Ver histórico';
-      b.innerHTML = chartButtonSVG();
-      b.addEventListener('click', (ev)=>{
-        if (isLocked){ window.location.href='planos.html'; return; }
+      td.appendChild(priceSpan);
+
+      const btn = document.createElement('button');
+      btn.className = 'chart-btn';
+      btn.type = 'button';
+      btn.title = isLocked ? 'Disponível no upgrade' : 'Ver gráfico do histórico';
+      btn.innerHTML = chartButtonSVG();
+      btn.addEventListener('click', (ev) => {
+        if (isLocked) { window.location.href = 'planos.html'; return; }
         openChartFor(ev, item.sku, siteName);
       });
-      td.appendChild(b);
+      td.appendChild(btn);
 
-      if (isLocked){
+      if (isLocked) {
         const up = document.createElement('button');
-        up.className='unlock'; up.type='button'; up.title='Excedeu o limite do plano. Ver planos.'; up.textContent='Ver planos';
-        up.addEventListener('click', ()=> window.location.href='planos.html');
+        up.className = 'unlock';
+        up.type = 'button';
+        up.title = 'Excedeu o limite do plano. Ver planos.';
+        up.textContent = 'Ver planos';
+        up.addEventListener('click', ()=> window.location.href = 'planos.html');
         td.appendChild(up);
       }
     } else {
+      const raw = (d.precoRaw ?? '').toString().replace(/</g,'&lt;');
       const span = document.createElement('span');
-      span.className='price';
+      span.className = 'price';
       span.title = isLocked ? 'Excedeu o limite do plano' : (dataStr ? `Atualizado em ${dataStr}` : '');
-      span.textContent = (d.precoRaw??'').toString();
+      span.textContent = raw;
       td.appendChild(span);
     }
   } else {
@@ -518,68 +515,106 @@ function createPriceCell(item, siteName, minSite, maxSite){
   return td;
 }
 function renderRowInto(tr, item){
-  const tdFav = document.createElement('td'); tdFav.className='col-fav';
-  const chk = document.createElement('input'); chk.type='checkbox'; chk.checked=isFav(item.sku); chk.title='Marcar como favorito';
-  chk.addEventListener('change', ()=>{ if (suppressGeneralChange) return; if (chk.checked) favSet.add(item.sku); else favSet.delete(item.sku); favSave(); renderFavs(); updateFavHeight(); updateCounts(); });
-  tdFav.appendChild(chk); tr.appendChild(tdFav); generalChkMap.set(item.sku, chk);
+  // Fav
+  const tdFav = document.createElement('td');
+  tdFav.className = 'col-fav';
+  const chk = document.createElement('input');
+  chk.type = 'checkbox'; chk.checked = isFav(item.sku); chk.title = 'Marcar como favorito';
+  chk.addEventListener('change', () => {
+    if (suppressGeneralChange) return;
+    if (chk.checked) favSet.add(item.sku); else favSet.delete(item.sku);
+    favSave(); renderFavs(); updateFavHeight(); updateCounts();
+  });
+  tdFav.appendChild(chk);
+  tr.appendChild(tdFav);
+  generalChkMap.set(item.sku, chk);
 
-  const tdSku = document.createElement('td'); tdSku.className='col-sku'; tdSku.textContent=item.sku; tr.appendChild(tdSku);
-  const tdDesc= document.createElement('td'); tdDesc.className='col-desc'; tdDesc.innerHTML=(item.desc||'').replace(/</g,'&lt;'); tr.appendChild(tdDesc);
+  // EAN
+  const tdSku = document.createElement('td'); tdSku.className = 'col-sku'; tdSku.textContent = item.sku; tr.appendChild(tdSku);
 
-  const {minSite,maxSite} = computeMinMaxForRow(item);
-  for (const lbl of chosenSitesAll){ tr.appendChild(createPriceCell(item, lbl, minSite, maxSite)); }
+  // Descrição
+  const tdDesc = document.createElement('td'); tdDesc.className = 'col-desc'; tdDesc.innerHTML = (item.desc || '').replace(/</g,'&lt;'); tr.appendChild(tdDesc);
+
+  // Sites (somente os selecionados, na ordem escolhida)
+  const { minSite, maxSite } = computeMinMaxForRow(item);
+  for (const s of chosenSitesAll) {
+    tr.appendChild(createPriceCell(item, s, minSite, maxSite));
+  }
 }
 function renderGeneralChunk(){
   const end = Math.min(itemsRendered + RENDER_CHUNK, produtosList.length);
   const frag = document.createDocumentFragment();
-  for (let i=itemsRendered;i<end;i++){ const it = produtosList[i]; const tr = document.createElement('tr'); renderRowInto(tr, it); frag.appendChild(tr); }
+  for (let i = itemsRendered; i < end; i++){ const item = produtosList[i]; const tr = document.createElement('tr'); renderRowInto(tr, item); frag.appendChild(tr); }
   generalBody.appendChild(frag);
   itemsRendered = end;
   endMarker.textContent = (serverExhausted && itemsRendered >= produtosList.length) ? 'Fim da lista' : '';
   updateCounts();
 }
-function resetGeneralDom(){ generalBody.innerHTML=''; generalChkMap.clear(); itemsRendered=0; endMarker.textContent=''; }
+function resetGeneralDom(){ generalBody.innerHTML = ''; generalChkMap.clear(); itemsRendered = 0; endMarker.textContent = ''; }
 function onGeneralScroll(){
   if (loadingMore) return;
   const nearBottom = generalWrap.scrollTop + generalWrap.clientHeight >= generalWrap.scrollHeight - 100;
-  if (nearBottom && itemsRendered < produtosList.length){ loadingMore=true; setTimeout(()=>{ renderGeneralChunk(); loadingMore=false; }, 30); return; }
+  if (nearBottom && itemsRendered < produtosList.length){
+    loadingMore = true; setTimeout(()=>{ renderGeneralChunk(); loadingMore = false; }, 30); return;
+  }
   if (nearBottom && !serverExhausted && !fetching){ fetchNextPage(); }
 }
 generalWrap.addEventListener('scroll', onGeneralScroll);
 
 /* ======== FAVORITOS ======== */
 function renderFavs(){
-  favBody.innerHTML='';
-  const favList = produtosList.filter(p=>isFav(p.sku));
+  favBody.innerHTML = '';
+  const favList = produtosList.filter(p => isFav(p.sku));
   const frag = document.createDocumentFragment();
   for (const item of favList){
     const tr = document.createElement('tr');
 
-    const tdAct=document.createElement('td'); tdAct.className='col-fav';
-    const btn=document.createElement('button'); btn.className='trash-btn'; btn.title='Remover'; btn.innerHTML='🗑️';
-    btn.addEventListener('click', ()=>{ favSet.delete(item.sku); favSave(); const chk=generalChkMap.get(item.sku); if (chk){ suppressGeneralChange=true; chk.checked=false; suppressGeneralChange=false; } renderFavs(); updateFavHeight(); updateCounts(); });
+    const tdAct = document.createElement('td'); tdAct.className = 'col-fav';
+    const btn = document.createElement('button'); btn.className = 'trash-btn'; btn.title = 'Remover dos favoritos';
+    btn.innerHTML = '🗑️';
+    btn.addEventListener('click', () => {
+      favSet.delete(item.sku); favSave();
+      const chk = generalChkMap.get(item.sku);
+      if (chk) { suppressGeneralChange = true; chk.checked = false; suppressGeneralChange = false; }
+      renderFavs(); updateFavHeight(); updateCounts();
+    });
     tdAct.appendChild(btn); tr.appendChild(tdAct);
 
-    const tdSku=document.createElement('td'); tdSku.className='col-sku'; tdSku.textContent=item.sku; tr.appendChild(tdSku);
-    const tdDesc=document.createElement('td'); tdDesc.className='col-desc'; tdDesc.innerHTML=(item.desc||'').replace(/</g,'&lt;'); tr.appendChild(tdDesc);
+    const tdSku = document.createElement('td'); tdSku.className = 'col-sku'; tdSku.textContent = item.sku; tr.appendChild(tdSku);
+    const tdDesc = document.createElement('td'); tdDesc.className = 'col-desc'; tdDesc.innerHTML = (item.desc || '').replace(/</g,'&lt;'); tr.appendChild(tdDesc);
 
-    const {minSite,maxSite}=computeMinMaxForRow(item);
-    for (const lbl of chosenSitesAll){ tr.appendChild(createPriceCell(item, lbl, minSite, maxSite)); }
+    const { minSite, maxSite } = computeMinMaxForRow(item);
+    for (const s of chosenSitesAll) {
+      tr.appendChild(createPriceCell(item, s, minSite, maxSite));
+    }
 
     frag.appendChild(tr);
   }
   favBody.appendChild(frag);
 }
 
+/* ======== TOGGLE SEÇÕES ======== */
+function attachToggle(panel, button){
+  function setState(expanded){
+    panel.classList.toggle('collapsed', !expanded);
+    button.textContent = expanded ? 'Minimizar' : 'Maximizar';
+    button.setAttribute('aria-expanded', String(expanded));
+  }
+  button.addEventListener('click', ()=>{ const isExpanded = button.getAttribute('aria-expanded') === 'true'; setState(!isExpanded); });
+  setState(true);
+}
+attachToggle(document.getElementById('favPanel'), document.getElementById('toggleFav'));
+attachToggle(document.getElementById('generalPanel'), document.getElementById('toggleGen'));
+
 /* ======== CONTADORES ======== */
 function updateCounts(){
-  const favs=favSet.size;
+  const favs = favSet.size;
   countShown.textContent = `Exibindo ${itemsRendered} de ${produtosList.length} no Geral (carregados)`;
   countTotal.textContent = serverExhausted ? `Total de SKUs carregados: ${produtosList.length}` : `Carregando… (${produtosList.length}+ )`;
-  countFavs.textContent  = `Favoritos: ${favs}`;
+  countFavs.textContent = `Favoritos: ${favs}`;
 }
 
-/* ======== CONSULTA (paginação) ======== */
+/* ======== CONSULTA SERVIDOR (PAGINADA) ======== */
 function buildQuery(){
   let q = sb.from(VIEW).select('ean, site, preco, data, descricao, preco_num', { count: 'estimated' }).order('data', { ascending: false });
   if (currentEanQ) q = q.ilike('ean', `%${currentEanQ}%`);
@@ -609,20 +644,27 @@ async function fetchNextPage(){
   finally { fetching = false; updateCounts(); }
 }
 
-/* ======== RESET ======== */
+/* ======== RESET DE CONSULTA ======== */
 function resetAndQuery(){
-  produtosMap.clear(); produtosList=[]; serverOffset=0; serverExhausted=false; favFirstAutoRenderDone=false;
-  resetGeneralDom();
+  produtosMap.clear(); produtosList = []; serverOffset = 0; serverExhausted = false; favFirstAutoRenderDone = false;
+
+  generalBody.innerHTML = '';
+  generalChkMap.clear();
+  itemsRendered = 0;
+  endMarker.textContent = '';
+
   renderFavs(); updateFavHeight(); updateCounts();
   fetchNextPage();
 }
 
-/* ======== NAVEGAÇÃO / FILTROS ======== */
-ddMeusDados.addEventListener('click', () => { window.location.href = 'meusdados.html'; });
-ddPlanos.addEventListener('click', () => { window.location.href = 'planos.html'; });
-btnSair.addEventListener('click', async () => {
-  try { await sb.auth.signOut(); } catch (e) { console.error('Erro ao sair:', e); }
-  finally { localStorage.removeItem('mm_login_date'); window.location.href = CFG.SITE_URL || 'index.html'; }
+/* ======== EVENTOS UI ======== */
+btnReload.addEventListener('click', async () => {
+  const session = (await sb.auth.getSession()).data.session;
+  if (session?.user?.id) {
+    const planKey = await loadHeaderInfoPlanOnly();
+    await loadUserSitesAndLocks(session.user.id, planKey); // reconstrói cabeçalhos na ordem do user_sites
+  }
+  resetAndQuery();
 });
 const onFilterInput = debounce(() => {
   currentEanQ = (eanFilter.value || '').trim();
@@ -632,21 +674,43 @@ const onFilterInput = debounce(() => {
 eanFilter.addEventListener('input', onFilterInput);
 descFilter.addEventListener('input', onFilterInput);
 
-btnReload.addEventListener('click', async () => {
-  const session = (await sb.auth.getSession()).data.session;
-  if (session?.user?.id) {
-    // recarrega cabeçalhos conforme seleção
-    let planKey = 'basico';
-    try{
-      const { data, error } = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
-      if (!error) planKey = (data?.plan || 'basico').toString().toLowerCase();
-    }catch(e){}
-    await loadUserSitesAndLocks(session.user.id, planKey);
-  }
-  resetAndQuery();
+/* ======== HEADER / SESSÃO ======== */
+ddMeusDados.addEventListener('click', () => { window.location.href = 'meusdados.html'; });
+ddPlanos.addEventListener('click', () => { window.location.href = 'planos.html'; });
+btnSair.addEventListener('click', async () => {
+  try { await sb.auth.signOut(); } catch (e) { console.error('Erro ao sair:', e); }
+  finally { localStorage.removeItem('mm_login_date'); window.location.href = CFG.SITE_URL || 'index.html'; }
 });
 
-/* ======== FAVORITOS: altura e resizer ======== */
+async function loadHeaderInfo(){
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return null; }
+  userChip.textContent = session.user?.email || 'Logado';
+
+  let planKey = 'basico';
+  try{
+    const { data, error } = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
+    if (error) throw error;
+    const planRaw = (data?.plan || 'basico').toString();
+    planKey = planRaw.toLowerCase();
+    const pretty = planRaw.charAt(0).toUpperCase() + planRaw.slice(1);
+    planChip.textContent = `Plano: ${pretty}`;
+  }catch(e){ console.error(e); planChip.textContent = 'Plano: —'; }
+
+  await loadUserSitesAndLocks(session.user.id, planKey);
+  return session;
+}
+async function loadHeaderInfoPlanOnly(){
+  try{
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) return 'basico';
+    const { data, error } = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
+    if (error) throw error;
+    return (data?.plan || 'basico').toString().toLowerCase();
+  }catch(e){ console.error(e); return 'basico'; }
+}
+
+/* ======== FAV HEIGHT / RESIZER (mantido) ======== */
 function measureRowHeight(){ const row = document.querySelector('#favTable tbody tr'); if (!row) return 44; const h = Math.round(row.getBoundingClientRect().height); return Math.max(36, h || 44); }
 function measureHeadHeight(){ const head = document.querySelector('#favTable thead'); if (!head) return 40; const h = Math.round(head.getBoundingClientRect().height); return Math.max(32, h || 40); }
 let favHeightUser = Number(localStorage.getItem('mm_fav_height')) || null;
@@ -669,7 +733,7 @@ function updateFavHeight(){
   favResizer.addEventListener('dblclick', ()=>{ favHeightUser = null; localStorage.removeItem('mm_fav_height'); updateFavHeight(); });
 })();
 
-/* ======== MINI-GRÁFICO ======== */
+/* ======== MINI-GRÁFICO (mantido) ======== */
 function closePopover(){ pop.style.display='none'; }
 function positionPopover(x, y){
   const pad = 12; const vw = window.innerWidth, vh = window.innerHeight;
@@ -677,7 +741,7 @@ function positionPopover(x, y){
   if (left + rectW > vw) left = x - rectW - pad;
   if (top + rectH > vh) top = y - rectH - pad;
   pop.style.left = Math.max(8, left) + 'px';
-  pop.style.top  = Math.max(8, top) + 'px';
+  pop.style.top = Math.max(8, top) + 'px';
 }
 document.addEventListener('click', (ev) => { if (pop.style.display !== 'none' && !pop.contains(ev.target)) closePopover(); });
 document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closePopover(); });
@@ -717,7 +781,11 @@ async function openChartFor(ev, ean, siteLabel){
   sparkCtx.clearRect(0,0,sparkCanvas.width,sparkCanvas.height);
   pop.style.display='block';
   try{
-    let viewKey = viewKeyByLabel[siteLabel] || ('Preco' + siteLabel.replace(/[^A-Za-z0-9]/g,''));
+    // Usa a view_key conhecida; se não existir, tenta heurística "Preco"+label compacto
+    let viewKey = viewKeyByLabel[siteLabel];
+    if (!viewKey){
+      viewKey = 'Preco' + siteLabel.replace(/[^A-Za-z0-9]/g,'');
+    }
     const { data, error } = await sb.from(VIEW).select('data, preco_num')
       .eq('ean', ean)
       .eq('site', viewKey)
