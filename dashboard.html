@@ -154,8 +154,13 @@
 </div>
 
 <script>
+/* ================== CAPTURA DE ERROS VISUAL ================== */
+window.addEventListener('error', e => { const el=document.getElementById('err'); el.style.display='block'; el.textContent='Erro JS: '+e.message; });
+window.addEventListener('unhandledrejection', e => { const el=document.getElementById('err'); el.style.display='block'; el.textContent='Erro assíncrono: '+(e.reason?.message||e.reason); });
+
 /* ================== CONFIG / SUPABASE ================== */
 const CFG = window.CONFIG || {};
+if (!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY) { const el=document.getElementById('err'); el.style.display='block'; el.textContent='config.js não carregado.'; throw new Error('CONFIG ausente'); }
 const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth:{ persistSession:true, autoRefreshToken:true, detectSessionInUrl:true } });
 
 /* ================== CONSTANTES ================== */
@@ -197,8 +202,8 @@ const sparkCanvas= document.getElementById('spark');
 const sparkCtx   = sparkCanvas.getContext('2d');
 
 /* ================== HELPERS / MAPAS ================== */
-/** O campo "site" na VIEW usa chaves como "PrecoLeroyMerlin". Este mapa resolve display label. */
-const labelByViewKey = {
+/* Mapeamento conhecido (view_key -> label legível) */
+const KNOWN_VIEW_TO_LABEL = {
   "PrecoLeroyMerlin":"LeroyMerlin",
   "PrecoQueroQuero":"QueroQuero",
   "PrecoCassol":"Cassol",
@@ -208,19 +213,34 @@ const labelByViewKey = {
   "PrecoSupremeinox":"Supremeinox",
   "PrecoGhaus":"Ghaus"
 };
-/** inverso: display label -> view key */
-const viewKeyByLabel = Object.fromEntries(Object.entries(labelByViewKey).map(([k,v])=>[v,k]));
+/* Inverso dinâmico (label -> view_key), que vamos alimentar também por heurística */
+const dynamicLabelToView = Object.fromEntries(Object.entries(KNOWN_VIEW_TO_LABEL).map(([k,v])=>[v,k]));
 
-/** Normalizador robusto para nomes vindos da tabela SITES */
-function normalize(s){
+/* Normalizadores */
+function norm(s){
   return (s||'').toString()
     .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
     .replace(/\s+/g,'').replace(/[^a-zA-Z0-9]/g,'')
     .toLowerCase();
 }
-/** Mapeia qualquer variação textual do banco (nome/name/site) para o label padrão do dashboard */
-function toLabel(raw){
-  const n = normalize(raw);
+/* Heurística: converte view_key "PrecoXYZ" -> "XYZ" (label) */
+function labelFromViewKey(viewKey){
+  if (!viewKey) return '';
+  const m = /^Preco(.+)$/.exec(viewKey);
+  const core = (m ? m[1] : viewKey);
+  return core; // Mantém CamelCase; funciona como label neutro
+}
+/* Heurística: label -> view_key (ex.: "LeroyMerlin" => "PrecoLeroyMerlin") */
+function viewKeyFromLabel(label){
+  if (dynamicLabelToView[label]) return dynamicLabelToView[label];
+  // Construção heurística
+  const camel = label.replace(/[^A-Za-z0-9]/g,''); // tira espaços e sinais
+  const k = 'Preco' + camel;
+  return k;
+}
+/* Converte nome de sites.nome/name/site para um label padrão que usaremos no dashboard */
+function labelFromSiteText(raw){
+  const n = norm(raw);
   if (n==='leroymerlin') return 'LeroyMerlin';
   if (n==='queroquero') return 'QueroQuero';
   if (n==='cassol'||n==='cassolcenterlar') return 'Cassol';
@@ -228,18 +248,16 @@ function toLabel(raw){
   if (n==='mestretinho'||n==='mestrettinho') return 'MestreTinho';
   if (n==='tumelero') return 'Tumelero';
   if (n==='supremeinox'||n==='supreme'||n==='supremeinoxcombr') return 'Supremeinox';
-  if (n==='ghaus'||n==='g-haus') return 'Ghaus';
-  // fallback: tenta casar com labels já conhecidos
-  for (const lbl of Object.values(labelByViewKey)){
-    if (normalize(lbl)===n) return lbl;
-  }
-  return ''; // desconhecido (não exibimos)
+  if (n==='ghaus'||n==='g-haus'||n==='gháus') return 'Ghaus';
+  // fallback: usa texto original sem espaços como label
+  const fallback = (raw||'').toString().replace(/\s+/g,'').replace(/[^\w]/g,'');
+  return fallback || '';
 }
 
 /* ================== ESTADO ================== */
 const DEFAULT_PLAN_SITE_LIMIT = { trial:2, basico:4, intermediario:5, premium:8 };
 
-let chosenLabels = [];          // labels exatamente como selecionados em user_sites
+let chosenLabels = [];          // labels exatamente como selecionados em user_sites (ordem)
 let unlockedSites = new Set();  // subset liberado (<= limite do plano)
 let lockedSites   = new Set();  // subset excedente
 
@@ -272,22 +290,20 @@ function isFav(sku){ return favSet.has(String(sku)); }
 
 /* ================== CABEÇALHOS DINÂMICOS ================== */
 function buildHeaders(){
-  // colunas fixas:
   const fixedFav = `<th class="col-fav">★</th>`;
   const fixedSku = `<th class="col-sku">EAN</th>`;
   const fixedDesc= `<th class="col-desc">Descrição</th>`;
 
-  // sites selecionados na ordem de user_sites:
   const sitesTh = chosenLabels.map(lbl => {
     const locked = lockedSites.has(lbl) ? ' data-locked="true"' : ' data-locked="false"';
     return `<th data-site="${lbl}"${locked}>${lbl}</th>`;
   }).join('');
 
-  favHeaderRow.innerHTML     = `<th class="col-fav">Ação</th>${fixedSku}${fixedDesc}${sitesTh}`;
-  generalHeaderRow.innerHTML = `${fixedFav}${fixedSku}${fixedDesc}${sitesTh}`;
+  // Favoritos
+  document.getElementById('favHeaderRow').innerHTML     = `<th class="col-fav">Ação</th>${fixedSku}${fixedDesc}${sitesTh}`;
+  // Geral
+  document.getElementById('generalHeaderRow').innerHTML = `${fixedFav}${fixedSku}${fixedDesc}${sitesTh}`;
 }
-
-/* Atualiza opacidade/cadeado caso muda bloqueio */
 function refreshHeaderLocks(){
   const headerThs = document.querySelectorAll('thead th[data-site]');
   headerThs.forEach(th=>{
@@ -317,8 +333,8 @@ async function getSitesLimitForPlan(planKey){
 async function loadUserSelectionAndLocks(userId, planKey){
   const limit = await getSitesLimitForPlan(planKey);
 
-  // 1) user_sites -> lista de IDs (na ordem criada/explicitada por id)
-  let userSiteRows = [];
+  // 1) user_sites -> lista ordenada do usuário
+  let rows = [];
   try{
     const { data, error } = await sb.from('user_sites')
       .select('site_id, enabled, position, id')
@@ -326,36 +342,35 @@ async function loadUserSelectionAndLocks(userId, planKey){
       .order('position', { ascending: true, nullsFirst: false })
       .order('id', { ascending: true });
     if (error) throw error;
-    userSiteRows = (data||[]).filter(r => r.enabled !== false);
+    rows = (data||[]).filter(r => r.enabled !== false);
   }catch(e){ console.warn('Falha lendo user_sites:', e); }
 
-  // 2) Se não há seleção, vamos exibir nada (ou todas como fallback?). Aqui: fallback = TODAS existentes
+  // 2) Resolve nomes/labels pela tabela sites preservando a ordem
   let labels = [];
-  if (userSiteRows.length){
-    const ids = userSiteRows.map(r=>r.site_id).filter(x=>x!=null);
+  if (rows.length){
+    const ids = rows.map(r=>r.site_id).filter(x=>x!=null);
     try{
-      const { data: sites, error } = await sb.from('sites').select('id, nome, name, site').in('id', ids);
+      const { data: sites, error } = await sb.from('sites').select('id, nome, name, site');
       if (error) throw error;
-      // preserva ordem de user_sites
       labels = ids.map(id => {
         const s = (sites||[]).find(x=>x.id===id);
-        return toLabel(s?.nome || s?.name || s?.site || '');
-      }).filter(lbl => !!lbl && viewKeyByLabel[lbl]); // só labels que sabemos mapear para a view
+        return labelFromSiteText(s?.nome || s?.name || s?.site || '');
+      }).filter(lbl => !!lbl);
     }catch(e){ console.warn('Falha lendo sites:', e); }
   }
 
+  // 3) Se não há seleção, fallback = todos conhecidos por ordem alfabética (permite a página abrir)
   if (!labels.length){
-    // Fallback: todas as que temos mapeadas (ordem alfabética)
-    labels = Object.values(labelByViewKey).sort((a,b)=>a.localeCompare(b,'pt-BR'));
+    labels = Object.values(KNOWN_VIEW_TO_LABEL).sort((a,b)=>a.localeCompare(b,'pt-BR'));
   }
 
-  // 3) aplica limite
+  // 4) Aplica limite
   const uniqueLabels = [...new Set(labels)];
   chosenLabels = uniqueLabels;
   unlockedSites = new Set(uniqueLabels.slice(0, limit));
   lockedSites   = new Set(uniqueLabels.slice(limit));
 
-  // 4) refaz cabeçalhos dinâmicos
+  // 5) Monta os cabeçalhos dinâmicos
   buildHeaders();
   refreshHeaderLocks();
 
@@ -367,8 +382,18 @@ function upsertRowsIntoProdutos(rows){
   for (const r of rows){
     const ean = String(r.ean??'');
     const viewKey = String(r.site??'');
-    const lbl = labelByViewKey[viewKey]; // converte para label que usamos no dashboard
-    if (!lbl) continue; // se chegou algum site não mapeado, ignora
+
+    // Resolve label a partir da view_key
+    let lbl = KNOWN_VIEW_TO_LABEL[viewKey];
+    if (!lbl){
+      // tenta heurística e registra dinamicamente o inverso para gráficos
+      lbl = labelFromViewKey(viewKey);
+      const vGuess = viewKeyFromLabel(lbl);
+      dynamicLabelToView[lbl] = vGuess;
+    }
+
+    // Ignore se o usuário não selecionou essa coluna
+    if (!chosenLabels.includes(lbl)) continue;
 
     if (!produtosMap.has(ean)) produtosMap.set(ean, { sku: ean, desc: r.descricao||'', sites:{} });
     const item = produtosMap.get(ean);
@@ -560,17 +585,19 @@ function resetAndQuery(){
 ddMeusDados.addEventListener('click', ()=> location.href='meusdados.html');
 ddPlanos.addEventListener('click', ()=> location.href='planos.html');
 btnSair.addEventListener('click', async ()=>{ try{ await sb.auth.signOut(); }finally{ localStorage.removeItem('mm_login_date'); location.href = CFG.SITE_URL || 'index.html'; } });
-btnReload.addEventListener('click', async ()=>{
-  const session = (await sb.auth.getSession()).data.session;
-  if (session?.user?.id){
-    const planKey = await getUserPlanKey(session.user.id);
-    await loadUserSelectionAndLocks(session.user.id, planKey);
-  }
-  resetAndQuery();
-});
+
 const onFilterInput = debounce(()=>{ currentEanQ=(eanFilter.value||'').trim(); currentDescQ=(descFilter.value||'').trim(); resetAndQuery(); }, 500);
 eanFilter.addEventListener('input', onFilterInput);
 descFilter.addEventListener('input', onFilterInput);
+
+btnReload.addEventListener('click', async ()=>{
+  const s=(await sb.auth.getSession()).data.session;
+  if (s?.user?.id){
+    const planKey = await getUserPlanKey(s.user.id);
+    await loadUserSelectionAndLocks(s.user.id, planKey);
+  }
+  resetAndQuery();
+});
 
 /* ================== GRÁFICO MINI ================== */
 function closePopover(){ pop.style.display='none'; }
@@ -609,7 +636,7 @@ async function openChartFor(ev, ean, label){
   popTitle.textContent = `${label} • ${ean}`;
   popMsg.style.display='block'; popMsg.textContent='Carregando…'; sparkCtx.clearRect(0,0,sparkCanvas.width,sparkCanvas.height); pop.style.display='block';
   try{
-    const viewKey = viewKeyByLabel[label];
+    const viewKey = dynamicLabelToView[label] || viewKeyFromLabel(label);
     const { data, error } = await sb.from(VIEW).select('data, preco_num')
       .eq('ean', ean).eq('site', viewKey).not('preco_num','is',null)
       .order('data', { ascending:true }).limit(60);
@@ -633,55 +660,4 @@ function updateFavHeight(){
   let startY=0, startH=0;
   function onMove(ev){ const dy=ev.clientY-startY; favHeightUser=startH+dy; localStorage.setItem('mm_fav_height', String(favHeightUser)); applyFavHeight(favHeightUser); }
   function stop(){ removeEventListener('mousemove', onMove); removeEventListener('mouseup', stop); document.body.classList.remove('resizing'); }
-  favResizer.addEventListener('mousedown',(ev)=>{ startY=ev.clientY; startH=document.getElementById('favWrap').offsetHeight; document.body.classList.add('resizing'); addEventListener('mousemove', onMove); addEventListener('mouseup', stop); });
-  favResizer.addEventListener('dblclick', ()=>{ favHeightUser=null; localStorage.removeItem('mm_fav_height'); updateFavHeight(); });
-})();
-
-/* ================== LOGIN/PLANO ================== */
-async function getUserPlanKey(userId){
-  try{
-    const { data, error } = await sb.from('profiles').select('plan').eq('id', userId).maybeSingle();
-    if (error) throw error;
-    return (data?.plan || 'basico').toString().toLowerCase();
-  }catch(e){ console.error(e); return 'basico'; }
-}
-
-/* ================== INIT ================== */
-(async function init(){
-  const { data:{ session } } = await sb.auth.getSession();
-  if (!session){ location.href = CFG.SITE_URL || 'index.html'; return; }
-  userChip.textContent = session.user?.email || 'Logado';
-
-  const planKey = await getUserPlanKey(session.user.id);
-  planChip.textContent = `Plano: ${planKey.charAt(0).toUpperCase()+planKey.slice(1)}`;
-
-  // carrega seleção do usuário (ORDEM do user_sites) + limite do plano e constrói cabeçalhos
-  await loadUserSelectionAndLocks(session.user.id, planKey);
-
-  // primeira busca
-  resetAndQuery();
-
-  // eventos de navegação
-  ddMeusDados.onclick = ()=> location.href='meusdados.html';
-  ddPlanos.onclick    = ()=> location.href='planos.html';
-  btnSair.onclick     = async ()=>{ try{ await sb.auth.signOut(); }finally{ localStorage.removeItem('mm_login_date'); location.href = CFG.SITE_URL || 'index.html'; } };
-
-  // infinite scroll kick
-  generalWrap.dispatchEvent(new Event('scroll'));
-})();
-
-/* ================== RELOAD FILTROS ================== */
-const onFilterInput = debounce(()=>{ currentEanQ=(eanFilter.value||'').trim(); currentDescQ=(descFilter.value||'').trim(); resetAndQuery(); }, 500);
-eanFilter.addEventListener('input', onFilterInput);
-descFilter.addEventListener('input', onFilterInput);
-btnReload.addEventListener('click', async ()=>{
-  const s=(await sb.auth.getSession()).data.session;
-  if (s?.user?.id){
-    const planKey = await getUserPlanKey(s.user.id);
-    await loadUserSelectionAndLocks(s.user.id, planKey);
-  }
-  resetAndQuery();
-});
-</script>
-</body>
-</html>
+  favResizer.addEventListener('mousedown',(ev)=>{ startY=ev.clientY;analysis
