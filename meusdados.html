@@ -277,10 +277,18 @@ function showBanner(text, type = 'ok', timeoutMs = 4200) {
   bannerEl.style.display = 'block';
   if (timeoutMs > 0) setTimeout(() => { bannerEl.style.display = 'none'; }, timeoutMs);
 }
-function digitsOnly(s){ return (s||'').replace(/\D+/g, ''); }
+
+/* FIX: digitsOnly robusto (nunca quebra) */
+function digitsOnly(s){
+  if (s === null || s === undefined) return '';
+  // números, booleanos, objetos: converte seguro
+  try { return String(s).replace(/\D+/g, ''); }
+  catch { return ''; }
+}
+
 function toNumberBR(v){
   if (v==null) return null;
-  if (typeof v === 'number') return v;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
   let s = String(v).trim();
   if (s==='') return null;
   if (/,\d{1,3}$/.test(s)) { s = s.replace(/\./g,'').replace(',','.'); }
@@ -304,12 +312,12 @@ const planChip = document.getElementById('planChip');
 const telHelp = document.getElementById('telHelp');
 const docHelp = document.getElementById('docHelp');
 
-function formatCPF(d){ d=d.slice(0,11); if(d.length<=3)return d; if(d.length<=6)return d.replace(/(\d{3})(\d+)/,"$1.$2"); if(d.length<=9)return d.replace(/(\d{3})(\d{3})(\d+)/,"$1.$2.$3"); return d.replace(/(\d{3})(\d{3})(\d{3})(\d{0,2}).*/,"$1.$2.$3-$4"); }
-function validateCPF(d){ if(!d||d.length!==11)return false; if(/^(\d)\1{10}$/.test(d))return false; let s=0; for(let i=0;i<9;i++)s+=parseInt(d[i])*(10-i); let r=s%11; let dv1=(r<2)?0:(11-r); if(dv1!==parseInt(d[9]))return false; s=0; for(let i=0;i<10;i++)s+=parseInt(d[i])*(11-i); r=s%11; let dv2=(r<2)?0:(11-r); return dv2===parseInt(d[10]); }
-function formatCNPJ(d){ d=d.slice(0,14); if(d.length<=2)return d; if(d.length<=5)return d.replace(/(\d{2})(\d+)/,"$1.$2"); if(d.length<=8)return d.replace(/(\d{2})(\d{3})(\d+)/,"$1.$2.$3"); if(d.length<=12)return d.replace(/(\d{2})(\d{3})(\d{3})(\d+)/,"$1.$2.$3/$4"); return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2}).*/,"$1.$2.$3/$4-$5"); }
-function validateCNPJ(d){ if(!d||d.length!==14)return false; if(/^(\d)\1{13}$/.test(d))return false; const w1=[5,4,3,2,9,8,7,6,5,4,3,2], w2=[6,5,4,3,2,9,8,7,6,5,4,3,2]; let s=0; for(let i=0;i<12;i++)s+=parseInt(d[i])*w1[i]; let r=s%11; let dv1=(r<2)?0:(11-r); if(dv1!==parseInt(d[12]))return false; s=0; for(let i=0;i<13;i++)s+=parseInt(d[i])*w2[i]; r=s%11; let dv2=(r<2)?0:(11-r); return dv2===parseInt(d[13]); }
-function formatPhone(d){ d=d.slice(0,11); if(d.length<=2)return `(${d}`; if(d.length<=6)return `(${d.slice(0,2)}) ${d.slice(2)}`; if(d.length<=10)return `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`; return `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`; }
-function validatePhone(d){ return d.length===10||d.length===11; }
+function formatCPF(d){ d=digitsOnly(d).slice(0,11); if(d.length<=3)return d; if(d.length<=6)return d.replace(/(\d{3})(\d+)/,"$1.$2"); if(d.length<=9)return d.replace(/(\d{3})(\d{3})(\d+)/,"$1.$2.$3"); return d.replace(/(\d{3})(\d{3})(\d{3})(\d{0,2}).*/,"$1.$2.$3-$4"); }
+function validateCPF(d){ d=digitsOnly(d); if(!d||d.length!==11)return false; if(/^(\d)\1{10}$/.test(d))return false; let s=0; for(let i=0;i<9;i++)s+=parseInt(d[i])*(10-i); let r=s%11; let dv1=(r<2)?0:(11-r); if(dv1!==parseInt(d[9]))return false; s=0; for(let i=0;i<10;i++)s+=parseInt(d[i])*(11-i); r=s%11; let dv2=(r<2)?0:(11-r); return dv2===parseInt(d[10]); }
+function formatCNPJ(d){ d=digitsOnly(d).slice(0,14); if(d.length<=2)return d; if(d.length<=5)return d.replace(/(\d{2})(\d+)/,"$1.$2"); if(d.length<=8)return d.replace(/(\d{2})(\d{3})(\d+)/,"$1.$2.$3"); if(d.length<=12)return d.replace(/(\d{2})(\d{3})(\d{3})(\d+)/,"$1.$2.$3/$4"); return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2}).*/,"$1.$2.$3/$4-$5"); }
+function validateCNPJ(d){ d=digitsOnly(d); if(!d||d.length!==14)return false; if(/^(\d)\1{13}$/.test(d))return false; const w1=[5,4,3,2,9,8,7,6,5,4,3,2], w2=[6,5,4,3,2,9,8,7,6,5,4,3,2]; let s=0; for(let i=0;i<12;i++)s+=parseInt(d[i])*w1[i]; let r=s%11; let dv1=(r<2)?0:(11-r); if(dv1!==parseInt(d[12]))return false; s=0; for(let i=0;i<13;i++)s+=parseInt(d[i])*w2[i]; r=s%11; let dv2=(r<2)?0:(11-r); return dv2===parseInt(d[13]); }
+function formatPhone(d){ d=digitsOnly(d).slice(0,11); if(d.length<=2)return `(${d}`; if(d.length<=6)return `(${d.slice(0,2)}) ${d.slice(2)}`; if(d.length<=10)return `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`; return `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`; }
+function validatePhone(d){ d=digitsOnly(d); return d.length===10||d.length===11; }
 function updateDocUI(){
   let d = digitsOnly(cpfCnpjEl.value);
   const isCNPJ = d.length>11;
@@ -360,8 +368,8 @@ let currentPlan = 'trial';
 
 btnSair.addEventListener('click', async ()=>{ await sb.auth.signOut(); window.location.href = CFG.SITE_URL || 'index.html'; });
 btnSalvar.addEventListener('click', async ()=>{
-  const first_name = nomeEl.value.trim();
-  const last_name  = sobrenomeEl.value.trim();
+  const first_name = (nomeEl.value||'').trim();
+  const last_name  = (sobrenomeEl.value||'').trim();
   const docDigits  = digitsOnly(cpfCnpjEl.value);
   const phoneDigits= digitsOnly(telefoneEl.value);
   if (!first_name){ showBanner('Informe o Nome.', 'warn'); nomeEl.focus(); return; }
@@ -468,8 +476,7 @@ function initExcelImport(){
     const s=String(val).trim();
     return /^-?\d[\d\.]*,\d{1,3}$/.test(s) || /^-?\d[\d,]*\.\d{1,3}$/.test(s);
   }
-  function asDigits(val){ return digitsOnly(String(val||'')); }
-  function looksEAN13(val){ const d=asDigits(val); return d.length===13; }
+  function looksEAN13(val){ const d=digitsOnly(val); return d.length===13; }
   function looksPrice(val){ const n=toNumberBR(val); return n!=null && n>=0 && n<=1e7; }
   function looksQty(val){ const n=toNumberBR(val); return n!=null && n>=0 && n<=1e6; }
   function distinctRatio(values){
@@ -486,12 +493,12 @@ function initExcelImport(){
       for (const r of sampleRows){
         const v = r[h];
         if (v!==null && v!==undefined && String(v).trim()!=='') nonEmpty++;
-        if (isLetters(v)) letters++;
-        if (isIntegerLike(v)) intLike++;
-        if (isDecimalLike(v)) decLike++;
-        if (looksEAN13(v)) eanLike++;
-        if (looksPrice(v)) priceLike++;
-        if (looksQty(v)) qtyLike++;
+        if (isLetters(v))    letters++;
+        if (isIntegerLike(v))intLike++;
+        if (isDecimalLike(v))decLike++;
+        if (looksEAN13(v))   eanLike++;
+        if (looksPrice(v))   priceLike++;
+        if (looksQty(v))     qtyLike++;
         samples.push(v);
       }
       const hdr = normHeader(h);
@@ -507,25 +514,25 @@ function initExcelImport(){
 
     const result = { id_produto:null, ean13:null, descricao:null, preco_custo:null, preco_venda:null, qtde_vendida:null, alerts:[], hints:[] };
 
-    // 1) mapeamento imediato por nome
+    // 1) por nome de cabeçalho
     for (const s of stats){
       const g = headerGuessMap(s.h);
       if (g && !result[g]) result[g]=s.h;
     }
 
-    // 2) descrição: mais "letters"
+    // 2) descrição
     if (!result.descricao){
       const cand = [...stats].sort((a,b)=> (b.letters - a.letters) || (b.nonEmpty - a.nonEmpty))[0];
       if (cand && cand.letters>0) result.descricao = cand.h;
     }
 
-    // 3) EAN13: mais matches de 13 dígitos
+    // 3) EAN13
     if (!result.ean13){
       const cand = [...stats].sort((a,b)=> (b.eanLike - a.eanLike) || (b.nonEmpty - a.nonEmpty))[0];
       if (cand && cand.eanLike>0) result.ean13 = cand.h;
     }
 
-    // 4) preços: honrar cabeçalho primeiro
+    // 4) preços (honra cabeçalhos se houver)
     if (!result.preco_venda){
       const vendaHdr = stats.filter(s=> s.isVendaHeader);
       if (vendaHdr[0]) result.preco_venda = vendaHdr[0].h;
@@ -534,13 +541,12 @@ function initExcelImport(){
       const custoHdr = stats.filter(s=> s.isCustoHeader);
       if (custoHdr[0]) result.preco_custo = custoHdr[0].h;
     }
-    // fallback: price-like
     const prices = stats.filter(s=> s.priceLike>0 && s.h!==result.ean13);
     prices.sort((a,b)=> (b.priceLike - a.priceLike) || (b.decLike - a.decLike));
     if (!result.preco_venda && prices[0]) result.preco_venda = prices[0].h;
     if (!result.preco_custo && prices[1]) result.preco_custo = prices[1].h;
 
-    // 5) ID vs Qtde: usar cabeçalho primeiro, depois heurística de "distintos"
+    // 5) ID e Qtde (prioriza cabeçalho; senão, usa "distintos")
     if (!result.id_produto){
       const idHdrs = stats.filter(s=> s.isIdHeader && s.eanLike===0);
       if (idHdrs[0]) result.id_produto = idHdrs.sort((a,b)=> b.distinct - a.distinct)[0].h;
@@ -549,13 +555,10 @@ function initExcelImport(){
       const qtyHdrs = stats.filter(s=> s.isQtyHeader && s.h!==result.preco_venda && s.h!==result.preco_custo);
       if (qtyHdrs[0]) result.qtde_vendida = qtyHdrs[0].h;
     }
-    // se ainda ambíguo, decidir pelos numéricos
     if (!result.id_produto || !result.qtde_vendida){
       const numericCols = stats.filter(s=> s.eanLike===0 && (s.intLike>0 || s.qtyLike>0) && s.h!==result.preco_venda && s.h!==result.preco_custo);
-      // ordenar por "mais distintos" para ID
       const byDistinct = [...numericCols].sort((a,b)=> (b.distinct - a.distinct) || (b.intLike - a.intLike));
       if (!result.id_produto && byDistinct[0]) result.id_produto = byDistinct[0].h;
-      // para qty: descartar o já escolhido como id e pegar resto com mais qtyLike / menos distintos
       const forQty = numericCols.filter(s=> s.h!==result.id_produto).sort((a,b)=> (b.qtyLike - a.qtyLike) || (a.distinct - b.distinct));
       if (!result.qtde_vendida && forQty[0]) result.qtde_vendida = forQty[0].h;
     }
