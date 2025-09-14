@@ -146,12 +146,23 @@
 </div>
 
 <script>
-/* =================== Supabase / elementos =================== */
+/* ===== Erros visíveis ===== */
+addEventListener('error', e => { const el=err; el.style.display='block'; el.textContent='Erro JS: '+e.message; });
+addEventListener('unhandledrejection', e => { const el=err; el.style.display='block'; el.textContent='Erro assíncrono: '+(e.reason?.message||e.reason); });
+
+/* ===== Config / Supabase ===== */
 const CFG = window.CONFIG || {};
+if (!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY) { const el=err; el.style.display='block'; el.textContent="Erro de configuração: config.js não carregado."; throw new Error("CONFIG ausente"); }
 const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth:{ persistSession:true, autoRefreshToken:true, detectSessionInUrl:true } });
 
+/* ===== Constantes ===== */
+const VIEW = "vw_precos_com_desc";
+const PAGE_SIZE = 200;
+const RENDER_CHUNK = 60;
+
+/* ===== Elementos ===== */
 const statusEl = document.getElementById('status');
-const errEl = document.getElementById('err');
+const err = document.getElementById('err');
 const userChip = document.getElementById('userChip');
 const planChip = document.getElementById('planChip');
 const ddMeusDados = document.getElementById('ddMeusDados');
@@ -185,10 +196,7 @@ toggleDbg.addEventListener('click', ()=>{
   toggleDbg.textContent = open ? 'Maximizar' : 'Minimizar';
 });
 
-window.addEventListener('error', e => { errEl.style.display='block'; errEl.textContent='Erro JS: '+e.message; });
-window.addEventListener('unhandledrejection', e => { errEl.style.display='block'; errEl.textContent='Erro assíncrono: '+(e.reason?.message||e.reason); });
-
-/* =================== Estado =================== */
+/* ===== Estado ===== */
 const DEFAULT_PLAN_SITE_LIMIT = { trial:2, basico:4, intermediario:5, premium:8 };
 
 let chosen = [];                  // [{site_id, label, view_key}] na ordem do user_sites
@@ -213,30 +221,31 @@ const generalChkMap = new Map();
 
 let favFirstAutoRenderDone = false;
 
-/* =================== Helpers =================== */
-function setStatus(t){ statusEl.textContent = t || ''; }
-function showErr(e){ errEl.style.display='block'; errEl.textContent = String(e||'').trim(); }
-function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
-function debounce(fn,delay=500){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),delay); }; }
+/* ===== Helpers ===== */
+function setStatus(t){ statusEl.textContent = t||''; }
+function showErr(e){ err.style.display='block'; err.textContent = String(e||'').trim(); }
+function hideErr(){ err.style.display='none'; err.textContent=''; }
 function favSave(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet])); }
 function isFav(sku){ return favSet.has(String(sku)); }
-function formatBRL(n){ try{return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}catch{return String(n)} }
+function debounce(fn,delay=500){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),delay); } }
+function formatBRL(n){ try { return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); } catch { return String(n); } }
 function comp(s){ return (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9]/g,''); }
 function debugLog(obj){ dbg.textContent += (typeof obj==='string' ? obj : JSON.stringify(obj, null, 2)) + "\n"; }
 
-/* =================== Cabeçalhos =================== */
+/* ===== Cabeçalhos ===== */
 function buildHeaders(){
-  const base = `<th class="col-fav">★</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
-  const ths = chosen.map(c=>{
+  const fav = `<th class="col-fav">★</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
+  const sitesTh = chosen.map(c=>{
     const lockAttr = locked.has(c.site_id) ? ' data-locked="true"' : ' data-locked="false"';
     return `<th data-siteid="${c.site_id}"${lockAttr}>${c.label}</th>`;
   }).join('');
-  generalHeaderRow.innerHTML = base + ths;
-  const favBase = `<th class="col-fav">Ação</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
-  document.getElementById('favHeaderRow').innerHTML = favBase + ths;
+  generalHeaderRow.innerHTML = fav + sitesTh;
+
+  const favHead = `<th class="col-fav">Ação</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>` + sitesTh;
+  favHeaderRow.innerHTML = favHead;
 }
 
-/* =================== Plano =================== */
+/* ===== Plano ===== */
 async function getSitesLimitForPlan(planKey){
   const k = (planKey||'').toLowerCase();
   try{
@@ -249,13 +258,13 @@ async function getSitesLimitForPlan(planKey){
   return DEFAULT_PLAN_SITE_LIMIT[k] ?? 2;
 }
 
-/* =================== Seleção (user_sites -> sites) =================== */
+/* ===== Seleção do usuário -> colunas ===== */
 async function loadUserSelection(userId, planKey){
   dbg.textContent = '';
   debugLog('--- PASSO 1: Sessão ---');
   debugLog({ user_id: userId, planKey });
 
-  // 1) user_sites (flexível no nome da coluna de usuário)
+  // 1) user_sites (qualquer nome de coluna de usuário)
   debugLog('--- PASSO 2: Lendo user_sites (todos os campos) ---');
   let allUserSites = [];
   try{
@@ -287,11 +296,11 @@ async function loadUserSelection(userId, planKey){
     return;
   }
 
-  // 2) sites (APENAS colunas existentes) -> label e view_key DINÂMICO
-  debugLog('--- PASSO 3: Buscando sites (id, nome/name/site) ---');
+  // 2) sites (usa select('*') para não quebrar por coluna ausente) -> label + view_key dinâmico
+  debugLog('--- PASSO 3: Buscando sites (select("*")) ---');
   let sites = [];
   try{
-    const { data, error } = await sb.from('sites').select('id, nome, name, site').in('id', siteIds);
+    const { data, error } = await sb.from('sites').select('*').in('id', siteIds);
     if (error) throw error;
     sites = data || [];
   }catch(e){ debugLog('ERRO sites: '+e.message); }
@@ -301,8 +310,8 @@ async function loadUserSelection(userId, planKey){
   for (const id of siteIds){ const s=byId.get(id); if (s && !ordered.includes(s)) ordered.push(s); }
 
   chosen = ordered.map(s=>{
-    const lbl = (s.nome || s.name || s.site || `Site ${s.id}`).toString().trim();
-    const vk  = 'Preco' + comp(lbl); // <— esta é a chave usada na view
+    const lbl = (s.nome || s.site || s.name || `Site ${s.id}`).toString().trim();
+    const vk  = 'Preco' + comp(lbl); // casa com vw_precos_com_desc.site
     return { site_id:s.id, label:lbl, view_key:vk };
   });
 
@@ -317,7 +326,7 @@ async function loadUserSelection(userId, planKey){
   setStatus(`Sites: ${chosen.map(c=>c.label).join(' · ')}`);
 }
 
-/* =================== Agregação da view (usa view_key de chosen) =================== */
+/* ===== Agrega linhas da view (usa view_key de chosen) ===== */
 function upsertRowsIntoProdutos(rows){
   const allowed = new Map(chosen.map(c=>[c.view_key, c.label]));
   for (const r of rows){
@@ -338,7 +347,7 @@ function upsertRowsIntoProdutos(rows){
   produtosList = Array.from(produtosMap.values());
 }
 
-/* =================== Render =================== */
+/* ===== Render ===== */
 function chartButtonSVG(){
   return `<svg class="chart-icon" viewBox="0 0 24 24" aria-hidden="true">
     <rect x="3" y="11" width="3" height="7" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>
@@ -409,7 +418,7 @@ function renderRowInto(tr, item){
   for (const c of chosen){ tr.appendChild(createPriceCell(item, c.label, locked.has(c.site_id), min, max)); }
 }
 function renderGeneralChunk(){
-  const end = Math.min(itemsRendered + 60, produtosList.length);
+  const end = Math.min(itemsRendered + RENDER_CHUNK, produtosList.length);
   const frag = document.createDocumentFragment();
   for (let i=itemsRendered;i<end;i++){ const it = produtosList[i]; const tr = document.createElement('tr'); renderRowInto(tr, it); frag.appendChild(tr); }
   generalBody.appendChild(frag);
@@ -426,14 +435,13 @@ function onGeneralScroll(){
 }
 generalWrap.addEventListener('scroll', onGeneralScroll);
 
-/* =================== Favoritos =================== */
+/* ===== Favoritos ===== */
 function renderFavs(){
   favBody.innerHTML='';
   const favList = produtosList.filter(p=>isFav(p.sku));
   const frag = document.createDocumentFragment();
   for (const item of favList){
     const tr = document.createElement('tr');
-
     const tdAct=document.createElement('td'); tdAct.className='col-fav';
     const btn=document.createElement('button'); btn.className='trash-btn'; btn.title='Remover'; btn.innerHTML='🗑️';
     btn.addEventListener('click', ()=>{ favSet.delete(item.sku); favSave(); const chk=generalChkMap.get(item.sku); if (chk){ suppressGeneralChange=true; chk.checked=false; suppressGeneralChange=false; } renderFavs(); updateFavHeight(); updateCounts(); });
@@ -444,22 +452,21 @@ function renderFavs(){
 
     const {min,max}=computeMinMaxForRow(item);
     for (const c of chosen){ tr.appendChild(createPriceCell(item, c.label, locked.has(c.site_id), min, max)); }
-
     frag.appendChild(tr);
   }
   favBody.appendChild(frag);
 }
 
-/* =================== Contadores =================== */
+/* ===== Contadores ===== */
 function updateCounts(){
   countShown.textContent = `Exibindo ${itemsRendered} de ${produtosList.length} no Geral (carregados)`;
   countTotal.textContent = serverExhausted ? `Total de SKUs carregados: ${produtosList.length}` : `Carregando… (${produtosList.length}+ )`;
   countFavs.textContent  = `Favoritos: ${favSet.size}`;
 }
 
-/* =================== Consulta paginada =================== */
+/* ===== Consulta paginada ===== */
 function buildQuery(){
-  let q = sb.from('vw_precos_com_desc').select('ean, site, preco, data, descricao, preco_num', { count:'estimated' }).order('data', { ascending:false });
+  let q = sb.from(VIEW).select('ean, site, preco, data, descricao, preco_num', { count:'estimated' }).order('data', { ascending:false });
   if (currentEanQ)  q = q.ilike('ean', `%${currentEanQ}%`);
   if (currentDescQ) q = q.ilike('descricao', `%${currentDescQ}%`);
   return q;
@@ -468,7 +475,7 @@ async function fetchNextPage(){
   if (fetching || serverExhausted) return;
   fetching = true; hideErr(); setStatus(`Carregando… (offset ${serverOffset})`);
   try{
-    const from = serverOffset, to = serverOffset + 200 - 1;
+    const from = serverOffset, to = serverOffset + PAGE_SIZE - 1;
     const { data, error } = await buildQuery().range(from, to);
     if (error) throw error;
 
@@ -480,14 +487,14 @@ async function fetchNextPage(){
       if (itemsRendered < produtosList.length) renderGeneralChunk();
       renderFavs();
       if (!favFirstAutoRenderDone){ updateFavHeight(); favFirstAutoRenderDone=true; }
-      serverOffset += 200;
+      serverOffset += PAGE_SIZE;
       setStatus(`Carregados: ${produtosList.length} SKUs (parcial)`);
     }
   }catch(e){ console.error(e); showErr('Falha ao carregar: ' + (e?.message || e)); setStatus('Erro ao carregar.'); }
   finally { fetching=false; updateCounts(); }
 }
 
-/* =================== Reset =================== */
+/* ===== Reset ===== */
 function resetAndQuery(){
   produtosMap.clear(); produtosList=[]; serverOffset=0; serverExhausted=false; favFirstAutoRenderDone=false;
   resetGeneralDom();
@@ -495,7 +502,7 @@ function resetAndQuery(){
   fetchNextPage();
 }
 
-/* =================== Navegação / filtros =================== */
+/* ===== Navegação / filtros ===== */
 ddMeusDados.addEventListener('click', ()=> location.href='meusdados.html');
 ddPlanos.addEventListener('click', ()=> location.href='planos.html');
 btnSair.addEventListener('click', async ()=>{ try{ await sb.auth.signOut(); } finally { localStorage.removeItem('mm_login_date'); location.href = CFG.SITE_URL || 'index.html'; } });
@@ -510,11 +517,8 @@ btnReload.addEventListener('click', async ()=>{
     let planKey='basico';
     try{
       const { data, error } = await sb.from('profiles').select('plan').eq('id', s.user.id).maybeSingle();
-      if (!error){
-        const raw = (data?.plan || 'basico').toString();
-        planKey = raw.toLowerCase();
-        planChip.textContent = `Plano: ${raw.charAt(0).toUpperCase()+raw.slice(1)}`;
-      }
+      if (!error) planKey = (data?.plan || 'basico').toString().toLowerCase();
+      planChip.textContent = `Plano: ${planKey.charAt(0).toUpperCase()+planKey.slice(1)}`;
     }catch{}
     await loadUserSelection(s.user.id, planKey);
   }
@@ -544,19 +548,19 @@ function updateFavHeight(){
   favResizer.addEventListener('dblclick', ()=>{ favHeightUser = null; localStorage.removeItem('mm_fav_height'); updateFavHeight(); });
 })();
 
-/* =================== Gráfico =================== */
+/* ===== Gráfico ===== */
 const pop = document.getElementById('chartPopover');
 const popTitle = document.getElementById('chartTitle');
 const popClose = document.getElementById('chartClose');
 const popMsg = document.getElementById('chartMsg');
-const sparkCanvas = document.getElementById('spark');
-const sparkCtx = sparkCanvas.getContext('2d');
+const spark = document.getElementById('spark');
+const sparkCtx = spark.getContext('2d');
 document.getElementById('chartClose').addEventListener('click', ()=> pop.style.display='none');
 addEventListener('click', (ev)=>{ if(pop.style.display!=='none' && !pop.contains(ev.target)) pop.style.display='none'; });
 
 function drawSpark(points){
-  const ctx=sparkCtx, W=sparkCanvas.width, H=sparkCanvas.height; ctx.clearRect(0,0,W,H);
-  if(!points||points.length<3){ popMsg.style.display='block'; popMsg.textContent='Histórico insuficiente (≥3 pontos).'; return; }
+  const ctx = sparkCtx, W=spark.width, H=spark.height; ctx.clearRect(0,0,W,H);
+  if (!points || points.length<3){ popMsg.style.display='block'; popMsg.textContent='Histórico insuficiente (≥3 pontos).'; return; }
   popMsg.style.display='none';
   const m={l:40,r:14,t:12,b:28};
   const xs=points.map(p=>p.x.getTime()), ys=points.map(p=>p.y);
@@ -574,11 +578,11 @@ async function openChartFor(ev, ean, label){
   const rect = ev.currentTarget.getBoundingClientRect();
   pop.style.display='block'; pop.style.left=(rect.right+12)+'px'; pop.style.top=(rect.bottom+12)+'px';
   popTitle.textContent = `${label} • ${ean}`;
-  popMsg.style.display='block'; popMsg.textContent='Carregando…'; sparkCtx.clearRect(0,0,sparkCanvas.width,sparkCanvas.height);
+  popMsg.style.display='block'; popMsg.textContent='Carregando…'; sparkCtx.clearRect(0,0,spark.width,spark.height);
 
   try{
     const vk = (chosen.find(c=>c.label===label)||{}).view_key || ('Preco'+comp(label));
-    const { data, error } = await sb.from('vw_precos_com_desc').select('data, preco_num')
+    const { data, error } = await sb.from(VIEW).select('data, preco_num')
       .eq('ean', ean).eq('site', vk).not('preco_num','is',null).order('data',{ascending:true}).limit(60);
     if (error) throw error;
     const pts = (data||[]).filter(r=>typeof r.preco_num==='number'&&Number.isFinite(r.preco_num)).map(r=>({x:new Date(r.data), y:r.preco_num}));
@@ -586,7 +590,7 @@ async function openChartFor(ev, ean, label){
   }catch(e){ popMsg.style.display='block'; popMsg.textContent='Falha ao carregar histórico.'; }
 }
 
-/* =================== INIT =================== */
+/* ===== INIT ===== */
 (async function init(){
   const { data:{ session } } = await sb.auth.getSession();
   if (!session) { location.href = CFG.SITE_URL || 'index.html'; return; }
@@ -596,17 +600,4 @@ async function openChartFor(ev, ean, label){
   try{
     const { data, error } = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
     if (!error){
-      const raw=(data?.plan||'basico').toString();
-      planKey = raw.toLowerCase();
-      planChip.textContent = `Plano: ${raw.charAt(0).toUpperCase()+raw.slice(1)}`;
-    }
-  }catch{}
-
-  await loadUserSelection(session.user.id, planKey);
-  currentEanQ=''; currentDescQ='';
-  resetAndQuery();
-  generalWrap.dispatchEvent(new Event('scroll'));
-})();
-</script>
-</body>
-</html>
+      const raw =analysis
