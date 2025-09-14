@@ -20,16 +20,29 @@
   .userChipWrap { position: relative; display:inline-block; }
   .dropdown {
     position: absolute;
-    right: 0; top: calc(100% + 6px); display: none;
-    min-width: 180px; padding: 6px; background: #0f0f0f;
-    border: 1px solid #2a2a2a; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.5);
+    right: 0;
+    top: calc(100% + 6px);
+    display: none;
+    min-width: 180px;
+    padding: 6px;
+    background: #0f0f0f;
+    border: 1px solid #2a2a2a;
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.5);
     z-index: 50;
   }
   .userChipWrap:hover .dropdown,
   .userChipWrap.open .dropdown { display: block; }
   .dd-item {
-    width: 100%; background: transparent; border: none; color: #eee; text-align: left;
-    padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 14px;
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: #eee;
+    text-align: left;
+    padding: 10px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
   }
   .dd-item:hover { background: #1b1b1b; }
 
@@ -94,7 +107,7 @@
   .chart-popover .msg { font-size:12px; color:#bbb; padding:8px; text-align:center; }
   canvas.spark { width:200px; height:180px; display:block; background:#121212; border:1px solid #232323; border-radius:6px; }
 
-  /* Bloqueio por plano */
+  /* ===== Bloqueio por plano (mantido) ===== */
   th[data-locked="true"] { position: relative; color: #aaa; }
   th[data-locked="true"]::after { content: "🔒"; margin-left: 6px; opacity: .8; font-size: 14px; }
   td.locked-cell .price { filter: blur(3px); }
@@ -143,7 +156,7 @@
   <div id="favWrap" class="wrap">
     <table id="favTable">
       <thead>
-        <tr id="favHeaderRow"><!-- via JS --></tr>
+        <tr id="favHeaderRow"><!-- montado via JS --></tr>
       </thead>
       <tbody></tbody>
     </table>
@@ -159,7 +172,7 @@
   <div id="generalWrap" class="wrap">
     <table id="produtosTable">
       <thead>
-        <tr id="generalHeaderRow"><!-- via JS --></tr>
+        <tr id="generalHeaderRow"><!-- montado via JS --></tr>
       </thead>
       <tbody></tbody>
     </table>
@@ -183,7 +196,7 @@
 </div>
 
 <script>
-/* ======== ERROS VISÍVEIS ======== */
+/* ======== AJUDA: Mostra erros no topo ======== */
 window.addEventListener('error', e => { const el=document.getElementById('err'); el.style.display='block'; el.textContent='Erro JS: '+e.message; });
 window.addEventListener('unhandledrejection', e => { const el=document.getElementById('err'); el.style.display='block'; el.textContent='Erro assíncrono: '+(e.reason?.message||e.reason); });
 
@@ -201,52 +214,61 @@ const RENDER_CHUNK = 60;
 
 /* ======== ELEMENTOS ======== */
 const statusEl = document.getElementById('status');
-const errEl    = document.getElementById('err');
+const errEl = document.getElementById('err');
 const userChip = document.getElementById('userChip');
 const planChip = document.getElementById('planChip');
 const ddMeusDados = document.getElementById('ddMeusDados');
-const ddPlanos    = document.getElementById('ddPlanos');
-const btnSair     = document.getElementById('btnSair');
-const btnReload   = document.getElementById('btnReload');
-const eanFilter   = document.getElementById('eanFilter');
-const descFilter  = document.getElementById('descFilter');
+const ddPlanos = document.getElementById('ddPlanos');
+const btnSair = document.getElementById('btnSair');
+const btnReload = document.getElementById('btnReload');
+const eanFilter = document.getElementById('eanFilter');
+const descFilter = document.getElementById('descFilter');
 
-const favWrap  = document.getElementById('favWrap');
-const favBody  = document.querySelector('#favTable tbody');
+const favWrap = document.getElementById('favWrap');
+const favBody = document.querySelector('#favTable tbody');
 const favResizer = document.getElementById('favResizer');
 
 const generalWrap = document.getElementById('generalWrap');
 const generalBody = document.querySelector('#produtosTable tbody');
-const endMarker   = document.getElementById('endMarker');
+const endMarker = document.getElementById('endMarker');
 
-const countShown  = document.getElementById('countShown');
-const countTotal  = document.getElementById('countTotal');
-const countFavs   = document.getElementById('countFavs');
+const countShown = document.getElementById('countShown');
+const countTotal = document.getElementById('countTotal');
+const countFavs  = document.getElementById('countFavs');
 
-const favHeaderRow     = document.getElementById('favHeaderRow');
+/* Cabeçalhos dinâmicos */
+const favHeaderRow = document.getElementById('favHeaderRow');
 const generalHeaderRow = document.getElementById('generalHeaderRow');
 
 /* Popover/Canvas */
-const pop        = document.getElementById('chartPopover');
-const popTitle   = document.getElementById('chartTitle');
-const popClose   = document.getElementById('chartClose');
-const popMsg     = document.getElementById('chartMsg');
-const sparkCanvas= document.getElementById('spark');
-const sparkCtx   = sparkCanvas.getContext('2d');
+const pop = document.getElementById('chartPopover');
+const popTitle = document.getElementById('chartTitle');
+const popClose = document.getElementById('chartClose');
+const popMsg = document.getElementById('chartMsg');
+const sparkCanvas = document.getElementById('spark');
+const sparkCtx = sparkCanvas.getContext('2d');
 
-/* ======== ESTADO COM CHAVES POR site_id ======== */
-const DEFAULT_PLAN_SITE_LIMIT = { trial:2, basico:4, intermediario:5, premium:8 };
+/* ======== MAPA view_key -> label, e inverso ======== */
+const siteMap = {
+  "PrecoLeroyMerlin": "LeroyMerlin",
+  "PrecoQueroQuero": "QueroQuero",
+  "PrecoCassol": "Cassol",
+  "PrecoRedeMac": "RedeMac",
+  "PrecoMestreTinho": "MestreTinho",
+  "PrecoTumelero": "Tumelero",
+  "PrecoSupremeinox": "Supremeinox",
+  "PrecoGhaus": "Ghaus"
+};
+const viewKeyByLabel = Object.fromEntries(Object.entries(siteMap).map(([k,v])=>[v,k]));
+const KNOWN_LABELS = Object.values(siteMap);
 
-let chosenSiteIds = [];            // [site_id] na ordem do user_sites
-let idToLabel     = new Map();     // site_id -> nome para exibir (sites.nome/name/site)
-let idToViewKey   = new Map();     // site_id -> view_key (ex.: "PrecoLeroyMerlin")
-let viewKeyToId   = new Map();     // view_key -> site_id
-
-let unlockedSiteIds = new Set();   // liberadas pelo plano
-let lockedSiteIds   = new Set();   // excedentes do plano
+/* ======== ESTADO ======== */
+let chosenSitesAll = [];          // labels exatamente como o usuário selecionou (ordem do user_sites)
+let unlockedSites = new Set(KNOWN_LABELS); // mantido (plano) — não tratamos limite aqui
+let lockedSites = new Set();               // mantido
 
 let favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
-let produtosMap = new Map();       // Map<ean, { sku, desc, sites: { [site_id]: {precoRaw, precoNum, data} } }>
+let produtosMap = new Map();              // Map<ean, { sku, desc, sites: { [label]: {...} } }>
 let produtosList = [];
 let itemsRendered = 0;
 
@@ -263,39 +285,62 @@ const generalChkMap = new Map();
 
 let favFirstAutoRenderDone = false;
 
+/* ======== LIMITES (fallback, mantido) ======== */
+const DEFAULT_PLAN_SITE_LIMIT = { trial: 2, basico: 4, intermediario: 5, premium: 8 };
+
 /* ======== HELPERS ======== */
 function setStatus(t){ statusEl.textContent = t || ''; }
 function showErr(e){ errEl.style.display='block'; errEl.textContent = String(e||'').trim(); }
 function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
 function formatBRL(n){ try { return n.toLocaleString('pt-BR', { style:'currency', currency:'BRL' }); } catch { return String(n); } }
-function debounce(fn, delay=500){ let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args),delay); }; }
 function favSave(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet])); }
 function isFav(sku){ return favSet.has(String(sku)); }
+function debounce(fn, delay=500){ let t; return (...args)=>{ clearTimeout(t); t = setTimeout(()=>fn(...args), delay); }; }
 
-/* ======== CABEÇALHOS ======== */
+function normalizeSiteLabel(x){
+  if (!x) return "";
+  return x.toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/\s+/g,'').replace(/[^a-zA-Z0-9]/g,'').toLowerCase();
+}
+function toDashboardLabel(raw){
+  const n = normalizeSiteLabel(raw);
+  if (n === 'leroymerlin') return 'LeroyMerlin';
+  if (n === 'queroquero') return 'QueroQuero';
+  if (n === 'cassol' || n === 'cassolcenterlar') return 'Cassol';
+  if (n === 'redemac' || n === 'redemacsuperbem' || n === 'superbem' || n === 'redemacsuperbem') return 'RedeMac';
+  if (n === 'mestretinho' || n === 'mestrettinho') return 'MestreTinho';
+  if (n === 'tumelero') return 'Tumelero';
+  if (n === 'supremeinox' || n === 'supreme inox') return 'Supremeinox';
+  if (n === 'ghaus' || n === 'g-haus' || n === 'gháus') return 'Ghaus';
+  // Se não casar, retorna string "colável" como rótulo mesmo assim
+  const fallback = (raw||'').toString().replace(/\s+/g,'').replace(/[^\w]/g,'');
+  return fallback || '';
+}
+
+/* ======== 1) Cabeçalhos dinâmicos conforme seleção ======== */
 function buildHeaders(){
   const favHeadFixed = `<th class="col-fav">Ação</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
   const genHeadFixed = `<th class="col-fav">★</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
 
-  const sitesTh = chosenSiteIds.map(id => {
-    const label = idToLabel.get(id) || `Site ${id}`;
-    const locked = lockedSiteIds.has(id) ? ' data-locked="true"' : ' data-locked="false"';
-    return `<th data-siteid="${id}"${locked}>${label}</th>`;
+  const sitesTh = chosenSitesAll.map(lbl => {
+    const locked = lockedSites.has(lbl) ? ' data-locked="true"' : ' data-locked="false"';
+    return `<th data-site="${lbl}"${locked}>${lbl}</th>`;
   }).join('');
 
   favHeaderRow.innerHTML = favHeadFixed + sitesTh;
   generalHeaderRow.innerHTML = genHeadFixed + sitesTh;
-
-  // aplica opacidade/lock
-  document.querySelectorAll('thead th[data-siteid]').forEach(th=>{
-    const id = Number(th.getAttribute('data-siteid'));
-    const locked = lockedSiteIds.has(id);
+}
+function markLockedHeaders(){
+  const ths = document.querySelectorAll('thead th[data-site]');
+  ths.forEach(th=>{
+    const s = th.getAttribute('data-site');
+    const locked = lockedSites.has(s);
     th.setAttribute('data-locked', locked ? 'true' : 'false');
     th.style.opacity = locked ? '0.4' : '1';
   });
 }
 
-/* ======== LIMITE DO PLANO ======== */
+/* ======== 2) Carregar seleção do usuário em user_sites (ordem real) ======== */
 async function getSitesLimitForPlan(planKey){
   const key = (planKey || '').toString().trim().toLowerCase();
   try {
@@ -310,87 +355,76 @@ async function getSitesLimitForPlan(planKey){
   return DEFAULT_PLAN_SITE_LIMIT[key] ?? 2;
 }
 
-/* ======== SELEÇÃO DO USUÁRIO (user_sites) → COLUNAS ======== */
 async function loadUserSitesAndLocks(userId, planKey){
   const maxSites = await getSitesLimitForPlan(planKey);
 
-  // 1) Lê user_sites na ordem de criação
+  // 1) Lê user_sites na ordem real do usuário (position, depois id)
   let userRows = [];
   try{
     const { data, error } = await sb.from('user_sites')
-      .select('site_id, created_at, id')
+      .select('site_id, enabled, position, id')
       .eq('user_id', userId)
-      .order('created_at', { ascending: true, nullsFirst: true })
+      .order('position', { ascending: true, nullsFirst: true })
       .order('id', { ascending: true });
     if (error) throw error;
-    userRows = data || [];
-  }catch(e){
-    console.warn('user_sites: falha de leitura', e);
+    userRows = (data || []).filter(r => r.enabled !== false);
+  }catch(e){ console.warn('user_sites: falha de leitura', e); }
+
+  // 2) Converte para labels preservando ordem do user_sites
+  let labels = [];
+  if (userRows.length){
+    const ids = userRows.map(r=>r.site_id).filter(x=>x!=null);
+    try{
+      const { data: sites, error } = await sb.from('sites')
+        .select('id, view_key, nome, name, site')
+        .in('id', ids);
+      if (error) throw error;
+
+      const ordered = ids.map(id => (sites||[]).find(s => s.id === id)).filter(Boolean);
+      ordered.forEach(s => {
+        let lbl = '';
+        // Preferência: usar view_key mapeado
+        if (s.view_key && siteMap[s.view_key]) {
+          lbl = siteMap[s.view_key];
+          // guarda inverso para gráficos
+          viewKeyByLabel[lbl] = s.view_key;
+        } else {
+          // Heurística pelo nome
+          lbl = toDashboardLabel(s?.nome || s?.name || s?.site || '');
+          // se já conhecemos a view_key dessa label, mantemos; senão, fica sem vínculo (só cabeçalho)
+        }
+        if (lbl) labels.push(lbl);
+      });
+    }catch(e){ console.warn('sites: falha de leitura', e); }
   }
 
-  if (!userRows.length){
-    setStatus('Nenhum site selecionado em Meus Dados.');
-    chosenSiteIds = [];
-    unlockedSiteIds = new Set();
-    lockedSiteIds = new Set();
-    idToLabel.clear(); idToViewKey.clear(); viewKeyToId.clear();
-    buildHeaders();
-    return;
+  // 3) Se não há seleção válida, fallback = todos conhecidos (apenas para garantir que a página abra)
+  if (!labels.length){
+    labels = [...KNOWN_LABELS]; // ordem padrão apenas quando não há seleção
   }
 
-  // 2) Busca dados dos sites referenciados
-  const ids = userRows.map(r=>r.site_id).filter(x=>x!=null);
-  let sites = [];
-  try{
-    const { data, error } = await sb.from('sites')
-      .select('id, view_key, nome, name, site')
-      .in('id', ids);
-    if (error) throw error;
-    sites = data || [];
-  }catch(e){
-    console.warn('sites: falha de leitura', e);
-  }
+  // 4) Remove duplicatas preservando ordem
+  chosenSitesAll = [...new Set(labels)];
 
-  // 3) Indexa e monta ordem final por site_id (sem duplicar)
-  idToLabel.clear(); idToViewKey.clear(); viewKeyToId.clear();
-  const byId = new Map(sites.map(s => [s.id, s]));
-  const order = [];
-  const seen = new Set();
-  for (const r of userRows){
-    const s = byId.get(r.site_id);
-    if (!s) continue;
-    if (seen.has(s.id)) continue;
-    seen.add(s.id);
-    order.push(s.id);
+  // 5) (Bloqueio por plano — mantido, sem mudanças de regra)
+  unlockedSites = new Set(chosenSitesAll.slice(0, maxSites));
+  lockedSites   = new Set(chosenSitesAll.slice(maxSites));
 
-    const label = (s.nome || s.name || s.site || `Site ${s.id}`).toString();
-    idToLabel.set(s.id, label);
-    if (s.view_key){
-      idToViewKey.set(s.id, s.view_key);
-      viewKeyToId.set(s.view_key, s.id);
-    }
-  }
-  chosenSiteIds = order;
-
-  // 4) Bloqueio por plano
-  unlockedSiteIds = new Set(chosenSiteIds.slice(0, maxSites));
-  lockedSiteIds   = new Set(chosenSiteIds.slice(maxSites));
-
-  // 5) Cabeçalhos
+  // 6) Monta cabeçalhos na exata ordem da seleção
   buildHeaders();
+  markLockedHeaders();
 
-  setStatus(`Sites selecionados (ordem do usuário): ${chosenSiteIds.map(id=>idToLabel.get(id)).join(' · ')}`);
+  setStatus(`Sites selecionados (ordem do usuário): ${chosenSitesAll.join(' · ')}`);
 }
 
-/* ======== AGREGAÇÃO (usa site_id como chave) ======== */
+/* ======== 3) Agregar dados por EAN, gravando por label selecionado ======== */
 function upsertRowsIntoProdutos(rows){
   for (const row of rows){
     const ean = String(row.ean ?? '');
-    const viewKey = String(row.site ?? '');   // exemplo: "PrecoLeroyMerlin"
-    const siteId = viewKeyToId.get(viewKey);
-
-    // só agrega se esse site estiver entre os selecionados pelo usuário
-    if (!siteId || !chosenSiteIds.includes(siteId)) continue;
+    const viewKey = String(row.site ?? '');           // ex.: "PrecoLeroyMerlin"
+    const label = siteMap[viewKey];                   // ex.: "LeroyMerlin"
+    if (!label) continue;                             // ignora sites não mapeados na view
+    if (!chosenSitesAll.includes(label)) continue;    // ignora se usuário não selecionou essa coluna
 
     if (!produtosMap.has(ean)) {
       produtosMap.set(ean, { sku: ean, desc: row.descricao || '', sites: {} });
@@ -398,15 +432,15 @@ function upsertRowsIntoProdutos(rows){
     const item = produtosMap.get(ean);
     if (!item.desc && row.descricao) item.desc = row.descricao;
 
-    const prev = item.sites[siteId];
+    const prev = item.sites[label];
     if (!prev || new Date(row.data) > new Date(prev.data)) {
-      item.sites[siteId] = { precoRaw: row.preco, precoNum: row.preco_num, data: row.data };
+      item.sites[label] = { precoRaw: row.preco, precoNum: row.preco_num, data: row.data };
     }
   }
   produtosList = Array.from(produtosMap.values());
 }
 
-/* ======== RENDER ======== */
+/* ======== 4) Render: só cria TD para sites selecionados, na ordem ======== */
 function chartButtonSVG(){
   return `
     <svg class="chart-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -417,52 +451,62 @@ function chartButtonSVG(){
     </svg>`;
 }
 function computeMinMaxForRow(item){
-  let min = { id:null, val: Infinity }, max = { id:null, val: -Infinity };
-  for (const id of chosenSiteIds) {
-    if (lockedSiteIds.has(id)) continue;
-    const d = item.sites[id];
+  let min = { site:null, val: Infinity }, max = { site:null, val: -Infinity };
+  for (const s of chosenSitesAll) {
+    if (lockedSites.has(s)) continue; // ignora bloqueadas
+    const d = item.sites[s];
     if (!d || !Number.isFinite(d.precoNum)) continue;
-    if (d.precoNum < min.val) { min = { id:id, val:d.precoNum }; }
-    if (d.precoNum > max.val) { max = { id:id, val:d.precoNum }; }
+    if (d.precoNum < min.val) { min = { site:s, val:d.precoNum }; }
+    if (d.precoNum > max.val) { max = { site:s, val:d.precoNum }; }
   }
-  return { minId: min.id, maxId: max.id };
+  return { minSite: min.site, maxSite: max.site };
 }
-function createPriceCell(item, siteId, minId, maxId){
+function createPriceCell(item, siteName, minSite, maxSite){
   const td = document.createElement('td');
-  const d = item.sites[siteId];
-  const isLocked = lockedSiteIds.has(siteId);
+  if (!chosenSitesAll.includes(siteName)) return td; // segurança
+
+  const d = item.sites[siteName];
+  const isLocked = lockedSites.has(siteName);
   if (isLocked) td.classList.add('locked-cell');
 
   if (d) {
     const dataStr = d.data ? new Date(d.data).toLocaleString('pt-BR') : '';
     if (Number.isFinite(d.precoNum)) {
-      const span = document.createElement('span');
-      span.className = `price ${!isLocked && siteId===minId ? 'min' : (!isLocked && siteId===maxId ? 'max':'')}`;
-      span.title = isLocked ? 'Excedeu o limite do plano' : (dataStr ? `Atualizado em ${dataStr}` : '');
-      span.textContent = formatBRL(d.precoNum);
-      td.appendChild(span);
+      const display = formatBRL(d.precoNum);
+      const cls = (!isLocked && siteName === minSite) ? 'min' : (!isLocked && siteName === maxSite ? 'max' : '');
+      const priceSpan = document.createElement('span');
+      priceSpan.className = `price ${cls}`;
+      priceSpan.title = isLocked ? 'Excedeu o limite do plano' : (dataStr ? `Atualizado em ${dataStr}` : '');
+      priceSpan.textContent = display;
 
-      const b = document.createElement('button');
-      b.className='chart-btn'; b.type='button';
-      b.title = isLocked ? 'Disponível no upgrade' : 'Ver histórico';
-      b.innerHTML = chartButtonSVG();
-      b.addEventListener('click', (ev)=>{
-        if (isLocked){ window.location.href='planos.html'; return; }
-        openChartFor(ev, item.sku, siteId);
+      td.appendChild(priceSpan);
+
+      const btn = document.createElement('button');
+      btn.className = 'chart-btn';
+      btn.type = 'button';
+      btn.title = isLocked ? 'Disponível no upgrade' : 'Ver gráfico do histórico';
+      btn.innerHTML = chartButtonSVG();
+      btn.addEventListener('click', (ev) => {
+        if (isLocked) { window.location.href = 'planos.html'; return; }
+        openChartFor(ev, item.sku, siteName);
       });
-      td.appendChild(b);
+      td.appendChild(btn);
 
-      if (isLocked){
+      if (isLocked) {
         const up = document.createElement('button');
-        up.className='unlock'; up.type='button'; up.title='Excedeu o limite do plano. Ver planos.'; up.textContent='Ver planos';
-        up.addEventListener('click', ()=> window.location.href='planos.html');
+        up.className = 'unlock';
+        up.type = 'button';
+        up.title = 'Excedeu o limite do plano. Ver planos.';
+        up.textContent = 'Ver planos';
+        up.addEventListener('click', ()=> window.location.href = 'planos.html');
         td.appendChild(up);
       }
     } else {
+      const raw = (d.precoRaw ?? '').toString().replace(/</g,'&lt;');
       const span = document.createElement('span');
-      span.className='price';
+      span.className = 'price';
       span.title = isLocked ? 'Excedeu o limite do plano' : (dataStr ? `Atualizado em ${dataStr}` : '');
-      span.textContent = (d.precoRaw??'').toString();
+      span.textContent = raw;
       td.appendChild(span);
     }
   } else {
@@ -471,68 +515,106 @@ function createPriceCell(item, siteId, minId, maxId){
   return td;
 }
 function renderRowInto(tr, item){
-  const tdFav = document.createElement('td'); tdFav.className='col-fav';
-  const chk = document.createElement('input'); chk.type='checkbox'; chk.checked=isFav(item.sku); chk.title='Marcar como favorito';
-  chk.addEventListener('change', ()=>{ if (suppressGeneralChange) return; if (chk.checked) favSet.add(item.sku); else favSet.delete(item.sku); favSave(); renderFavs(); updateFavHeight(); updateCounts(); });
-  tdFav.appendChild(chk); tr.appendChild(tdFav); generalChkMap.set(item.sku, chk);
+  // Fav
+  const tdFav = document.createElement('td');
+  tdFav.className = 'col-fav';
+  const chk = document.createElement('input');
+  chk.type = 'checkbox'; chk.checked = isFav(item.sku); chk.title = 'Marcar como favorito';
+  chk.addEventListener('change', () => {
+    if (suppressGeneralChange) return;
+    if (chk.checked) favSet.add(item.sku); else favSet.delete(item.sku);
+    favSave(); renderFavs(); updateFavHeight(); updateCounts();
+  });
+  tdFav.appendChild(chk);
+  tr.appendChild(tdFav);
+  generalChkMap.set(item.sku, chk);
 
-  const tdSku = document.createElement('td'); tdSku.className='col-sku'; tdSku.textContent=item.sku; tr.appendChild(tdSku);
-  const tdDesc= document.createElement('td'); tdDesc.className='col-desc'; tdDesc.innerHTML=(item.desc||'').replace(/</g,'&lt;'); tr.appendChild(tdDesc);
+  // EAN
+  const tdSku = document.createElement('td'); tdSku.className = 'col-sku'; tdSku.textContent = item.sku; tr.appendChild(tdSku);
 
-  const {minId,maxId} = computeMinMaxForRow(item);
-  for (const id of chosenSiteIds){ tr.appendChild(createPriceCell(item, id, minId, maxId)); }
+  // Descrição
+  const tdDesc = document.createElement('td'); tdDesc.className = 'col-desc'; tdDesc.innerHTML = (item.desc || '').replace(/</g,'&lt;'); tr.appendChild(tdDesc);
+
+  // Sites (somente os selecionados, na ordem escolhida)
+  const { minSite, maxSite } = computeMinMaxForRow(item);
+  for (const s of chosenSitesAll) {
+    tr.appendChild(createPriceCell(item, s, minSite, maxSite));
+  }
 }
 function renderGeneralChunk(){
   const end = Math.min(itemsRendered + RENDER_CHUNK, produtosList.length);
   const frag = document.createDocumentFragment();
-  for (let i=itemsRendered;i<end;i++){ const it = produtosList[i]; const tr = document.createElement('tr'); renderRowInto(tr, it); frag.appendChild(tr); }
+  for (let i = itemsRendered; i < end; i++){ const item = produtosList[i]; const tr = document.createElement('tr'); renderRowInto(tr, item); frag.appendChild(tr); }
   generalBody.appendChild(frag);
   itemsRendered = end;
   endMarker.textContent = (serverExhausted && itemsRendered >= produtosList.length) ? 'Fim da lista' : '';
   updateCounts();
 }
-function resetGeneralDom(){ generalBody.innerHTML=''; generalChkMap.clear(); itemsRendered=0; endMarker.textContent=''; }
+function resetGeneralDom(){ generalBody.innerHTML = ''; generalChkMap.clear(); itemsRendered = 0; endMarker.textContent = ''; }
 function onGeneralScroll(){
   if (loadingMore) return;
   const nearBottom = generalWrap.scrollTop + generalWrap.clientHeight >= generalWrap.scrollHeight - 100;
-  if (nearBottom && itemsRendered < produtosList.length){ loadingMore=true; setTimeout(()=>{ renderGeneralChunk(); loadingMore=false; }, 30); return; }
+  if (nearBottom && itemsRendered < produtosList.length){
+    loadingMore = true; setTimeout(()=>{ renderGeneralChunk(); loadingMore = false; }, 30); return;
+  }
   if (nearBottom && !serverExhausted && !fetching){ fetchNextPage(); }
 }
 generalWrap.addEventListener('scroll', onGeneralScroll);
 
 /* ======== FAVORITOS ======== */
 function renderFavs(){
-  favBody.innerHTML='';
-  const favList = produtosList.filter(p=>isFav(p.sku));
+  favBody.innerHTML = '';
+  const favList = produtosList.filter(p => isFav(p.sku));
   const frag = document.createDocumentFragment();
   for (const item of favList){
     const tr = document.createElement('tr');
 
-    const tdAct=document.createElement('td'); tdAct.className='col-fav';
-    const btn=document.createElement('button'); btn.className='trash-btn'; btn.title='Remover'; btn.innerHTML='🗑️';
-    btn.addEventListener('click', ()=>{ favSet.delete(item.sku); favSave(); const chk=generalChkMap.get(item.sku); if (chk){ suppressGeneralChange=true; chk.checked=false; suppressGeneralChange=false; } renderFavs(); updateFavHeight(); updateCounts(); });
+    const tdAct = document.createElement('td'); tdAct.className = 'col-fav';
+    const btn = document.createElement('button'); btn.className = 'trash-btn'; btn.title = 'Remover dos favoritos';
+    btn.innerHTML = '🗑️';
+    btn.addEventListener('click', () => {
+      favSet.delete(item.sku); favSave();
+      const chk = generalChkMap.get(item.sku);
+      if (chk) { suppressGeneralChange = true; chk.checked = false; suppressGeneralChange = false; }
+      renderFavs(); updateFavHeight(); updateCounts();
+    });
     tdAct.appendChild(btn); tr.appendChild(tdAct);
 
-    const tdSku=document.createElement('td'); tdSku.className='col-sku'; tdSku.textContent=item.sku; tr.appendChild(tdSku);
-    const tdDesc=document.createElement('td'); tdDesc.className='col-desc'; tdDesc.innerHTML=(item.desc||'').replace(/</g,'&lt;'); tr.appendChild(tdDesc);
+    const tdSku = document.createElement('td'); tdSku.className = 'col-sku'; tdSku.textContent = item.sku; tr.appendChild(tdSku);
+    const tdDesc = document.createElement('td'); tdDesc.className = 'col-desc'; tdDesc.innerHTML = (item.desc || '').replace(/</g,'&lt;'); tr.appendChild(tdDesc);
 
-    const {minId,maxId}=computeMinMaxForRow(item);
-    for (const id of chosenSiteIds){ tr.appendChild(createPriceCell(item, id, minId, maxId)); }
+    const { minSite, maxSite } = computeMinMaxForRow(item);
+    for (const s of chosenSitesAll) {
+      tr.appendChild(createPriceCell(item, s, minSite, maxSite));
+    }
 
     frag.appendChild(tr);
   }
   favBody.appendChild(frag);
 }
 
+/* ======== TOGGLE SEÇÕES ======== */
+function attachToggle(panel, button){
+  function setState(expanded){
+    panel.classList.toggle('collapsed', !expanded);
+    button.textContent = expanded ? 'Minimizar' : 'Maximizar';
+    button.setAttribute('aria-expanded', String(expanded));
+  }
+  button.addEventListener('click', ()=>{ const isExpanded = button.getAttribute('aria-expanded') === 'true'; setState(!isExpanded); });
+  setState(true);
+}
+attachToggle(document.getElementById('favPanel'), document.getElementById('toggleFav'));
+attachToggle(document.getElementById('generalPanel'), document.getElementById('toggleGen'));
+
 /* ======== CONTADORES ======== */
 function updateCounts(){
-  const favs=favSet.size;
+  const favs = favSet.size;
   countShown.textContent = `Exibindo ${itemsRendered} de ${produtosList.length} no Geral (carregados)`;
   countTotal.textContent = serverExhausted ? `Total de SKUs carregados: ${produtosList.length}` : `Carregando… (${produtosList.length}+ )`;
-  countFavs.textContent  = `Favoritos: ${favs}`;
+  countFavs.textContent = `Favoritos: ${favs}`;
 }
 
-/* ======== CONSULTA (paginação) ======== */
+/* ======== CONSULTA SERVIDOR (PAGINADA) ======== */
 function buildQuery(){
   let q = sb.from(VIEW).select('ean, site, preco, data, descricao, preco_num', { count: 'estimated' }).order('data', { ascending: false });
   if (currentEanQ) q = q.ilike('ean', `%${currentEanQ}%`);
@@ -562,20 +644,27 @@ async function fetchNextPage(){
   finally { fetching = false; updateCounts(); }
 }
 
-/* ======== RESET ======== */
+/* ======== RESET DE CONSULTA ======== */
 function resetAndQuery(){
-  produtosMap.clear(); produtosList=[]; serverOffset=0; serverExhausted=false; favFirstAutoRenderDone=false;
-  resetGeneralDom();
+  produtosMap.clear(); produtosList = []; serverOffset = 0; serverExhausted = false; favFirstAutoRenderDone = false;
+
+  generalBody.innerHTML = '';
+  generalChkMap.clear();
+  itemsRendered = 0;
+  endMarker.textContent = '';
+
   renderFavs(); updateFavHeight(); updateCounts();
   fetchNextPage();
 }
 
-/* ======== NAVEGAÇÃO / FILTROS ======== */
-ddMeusDados.addEventListener('click', () => { window.location.href = 'meusdados.html'; });
-ddPlanos.addEventListener('click', () => { window.location.href = 'planos.html'; });
-btnSair.addEventListener('click', async () => {
-  try { await sb.auth.signOut(); } catch (e) { console.error('Erro ao sair:', e); }
-  finally { localStorage.removeItem('mm_login_date'); window.location.href = CFG.SITE_URL || 'index.html'; }
+/* ======== EVENTOS UI ======== */
+btnReload.addEventListener('click', async () => {
+  const session = (await sb.auth.getSession()).data.session;
+  if (session?.user?.id) {
+    const planKey = await loadHeaderInfoPlanOnly();
+    await loadUserSitesAndLocks(session.user.id, planKey); // reconstrói cabeçalhos na ordem do user_sites
+  }
+  resetAndQuery();
 });
 const onFilterInput = debounce(() => {
   currentEanQ = (eanFilter.value || '').trim();
@@ -585,21 +674,43 @@ const onFilterInput = debounce(() => {
 eanFilter.addEventListener('input', onFilterInput);
 descFilter.addEventListener('input', onFilterInput);
 
-btnReload.addEventListener('click', async () => {
-  const session = (await sb.auth.getSession()).data.session;
-  if (session?.user?.id) {
-    let planKey = 'basico';
-    try{
-      const { data, error } = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
-      if (!error) planKey = (data?.plan || 'basico').toString().toLowerCase();
-      planChip.textContent = `Plano: ${planKey.charAt(0).toUpperCase()+planKey.slice(1)}`;
-    }catch(e){}
-    await loadUserSitesAndLocks(session.user.id, planKey);
-  }
-  resetAndQuery();
+/* ======== HEADER / SESSÃO ======== */
+ddMeusDados.addEventListener('click', () => { window.location.href = 'meusdados.html'; });
+ddPlanos.addEventListener('click', () => { window.location.href = 'planos.html'; });
+btnSair.addEventListener('click', async () => {
+  try { await sb.auth.signOut(); } catch (e) { console.error('Erro ao sair:', e); }
+  finally { localStorage.removeItem('mm_login_date'); window.location.href = CFG.SITE_URL || 'index.html'; }
 });
 
-/* ======== FAVORITOS: altura e resizer ======== */
+async function loadHeaderInfo(){
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return null; }
+  userChip.textContent = session.user?.email || 'Logado';
+
+  let planKey = 'basico';
+  try{
+    const { data, error } = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
+    if (error) throw error;
+    const planRaw = (data?.plan || 'basico').toString();
+    planKey = planRaw.toLowerCase();
+    const pretty = planRaw.charAt(0).toUpperCase() + planRaw.slice(1);
+    planChip.textContent = `Plano: ${pretty}`;
+  }catch(e){ console.error(e); planChip.textContent = 'Plano: —'; }
+
+  await loadUserSitesAndLocks(session.user.id, planKey);
+  return session;
+}
+async function loadHeaderInfoPlanOnly(){
+  try{
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) return 'basico';
+    const { data, error } = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
+    if (error) throw error;
+    return (data?.plan || 'basico').toString().toLowerCase();
+  }catch(e){ console.error(e); return 'basico'; }
+}
+
+/* ======== FAV HEIGHT / RESIZER (mantido) ======== */
 function measureRowHeight(){ const row = document.querySelector('#favTable tbody tr'); if (!row) return 44; const h = Math.round(row.getBoundingClientRect().height); return Math.max(36, h || 44); }
 function measureHeadHeight(){ const head = document.querySelector('#favTable thead'); if (!head) return 40; const h = Math.round(head.getBoundingClientRect().height); return Math.max(32, h || 40); }
 let favHeightUser = Number(localStorage.getItem('mm_fav_height')) || null;
@@ -622,7 +733,7 @@ function updateFavHeight(){
   favResizer.addEventListener('dblclick', ()=>{ favHeightUser = null; localStorage.removeItem('mm_fav_height'); updateFavHeight(); });
 })();
 
-/* ======== MINI-GRÁFICO ======== */
+/* ======== MINI-GRÁFICO (mantido) ======== */
 function closePopover(){ pop.style.display='none'; }
 function positionPopover(x, y){
   const pad = 12; const vw = window.innerWidth, vh = window.innerHeight;
@@ -630,7 +741,7 @@ function positionPopover(x, y){
   if (left + rectW > vw) left = x - rectW - pad;
   if (top + rectH > vh) top = y - rectH - pad;
   pop.style.left = Math.max(8, left) + 'px';
-  pop.style.top  = Math.max(8, top) + 'px';
+  pop.style.top = Math.max(8, top) + 'px';
 }
 document.addEventListener('click', (ev) => { if (pop.style.display !== 'none' && !pop.contains(ev.target)) closePopover(); });
 document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closePopover(); });
@@ -661,18 +772,20 @@ function drawSparkline(points){
   const fmt = (d)=> d.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' });
   ctx.textAlign = 'center'; ctx.fillText(fmt(points[0].x), Math.max(m.l, 24), H-8); ctx.fillText(fmt(points[points.length-1].x), Math.min(W - m.r, W-24), H-8);
 }
-async function openChartFor(ev, ean, siteId){
+async function openChartFor(ev, ean, siteLabel){
   ev.stopPropagation();
   const rect = ev.currentTarget.getBoundingClientRect();
   positionPopover(rect.right, rect.bottom);
-  const label = idToLabel.get(siteId) || `Site ${siteId}`;
-  popTitle.textContent = `${label} • ${ean}`;
+  popTitle.textContent = `${siteLabel} • ${ean}`;
   popMsg.style.display='block'; popMsg.textContent = 'Carregando histórico…';
   sparkCtx.clearRect(0,0,sparkCanvas.width,sparkCanvas.height);
   pop.style.display='block';
   try{
-    const viewKey = idToViewKey.get(siteId) || '';
-    if (!viewKey) { popMsg.style.display='block'; popMsg.textContent = 'Site sem view_key mapeada.'; return; }
+    // Usa a view_key conhecida; se não existir, tenta heurística "Preco"+label compacto
+    let viewKey = viewKeyByLabel[siteLabel];
+    if (!viewKey){
+      viewKey = 'Preco' + siteLabel.replace(/[^A-Za-z0-9]/g,'');
+    }
     const { data, error } = await sb.from(VIEW).select('data, preco_num')
       .eq('ean', ean)
       .eq('site', viewKey)
@@ -689,6 +802,7 @@ async function openChartFor(ev, ean, siteId){
   const { data: { session } } = await sb.auth.getSession();
   if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return; }
 
+  // Header + plano
   userChip.textContent = session.user?.email || 'Logado';
   let planKey = 'basico';
   try{
@@ -696,7 +810,8 @@ async function openChartFor(ev, ean, siteId){
     if (error) throw error;
     const planRaw = (data?.plan || 'basico').toString();
     planKey = planRaw.toLowerCase();
-    planChip.textContent = `Plano: ${planRaw.charAt(0).toUpperCase() + planRaw.slice(1)}`;
+    const pretty = planRaw.charAt(0).toUpperCase() + planRaw.slice(1);
+    planChip.textContent = `Plano: ${pretty}`;
   }catch(e){ console.error(e); planChip.textContent = 'Plano: —'; }
 
   // Seleção de sites + cabeçalhos na ordem da seleção
