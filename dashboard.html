@@ -15,8 +15,6 @@
   .chip.plan { color:#bfffc1; border-color:#2f5a2f; background:#132313; }
   .btn { background:#00b140; color:#fff; border:none; padding:8px 14px; border-radius:6px; cursor:pointer; }
   .btn:hover { background:#009b38; }
-  .btn.secondary { background:#2a2a2a; }
-  .btn.secondary:hover { background:#323232; }
 
   .userChipWrap { position: relative; display:inline-block; }
   .dropdown { position:absolute; right:0; top:calc(100% + 6px); display:none; min-width:180px; padding:6px; background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px; box-shadow:0 10px 30px rgba(0,0,0,.5); z-index:50; }
@@ -32,14 +30,6 @@
 
   .filters { display:grid; grid-template-columns: 1fr 1fr auto; gap:12px; margin:16px 0; }
   .filters input { padding:10px 12px; border-radius:6px; border:1px solid #333; background:#1e1e1e; color:#fff; }
-
-  /* Linha extra de controles: radios + imprimir */
-  .controls-line { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin:8px 0 4px; }
-  .radios { display:flex; gap:10px; align-items:center; font-size:13px; color:#d9d9d9; }
-  .radios label { display:flex; align-items:center; gap:6px; padding:6px 10px; border:1px solid #2a2a2a; border-radius:999px; cursor:pointer; }
-  .radios input[type="radio"] { accent-color:#00b140; }
-  .controls-line .btn { height:36px; }
-
   .status { margin:10px 0; color:#aaa; font-size:12px; }
   .err { display:none; color:#ff5d5d; margin:8px 0; font-size:13px; }
 
@@ -86,36 +76,6 @@
   #chartPopover header { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
   #chartPopover .close { background:transparent; border:1px solid #333; color:#ddd; padding:2px 8px; border-radius:6px; cursor:pointer; }
   #chartPopover .msg { font-size:12px; color:#9aa0a6; margin-top:6px; }
-
-  /* ===== Impressão ===== */
-  @media print {
-    :root { color-scheme: light; }
-    body { padding:0; background:#fff; color:#000; }
-    header, .controls-line, .filters, .status, .err, .counts, .resizer, #dbgWrap, #chartPopover { display:none !important; }
-
-    .panel { border:none; background:#fff; border-radius:0; padding:0; margin:0 0 10mm; }
-    .panel-header { display:block; margin:0 0 4mm; }
-    .panel-header h2 { color:#000; font-size:16pt; }
-
-    .wrap { border:none; overflow:visible; }
-
-    table { page-break-inside:auto; border-collapse:collapse; }
-    thead { display:table-header-group; }
-    tr { page-break-inside:avoid; page-break-after:auto; }
-    th, td { border:1px solid #ccc; padding:6px 8px; color:#000; font-size:11pt; }
-    .col-fav { width:10mm; }
-    .col-sku { width:35mm; }
-    .col-desc { min-width:60mm; }
-
-    /* Mostrar apenas a(s) seção(ões) conforme escopo */
-    body.print-fav  #generalPanel { display:none !important; }
-    body.print-gen  #favPanel     { display:none !important; }
-    body.print-all  #favPanel, body.print-all #generalPanel { display:block !important; }
-
-    /* Remover blur na impressão (opcional: manter fiel ao plano basta comentar a linha) */
-    td.locked-cell .price { filter:none !important; }
-    td.locked-cell .unlock, .chart-btn { display:none !important; }
-  }
 </style>
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="./config.js"></script>
@@ -142,17 +102,6 @@
     <input id="descFilter" placeholder="Filtrar por descrição…" />
     <button id="btnReload" class="btn">Recarregar</button>
   </div>
-
-  <!-- NOVO: linha de controles com radios de escopo + imprimir -->
-  <div class="controls-line">
-    <div class="radios" role="radiogroup" aria-label="Escopo de pesquisa">
-      <label><input type="radio" name="scope" id="scopeAll" value="all" checked> Todos</label>
-      <label><input type="radio" name="scope" id="scopeFav" value="fav"> Apenas favoritos</label>
-      <label><input type="radio" name="scope" id="scopeGen" value="gen"> Apenas geral</label>
-    </div>
-    <button id="btnPrint" class="btn secondary" title="Imprimir dados exibidos">Imprimir</button>
-  </div>
-
   <div class="status"><span id="status"></span></div>
   <div id="err" class="err"></div>
 </div>
@@ -210,7 +159,7 @@
 /* ========= util debug (oculto; Ctrl+Alt+D para alternar) ========= */
 const dbgWrap = document.getElementById('dbgWrap');
 const dbg = document.getElementById('dbg');
-function dlog(o){ dbg.textContent += (typeof o==='string' ? o : JSON.stringify(o,null,2)) + "\\n"; }
+function dlog(o){ dbg.textContent += (typeof o==='string' ? o : JSON.stringify(o,null,2)) + "\n"; }
 document.addEventListener('keydown', (e)=>{
   if (e.ctrlKey && e.altKey && (e.key==='d' || e.key==='D')){
     dbgWrap.style.display = (dbgWrap.style.display==='none' || !dbgWrap.style.display) ? 'block' : 'none';
@@ -241,19 +190,12 @@ const btnReload   = document.getElementById('btnReload');
 const eanFilter   = document.getElementById('eanFilter');
 const descFilter  = document.getElementById('descFilter');
 
-const scopeAll = document.getElementById('scopeAll');
-const scopeFav = document.getElementById('scopeFav');
-const scopeGen = document.getElementById('scopeGen');
-const btnPrint = document.getElementById('btnPrint');
-
-const favPanel = document.getElementById('favPanel');
 const favWrap  = document.getElementById('favWrap');
 const favBody  = document.querySelector('#favTable tbody');
 const favHeaderRow = document.getElementById('favHeaderRow');
 const favResizer  = document.getElementById('favResizer');
 const toggleFavBtn = document.getElementById('toggleFav');
 
-const generalPanel = document.getElementById('generalPanel');
 const generalWrap = document.getElementById('generalWrap');
 const generalBody = document.querySelector('#produtosTable tbody');
 const generalHeaderRow = document.getElementById('generalHeaderRow');
@@ -290,9 +232,7 @@ let loadingMore = false;
 const generalChkMap = new Map();
 
 let favHeightUser = Number(localStorage.getItem('mm_fav_height')) || null;
-
-/* NOVO: escopo atual (all | fav | gen) */
-let currentScope = localStorage.getItem('mm_scope') || 'all';
+let favFirstAutoRenderDone = false;
 
 /* ========= helpers ========= */
 function setStatus(t){ statusEl.textContent = t||''; }
@@ -324,7 +264,7 @@ function buildHeaders(){
   const base = `<th class="col-fav">★</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
   const ths = chosen.map(c=>{
     const lockAttr = locked.has(c.site_id) ? ' data-locked="true"' : ' data-locked="false"';
-    return `<th data-siteid="\${c.site_id}"\${lockAttr}>\${c.label}</th>`;
+    return `<th data-siteid="${c.site_id}"${lockAttr}>${c.label}</th>`;
   }).join('');
   generalHeaderRow.innerHTML = base + ths;
 
@@ -392,7 +332,7 @@ async function loadUserSelection(userId, planKey){
   for (const id of siteIds){ const s=byId.get(id); if(s && !ordered.includes(s)) ordered.push(s); }
 
   chosen = ordered.map(s=>{
-    const label = (s.nome || s.site || `Site \${s.id}`).toString().trim();
+    const label = (s.nome || s.site || `Site ${s.id}`).toString().trim();
     const vk    = computeViewKey(label);
     return { site_id:s.id, label, view_key:vk };
   });
@@ -404,7 +344,7 @@ async function loadUserSelection(userId, planKey){
   dlog({ plano_limite:lim, unlocked:[...unlocked], locked:[...locked] });
 
   buildHeaders();
-  setStatus(`Sites: \${chosen.map(c=>c.label).join(' · ')}`);
+  setStatus(`Sites: ${chosen.map(c=>c.label).join(' · ')}`);
 }
 
 /* ========= agrega linhas da view ========= */
@@ -457,8 +397,8 @@ function createPriceCell(item, label, isLocked, minLabel, maxLabel){
     const dtStr = d.data ? new Date(d.data).toLocaleString('pt-BR') : '';
     if (Number.isFinite(d.precoNum)){
       const span=document.createElement('span');
-      span.className=`price \${!isLocked && label===minLabel ? 'min' : (!isLocked && label===maxLabel ? 'max':'')}`;
-      span.title=isLocked?'Excedeu o limite do plano':(dtStr?`Atualizado em \${dtStr}`:'');
+      span.className=`price ${!isLocked && label===minLabel ? 'min' : (!isLocked && label===maxLabel ? 'max':'')}`;
+      span.title=isLocked?'Excedeu o limite do plano':(dtStr?`Atualizado em ${dtStr}`:'');
       span.textContent=formatBRL(d.precoNum);
       td.appendChild(span);
 
@@ -477,7 +417,7 @@ function createPriceCell(item, label, isLocked, minLabel, maxLabel){
     }else{
       const span=document.createElement('span');
       span.className='price';
-      span.title=isLocked?'Excedeu o limite do plano':(dtStr?`Atualizado em \${dtStr}`:'');
+      span.title=isLocked?'Excedeu o limite do plano':(dtStr?`Atualizado em ${dtStr}`:'');
       span.textContent=(d.precoRaw??'').toString();
       td.appendChild(span);
     }
@@ -489,7 +429,7 @@ function createPriceCell(item, label, isLocked, minLabel, maxLabel){
 function renderRowInto(tr,item){
   const tdFav=document.createElement('td'); tdFav.className='col-fav';
   const chk=document.createElement('input'); chk.type='checkbox'; chk.checked=isFav(item.sku);
-  chk.addEventListener('change',()=>{ if(chk.checked) favSet.add(item.sku); else favSet.delete(item.sku); favSave(); renderFavs(); updateFavHeight(); updateCounts(); applyScopeUI(); });
+  chk.addEventListener('change',()=>{ if(chk.checked) favSet.add(item.sku); else favSet.delete(item.sku); favSave(); renderFavs(); updateFavHeight(); updateCounts(); });
   tdFav.appendChild(chk); tr.appendChild(tdFav); generalChkMap.set(item.sku, chk);
 
   const tdSku=document.createElement('td'); tdSku.className='col-sku'; tdSku.textContent=item.sku; tr.appendChild(tdSku);
@@ -506,12 +446,10 @@ function renderGeneralChunk(){
   itemsRendered=end;
   endMarker.textContent=(serverExhausted && itemsRendered>=produtosList.length)?'Fim da lista':'';
   updateCounts();
-  applyScopeUI(); // garantir que o escopo siga valendo ao renderizar mais linhas
 }
 function resetGeneralDom(){ generalBody.innerHTML=''; generalChkMap.clear(); itemsRendered=0; endMarker.textContent=''; }
 
 /* ========= scroll / paginação ========= */
-let favFirstAutoRenderDone = false;
 function onGeneralScroll(){
   if (loadingMore) return;
   const nearBottom = generalWrap.scrollTop + generalWrap.clientHeight >= generalWrap.scrollHeight - 100;
@@ -523,7 +461,6 @@ generalWrap.addEventListener('scroll', onGeneralScroll);
 /* ========= favoritos ========= */
 function renderFavs(){
   favBody.innerHTML='';
-  // Filtra por favoritos e também respeita filtros de EAN/Descrição (já aplicados na query ao montar produtosList)
   const favList = produtosList.filter(p=>isFav(p.sku));
   const frag=document.createDocumentFragment();
   for (const item of favList){
@@ -531,7 +468,7 @@ function renderFavs(){
 
     const tdAct=document.createElement('td'); tdAct.className='col-fav';
     const btn=document.createElement('button'); btn.title='Remover'; btn.innerHTML='🗑️';
-    btn.addEventListener('click',()=>{ favSet.delete(item.sku); favSave(); const chk=generalChkMap.get(item.sku); if(chk){ chk.checked=false; } renderFavs(); updateFavHeight(); updateCounts(); applyScopeUI(); });
+    btn.addEventListener('click',()=>{ favSet.delete(item.sku); favSave(); const chk=generalChkMap.get(item.sku); if(chk){ chk.checked=false; } renderFavs(); updateFavHeight(); updateCounts(); });
     tdAct.appendChild(btn); tr.appendChild(tdAct);
 
     const tdSku=document.createElement('td'); tdSku.className='col-sku'; tdSku.textContent=item.sku; tr.appendChild(tdSku);
@@ -547,21 +484,21 @@ function renderFavs(){
 
 /* ========= contadores ========= */
 function updateCounts(){
-  countShown.textContent = `Exibindo \${itemsRendered} de \${produtosList.length} no Geral (carregados)`;
-  countTotal.textContent = serverExhausted ? `Total de SKUs carregados: \${produtosList.length}` : `Carregando… (\${produtosList.length}+ )`;
-  countFavs.textContent  = `Favoritos: \${favSet.size}`;
+  countShown.textContent = `Exibindo ${itemsRendered} de ${produtosList.length} no Geral (carregados)`;
+  countTotal.textContent = serverExhausted ? `Total de SKUs carregados: ${produtosList.length}` : `Carregando… (${produtosList.length}+ )`;
+  countFavs.textContent  = `Favoritos: ${favSet.size}`;
 }
 
 /* ========= query ========= */
 function buildQuery(){
   let q = sb.from(VIEW).select('ean, site, preco, data, descricao, preco_num', { count:'estimated' }).order('data', { ascending:false });
-  if (currentEanQ)  q = q.ilike('ean', `%\${currentEanQ}%`);
-  if (currentDescQ) q = q.ilike('descricao', `%\${currentDescQ}%`);
+  if (currentEanQ)  q = q.ilike('ean', `%${currentEanQ}%`);
+  if (currentDescQ) q = q.ilike('descricao', `%${currentDescQ}%`);
   return q;
 }
 async function fetchNextPage(){
   if (fetching || serverExhausted) return;
-  fetching = true; hideErr(); setStatus(`Carregando… (offset \${serverOffset})`);
+  fetching = true; hideErr(); setStatus(`Carregando… (offset ${serverOffset})`);
   try{
     const from = serverOffset, to = serverOffset + PAGE_SIZE - 1;
     const { data, error } = await buildQuery().range(from,to);
@@ -576,7 +513,7 @@ async function fetchNextPage(){
       renderFavs();
       if (!favFirstAutoRenderDone){ updateFavHeight(); favFirstAutoRenderDone=true; }
       serverOffset += PAGE_SIZE;
-      setStatus(`Carregados: \${produtosList.length} SKUs (parcial)`);
+      setStatus(`Carregados: ${produtosList.length} SKUs (parcial)`);
     }
   }catch(e){ console.error(e); errEl.style.display='block'; errEl.textContent='Falha ao carregar: '+(e?.message||e); setStatus('Erro ao carregar.'); }
   finally{ fetching=false; updateCounts(); }
@@ -606,7 +543,7 @@ btnReload.addEventListener('click', async ()=>{
       if (!error){
         const raw=(data?.plan||'basico').toString();
         planKey = raw.toLowerCase();
-        planChip.textContent = `Plano: \${raw.charAt(0).toUpperCase()+raw.slice(1)}`;
+        planChip.textContent = `Plano: ${raw.charAt(0).toUpperCase()+raw.slice(1)}`;
       }
     }catch{}
     await loadUserSelection(s.user.id, planKey);
@@ -662,7 +599,7 @@ function drawSpark(points){
 async function openChartFor(ev, ean, label){
   const rect=ev.currentTarget.getBoundingClientRect();
   pop.style.display='block'; pop.style.left=(rect.right+12)+'px'; pop.style.top=(rect.bottom+12)+'px';
-  popTitle.textContent=`\${label} • \${ean}`;
+  popTitle.textContent=`${label} • ${ean}`;
   popMsg.style.display='block'; popMsg.textContent='Carregando…'; sparkCtx.clearRect(0,0,spark.width,spark.height);
   try{
     const vk = (chosen.find(c=>c.label===label)||{}).view_key || computeViewKey(label);
@@ -694,49 +631,6 @@ function applyToggle(btn, wrap, extraEl, key){
 applyToggle(toggleFavBtn, favWrap, document.getElementById('favResizer'), 'mm_tgl_fav');
 applyToggle(toggleGenBtn, generalWrap, null, 'mm_tgl_gen');
 
-/* ========= Escopo (radios) ========= */
-function getSelectedScope(){
-  if (scopeFav.checked) return 'fav';
-  if (scopeGen.checked) return 'gen';
-  return 'all';
-}
-function applyScopeUI(){
-  const sc = currentScope;
-  // Mostrar/ocultar painéis
-  favPanel.style.display     = (sc==='gen') ? 'none' : '';
-  generalPanel.style.display = (sc==='fav') ? 'none' : '';
-}
-function setScope(sc){
-  currentScope = sc;
-  localStorage.setItem('mm_scope', sc);
-  // Ajusta radios visualmente
-  scopeAll.checked = (sc==='all');
-  scopeFav.checked = (sc==='fav');
-  scopeGen.checked = (sc==='gen');
-  applyScopeUI();
-}
-[scopeAll, scopeFav, scopeGen].forEach(r=>{
-  r.addEventListener('change', ()=> setScope(getSelectedScope()));
-});
-
-/* ========= Impressão ========= */
-function preparePrintBodyClass(){
-  document.body.classList.remove('print-fav','print-gen','print-all');
-  if (currentScope==='fav') document.body.classList.add('print-fav');
-  else if (currentScope==='gen') document.body.classList.add('print-gen');
-  else document.body.classList.add('print-all');
-}
-btnPrint.addEventListener('click', ()=>{
-  preparePrintBodyClass();
-  // Garante cabeçalhos visíveis (descolapsa se usuário deixou minimizado)
-  localStorage.setItem('mm_tgl_fav','0');
-  localStorage.setItem('mm_tgl_gen','0');
-  // Força estado expandido no momento de imprimir
-  document.getElementById('favWrap').style.display = '';
-  document.getElementById('generalWrap').style.display = '';
-  window.print();
-});
-
 /* ========= init ========= */
 (async function init(){
   const { data:{ session } } = await sb.auth.getSession();
@@ -749,14 +643,11 @@ btnPrint.addEventListener('click', ()=>{
     if (!error){
       const raw=(data?.plan||'basico').toString();
       planKey = raw.toLowerCase();
-      planChip.textContent = `Plano: \${raw.charAt(0).toUpperCase()+raw.slice(1)}`;
+      planChip.textContent = `Plano: ${raw.charAt(0).toUpperCase()+raw.slice(1)}`;
     }
   }catch(e){ planChip.textContent='Plano: —'; }
 
   await loadUserSelection(session.user.id, planKey);
-
-  // Restabelecer escopo salvo
-  setScope(currentScope);
 
   currentEanQ=''; currentDescQ='';
   resetAndQuery();
