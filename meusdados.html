@@ -62,14 +62,13 @@
   .counter{font-size:13px;color:#9aa0a6}
   input[type="checkbox"]{width:18px;height:18px;margin-top:2px}
 
-  /* ===== Upload Excel (sem armazenar) ===== */
+  /* ===== Importar Excel ===== */
   .dz{
     border:1px dashed #2a2a2a;border-radius:12px;background:#0e0e0e;
     padding:18px;text-align:center;transition:all .15s ease-in-out
   }
   .dz:hover{background:#121212}
   .dz.dragover{border-color:#00b140;background:#0d170f}
-  .dz small{display:block;color:#9aa0a6;margin-top:8px}
   .file-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px;flex-wrap:wrap}
   .file-name{font-size:14px;color:#ddd;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .spinner{width:16px;height:16px;border:2px solid #2a2a2a;border-top-color:#00b140;border-radius:50%;display:inline-block;animation:spin 1s linear infinite}
@@ -78,15 +77,21 @@
   table.preview{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}
   table.preview th, table.preview td{border:1px solid #2a2a2a;padding:6px 8px;text-align:left}
   table.preview th{background:#161616;color:#bdbdbd}
+
+  .map-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+  .map-item{border:1px solid #2a2a2a;border-radius:10px;padding:10px;background:#101010}
+  .map-item h4{margin:0 0 8px 0;font-size:14px;color:#bdbdbd}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid #2a2a2a;color:#bdbdbd}
   .ok{color:#b7fbb7}
   .warn{color:#ffc966}
   .err{color:#ff9a9a}
 </style>
+
 <!-- Supabase -->
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="./config.js"></script>
-<!-- SheetJS (XLSX) para ler Excel no browser -->
+<!-- SheetJS (XLSX) -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
@@ -102,7 +107,7 @@
 <main class="container">
   <div id="banner" class="banner"></div>
 
-  <!-- ===== Cartão original: dados do perfil ===== -->
+  <!-- ===== Perfil (original) ===== -->
   <div class="card">
     <div class="grid">
       <div class="col-2">
@@ -154,12 +159,13 @@
     </div>
   </div>
 
-  <!-- ===== NOVA SEÇÃO: Importar produtos (Excel) -> Gravar na base ===== -->
+  <!-- ===== NOVO: Importar produtos (Excel) -> Gravar na base ===== -->
   <div class="card" id="importCard">
     <h2 style="margin:0 0 8px 0;">Importar produtos (Excel) → Gravar na base</h2>
     <p class="muted" style="margin-top:0">
-      Envie uma planilha com as colunas <strong>EAN</strong>, <strong>Descricao</strong>, <strong>PrecoCusto</strong>, <strong>PrecoVenda</strong>.
-      Suporte a <em>.xlsx, .xls ou .csv</em>. Nada será armazenado; o conteúdo é lido no navegador e inserido diretamente na tabela <code>produtos_cliente</code>.
+      Esperado: <strong>ID Produto</strong>, <strong>EAN13</strong>, <strong>Descricao</strong>,
+      <strong>Preco Custo</strong>, <strong>Preco Venda</strong>, <strong>Qtde Vendida</strong>.
+      Obrigatórias: <strong>EAN13</strong>, <strong>Descricao</strong>, <strong>Preco Venda</strong>.
     </p>
 
     <div class="dz" id="dropArea" aria-label="Área para arrastar e soltar arquivo">
@@ -168,24 +174,59 @@
       <div style="margin-top:8px">
         <input id="fileExcel" type="file" accept=".xlsx,.xls,.csv" />
       </div>
-      <small>Formatos: .xlsx, .xls, .csv • Tamanho sugerido ≤ 5 MB</small>
+      <small>Formatos: .xlsx, .xls, .csv • Usaremos as primeiras 10 linhas para detectar as colunas.</small>
     </div>
 
     <div class="file-row" id="fileRow" style="display:none">
       <div class="file-name" id="fileName">Nenhum arquivo selecionado</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button id="btnPrever" class="btn outline" disabled>👁️ Pré-visualizar</button>
+        <button id="btnPrever" class="btn outline" disabled>👁️ Pré-visualizar & Detectar</button>
         <button id="btnInserir" class="btn" disabled>⬇️ Gravar na base</button>
         <button id="btnLimparImport" class="btn muted" disabled>Limpar</button>
       </div>
     </div>
 
     <div id="importStats" class="help" style="margin-top:8px"></div>
-    <div id="previewWrap" style="margin-top:10px; display:none">
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <span class="badge">Prévia (primeiras 12 linhas)</span>
-        <span id="mapInfo" class="help"></span>
+
+    <!-- Painel de mapeamento -->
+    <div id="mapWrap" class="map-grid" style="display:none">
+      <div class="map-item">
+        <h4>Mapeamento de colunas</h4>
+        <div class="row">
+          <label class="help">ID Produto</label>
+          <select id="sel_id_produto"></select>
+        </div>
+        <div class="row">
+          <label class="help">EAN13 (obrigatório)</label>
+          <select id="sel_ean13"></select>
+        </div>
+        <div class="row">
+          <label class="help">Descrição (obrigatório)</label>
+          <select id="sel_descricao"></select>
+        </div>
+        <div class="row">
+          <label class="help">Preço Custo</label>
+          <select id="sel_preco_custo"></select>
+        </div>
+        <div class="row">
+          <label class="help">Preço Venda (obrigatório)</label>
+          <select id="sel_preco_venda"></select>
+        </div>
+        <div class="row">
+          <label class="help">Qtde Vendida</label>
+          <select id="sel_qtde_vendida"></select>
+        </div>
+        <div id="mapHints" class="help" style="margin-top:8px"></div>
       </div>
+      <div class="map-item">
+        <h4>Observações & Alertas</h4>
+        <div id="mapAlerts" class="help"></div>
+      </div>
+    </div>
+
+    <!-- Prévia da planilha -->
+    <div id="previewWrap" style="margin-top:10px; display:none">
+      <span class="badge">Prévia (primeiras 12 linhas)</span>
       <table class="preview" id="previewTable" aria-label="Pré-visualização"></table>
     </div>
   </div>
@@ -199,9 +240,7 @@
     </p>
     <p class="limit-info" id="limitInfo">Limite do plano: —</p>
 
-    <div id="sitesWrap" class="sites-grid" aria-live="polite" aria-busy="true">
-      <!-- Lista renderizada aqui -->
-    </div>
+    <div id="sitesWrap" class="sites-grid" aria-live="polite" aria-busy="true"></div>
 
     <div class="footer-actions">
       <div class="counter" id="counter">Selecionados: 0 / —</div>
@@ -229,7 +268,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 });
 
 /* =========================
-   Utilidades e UI
+   Utilidades gerais
    ========================= */
 const bannerEl = document.getElementById('banner');
 function showBanner(text, type = 'ok', timeoutMs = 4200) {
@@ -239,8 +278,18 @@ function showBanner(text, type = 'ok', timeoutMs = 4200) {
   if (timeoutMs > 0) setTimeout(() => { bannerEl.style.display = 'none'; }, timeoutMs);
 }
 function digitsOnly(s){ return (s||'').replace(/\D+/g, ''); }
+function toNumberBR(v){
+  if (v==null) return null;
+  if (typeof v === 'number') return v;
+  let s = String(v).trim();
+  if (s==='') return null;
+  if (/,\d{1,2}$/.test(s)) { s = s.replace(/\./g,'').replace(',','.'); }
+  else { s = s.replace(',','.'); }
+  const num = Number(s);
+  return Number.isFinite(num) ? num : null;
+}
 
-/* ======== CPF/CNPJ/Telefone helpers (iguais à sua base) ======== */
+/* ======== Perfil (mantido do seu arquivo) ======== */
 const emailEl = document.getElementById('email');
 const nomeEl = document.getElementById('nome');
 const sobrenomeEl = document.getElementById('sobrenome');
@@ -251,93 +300,27 @@ const razaoWrap = document.getElementById('razaoWrap');
 const razaoSocialEl = document.getElementById('razaoSocial');
 const btnSalvar = document.getElementById('btnSalvar');
 const btnSair = document.getElementById('btnSair');
+const planChip = document.getElementById('planChip');
 const telHelp = document.getElementById('telHelp');
 const docHelp = document.getElementById('docHelp');
-const planChip = document.getElementById('planChip');
 
-function formatCPF(d) {
-  d = d.slice(0,11);
-  if (d.length <= 3) return d;
-  if (d.length <= 6) return d.replace(/(\d{3})(\d+)/, "$1.$2");
-  if (d.length <= 9) return d.replace(/(\d{3})(\d{3})(\d+)/, "$1.$2.$3");
-  return d.replace(/(\d{3})(\d{3})(\d{3})(\d{0,2}).*/, "$1.$2.$3-$4");
-}
-function validateCPF(d) {
-  if (!d || d.length !== 11) return false;
-  if (/^(\d)\1{10}$/.test(d)) return false;
-  let sum = 0;
-  for (let i=0;i<9;i++) sum += parseInt(d.charAt(i))*(10-i);
-  let r = sum % 11; let dv1 = (r<2)?0:(11-r);
-  if (dv1 !== parseInt(d.charAt(9))) return false;
-  sum = 0;
-  for (let i=0;i<10;i++) sum += parseInt(d.charAt(i))*(11-i);
-  r = sum % 11; let dv2 = (r<2)?0:(11-r);
-  return dv2 === parseInt(d.charAt(10));
-}
-
-function formatCNPJ(d) {
-  d = d.slice(0,14);
-  if (d.length <= 2) return d;
-  if (d.length <= 5) return d.replace(/(\d{2})(\d+)/, "$1.$2");
-  if (d.length <= 8) return d.replace(/(\d{2})(\d{3})(\d+)/, "$1.$2.$3");
-  if (d.length <= 12) return d.replace(/(\d{2})(\d{3})(\d{3})(\d+)/, "$1.$2.$3/$4");
-  return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2}).*/, "$1.$2.$3/$4-$5");
-}
-function validateCNPJ(d) {
-  if (!d || d.length !== 14) return false;
-  if (/^(\d)\1{13}$/.test(d)) return false;
-  const w1 = [5,4,3,2,9,8,7,6,5,4,3,2];
-  const w2 = [6,5,4,3,2,9,8,7,6,5,4,3,2];
-  let sum = 0;
-  for (let i=0;i<12;i++) sum += parseInt(d[i]) * w1[i];
-  let r = sum % 11; let dv1 = (r<2)?0:(11-r);
-  if (dv1 !== parseInt(d[12])) return false;
-  sum = 0;
-  for (let i=0;i<13;i++) sum += parseInt(d[i]) * w2[i];
-  r = sum % 11; let dv2 = (r<2)?0:(11-r);
-  return dv2 === parseInt(d[13]);
-}
-
-function formatPhone(d) {
-  d = d.slice(0,11);
-  if (d.length <= 2) return `(${d}`;
-  if (d.length <= 6) return `(${d.slice(0,2)}) ${d.slice(2)}`;
-  if (d.length <= 10) return `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`;
-  return `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`;
-}
-function validatePhone(d){ return d.length === 10 || d.length === 11; }
-
-function updateDocUI() {
+/* Helpers de CPF/CNPJ/Telefone (iguais ao seu) */
+function formatCPF(d){ d=d.slice(0,11); if(d.length<=3)return d; if(d.length<=6)return d.replace(/(\d{3})(\d+)/,"$1.$2"); if(d.length<=9)return d.replace(/(\d{3})(\d{3})(\d+)/,"$1.$2.$3"); return d.replace(/(\d{3})(\d{3})(\d{3})(\d{0,2}).*/,"$1.$2.$3-$4"); }
+function validateCPF(d){ if(!d||d.length!==11)return false; if(/^(\d)\1{10}$/.test(d))return false; let s=0; for(let i=0;i<9;i++)s+=parseInt(d[i])*(10-i); let r=s%11; let dv1=(r<2)?0:(11-r); if(dv1!==parseInt(d[9]))return false; s=0; for(let i=0;i<10;i++)s+=parseInt(d[i])*(11-i); r=s%11; let dv2=(r<2)?0:(11-r); return dv2===parseInt(d[10]); }
+function formatCNPJ(d){ d=d.slice(0,14); if(d.length<=2)return d; if(d.length<=5)return d.replace(/(\d{2})(\d+)/,"$1.$2"); if(d.length<=8)return d.replace(/(\d{2})(\d{3})(\d+)/,"$1.$2.$3"); if(d.length<=12)return d.replace(/(\d{2})(\d{3})(\d{3})(\d+)/,"$1.$2.$3/$4"); return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2}).*/,"$1.$2.$3/$4-$5"); }
+function validateCNPJ(d){ if(!d||d.length!==14)return false; if(/^(\d)\1{13}$/.test(d))return false; const w1=[5,4,3,2,9,8,7,6,5,4,3,2], w2=[6,5,4,3,2,9,8,7,6,5,4,3,2]; let s=0; for(let i=0;i<12;i++)s+=parseInt(d[i])*w1[i]; let r=s%11; let dv1=(r<2)?0:(11-r); if(dv1!==parseInt(d[12]))return false; s=0; for(let i=0;i<13;i++)s+=parseInt(d[i])*w2[i]; r=s%11; let dv2=(r<2)?0:(11-r); return dv2===parseInt(d[13]); }
+function formatPhone(d){ d=d.slice(0,11); if(d.length<=2)return `(${d}`; if(d.length<=6)return `(${d.slice(0,2)}) ${d.slice(2)}`; if(d.length<=10)return `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`; return `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`; }
+function validatePhone(d){ return d.length===10||d.length===11; }
+function updateDocUI(){
   let d = digitsOnly(cpfCnpjEl.value);
-  const isCNPJ = d.length > 11;
-  if (isCNPJ) {
-    cpfCnpjEl.value = formatCNPJ(d);
-    const ok = validateCNPJ(d);
-    document.getElementById('docHelp').textContent = ok ? 'CNPJ válido.' : 'Digite 14 dígitos para um CNPJ válido.';
-    document.getElementById('docHelp').className = 'help' + (ok ? '' : ' error');
-    razaoWrap.style.display = 'block';
-  } else {
-    cpfCnpjEl.value = formatCPF(d);
-    const ok = validateCPF(d);
-    document.getElementById('docHelp').textContent = ok ? 'CPF válido.' : 'Digite 11 dígitos para um CPF válido.';
-    document.getElementById('docHelp').className = 'help' + (ok ? '' : ' error');
-    razaoWrap.style.display = 'none';
-    razaoSocialEl.value = '';
-  }
+  const isCNPJ = d.length>11;
+  if(isCNPJ){ cpfCnpjEl.value = formatCNPJ(d); const ok=validateCNPJ(d); docHelp.textContent= ok?'CNPJ válido.':'Digite 14 dígitos para um CNPJ válido.'; docHelp.className='help'+(ok?'':' error'); razaoWrap.style.display='block'; }
+  else { cpfCnpjEl.value = formatCPF(d); const ok=validateCPF(d); docHelp.textContent= ok?'CPF válido.':'Digite 11 dígitos para um CPF válido.'; docHelp.className='help'+(ok?'':' error'); razaoWrap.style.display='none'; razaoSocialEl.value=''; }
 }
 cpfCnpjEl.addEventListener('input', updateDocUI);
+telefoneEl.addEventListener('input', ()=>{ const d=digitsOnly(telefoneEl.value); telefoneEl.value=formatPhone(d); const ok=d.length===0||validatePhone(d); telHelp.textContent= ok?'Formato BR (com DDD).':'Telefone inválido. Use 10 ou 11 dígitos.'; telHelp.className='help'+(ok?'':' error'); });
 
-telefoneEl.addEventListener('input', () => {
-  const d = digitsOnly(telefoneEl.value);
-  telefoneEl.value = formatPhone(d);
-  const ok = d.length === 0 || validatePhone(d);
-  document.getElementById('telHelp').textContent = ok ? 'Formato BR (com DDD).' : 'Telefone inválido. Use 10 ou 11 dígitos.';
-  document.getElementById('telHelp').className = 'help' + (ok ? '' : ' error');
-});
-
-/* =========================
-   Sessão + Perfil + Plano
-   ========================= */
+/* Sessão / Perfil */
 let sessionUser = null;
 let currentPlan = 'trial';
 
@@ -346,7 +329,6 @@ let currentPlan = 'trial';
   if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return; }
   sessionUser = session.user;
   emailEl.value = session.user.email || '';
-
   try{
     const { data: prof, error: e1 } = await sb
       .from('profiles')
@@ -372,8 +354,8 @@ let currentPlan = 'trial';
       planChip.textContent = `Plano: ${prettyBR}`;
     }
 
-    await initSitesSection();       // carrega lista + seleção sites
-    initExcelImport();              // ativa importador de Excel
+    await initSitesSection();
+    initExcelImport(); // inicializa o importador
   }catch(e){
     console.error(e);
     showBanner('Erro ao carregar dados (tabela "profiles").', 'err');
@@ -382,61 +364,29 @@ let currentPlan = 'trial';
   }
 })();
 
-btnSair.addEventListener('click', async ()=>{
-  await sb.auth.signOut();
-  window.location.href = CFG.SITE_URL || 'index.html';
-});
-
+btnSair.addEventListener('click', async ()=>{ await sb.auth.signOut(); window.location.href = CFG.SITE_URL || 'index.html'; });
 btnSalvar.addEventListener('click', async ()=>{
   const first_name = nomeEl.value.trim();
   const last_name  = sobrenomeEl.value.trim();
   const docDigits  = digitsOnly(cpfCnpjEl.value);
   const phoneDigits= digitsOnly(telefoneEl.value);
-
   if (!first_name){ showBanner('Informe o Nome.', 'warn'); nomeEl.focus(); return; }
   if (!last_name){ showBanner('Informe o Sobrenome.', 'warn'); sobrenomeEl.focus(); return; }
-
-  let docType = null, docOK = false;
-  if (docDigits.length > 0 && docDigits.length <= 11) {
-    docType = 'cpf'; docOK = validateCPF(docDigits);
-  } else if (docDigits.length >= 12) {
-    docType = 'cnpj'; docOK = validateCNPJ(docDigits);
-  }
+  let docType=null, docOK=false;
+  if (docDigits.length>0 && docDigits.length<=11){ docType='cpf'; docOK=validateCPF(docDigits); }
+  else if (docDigits.length>=12){ docType='cnpj'; docOK=validateCNPJ(docDigits); }
   if (!docOK){ showBanner('CPF/CNPJ inválido.', 'warn'); cpfCnpjEl.focus(); return; }
+  let razao_social=null;
+  if (docType==='cnpj'){ razao_social=(razaoSocialEl.value||'').trim(); if(!razao_social){ showBanner('Informe a Razão social para CNPJ.', 'warn'); razaoSocialEl.focus(); return; } }
+  if (phoneDigits && !validatePhone(phoneDigits)){ showBanner('Telefone inválido (use 10 ou 11 dígitos).', 'warn'); telefoneEl.focus(); return; }
 
-  let razao_social = null;
-  if (docType === 'cnpj') {
-    razao_social = (razaoSocialEl.value || '').trim();
-    if (!razao_social) { showBanner('Informe a Razão social para CNPJ.', 'warn'); razaoSocialEl.focus(); return; }
-  }
-
-  if (phoneDigits && !validatePhone(phoneDigits)){
-    showBanner('Telefone inválido (use 10 ou 11 dígitos).', 'warn'); telefoneEl.focus(); return;
-  }
-
-  const payload = {
-    id: sessionUser.id,
-    email: sessionUser.email,
-    first_name,
-    last_name,
-    cpf_cnpj: docDigits,
-    cpf_cnpj_type: docType,
-    razao_social,
-    phone: phoneDigits
-  };
-
-  try {
-    const { error } = await sb.from('profiles').upsert(payload, { onConflict: 'id' });
-    if (error) throw error;
-    showBanner('Dados salvos com sucesso!', 'ok');
-  } catch (e) {
-    console.error(e);
-    showBanner('Falha ao salvar na base. Verifique a tabela/privilegios.', 'err');
-  }
+  const payload={ id:sessionUser.id, email:sessionUser.email, first_name, last_name, cpf_cnpj:docDigits, cpf_cnpj_type:docType, razao_social, phone:phoneDigits };
+  try{ const { error } = await sb.from('profiles').upsert(payload,{onConflict:'id'}); if(error) throw error; showBanner('Dados salvos com sucesso!','ok'); }
+  catch(e){ console.error(e); showBanner('Falha ao salvar na base. Verifique a tabela/privilegios.','err'); }
 });
 
 /* =========================================================
-   SEÇÃO: Importar Excel -> Inserir direto na tabela
+   Importar Excel → detecção inteligente → UPSERT em lotes
    ========================================================= */
 function initExcelImport(){
   const input = document.getElementById('fileExcel');
@@ -449,23 +399,31 @@ function initExcelImport(){
   const importStats = document.getElementById('importStats');
   const previewWrap = document.getElementById('previewWrap');
   const previewTable = document.getElementById('previewTable');
-  const mapInfo = document.getElementById('mapInfo');
+  const mapWrap = document.getElementById('mapWrap');
+  const mapAlerts = document.getElementById('mapAlerts');
+  const mapHints = document.getElementById('mapHints');
+
+  const sel_id_produto   = document.getElementById('sel_id_produto');
+  const sel_ean13        = document.getElementById('sel_ean13');
+  const sel_descricao    = document.getElementById('sel_descricao');
+  const sel_preco_custo  = document.getElementById('sel_preco_custo');
+  const sel_preco_venda  = document.getElementById('sel_preco_venda');
+  const sel_qtde_vendida = document.getElementById('sel_qtde_vendida');
 
   let selectedFile = null;
-  let parsedRows = []; // linhas normalizadas {ean, descricao, preco_custo, preco_venda}
+  let rowsAll = [];     // objetos brutos da SheetJS
+  let headers = [];     // nomes originais
+  let mapping = {};     // mapeamento col->headerName
+  let parsedRows = [];  // linhas normalizadas
 
   function resetImport(){
-    selectedFile = null;
-    parsedRows = [];
+    selectedFile = null; rowsAll=[]; headers=[]; mapping={}; parsedRows=[];
     fileNameEl.textContent = 'Nenhum arquivo selecionado';
     fileRow.style.display = 'none';
-    btnPrever.disabled = true;
-    btnInserir.disabled = true;
-    btnLimparImport.disabled = true;
+    btnPrever.disabled = true; btnInserir.disabled = true; btnLimparImport.disabled = true;
     importStats.textContent = '';
-    previewWrap.style.display = 'none';
-    previewTable.innerHTML = '';
-    mapInfo.textContent = '';
+    previewWrap.style.display = 'none'; previewTable.innerHTML = '';
+    mapWrap.style.display = 'none'; mapAlerts.innerHTML = ''; mapHints.textContent = '';
     input.value = '';
   }
 
@@ -473,161 +431,282 @@ function initExcelImport(){
     if (!file){ resetImport(); return; }
     const okExt = /\.(xlsx|xls|csv)$/i.test(file.name);
     if (!okExt){ showBanner('Formato inválido. Use .xlsx, .xls ou .csv', 'warn'); return; }
-    if (file.size > 8*1024*1024){ showBanner('Arquivo grande (> 8MB). Considere dividir.', 'warn'); }
     selectedFile = file;
     fileNameEl.textContent = `${file.name} • ${(file.size/1024/1024).toFixed(2)} MB`;
     fileRow.style.display='flex';
-    btnPrever.disabled = false;
-    btnLimparImport.disabled = false;
-    importStats.textContent = 'Pronto para ler o arquivo.';
+    btnPrever.disabled = false; btnLimparImport.disabled = true; btnInserir.disabled = true;
+    importStats.textContent = 'Pronto para ler e detectar colunas.';
   }
 
-  input.addEventListener('change', (e)=>{
-    const f = e.target.files && e.target.files[0];
-    setFile(f || null);
-  });
-
-  ;['dragenter','dragover'].forEach(evt=>{
-    dropArea.addEventListener(evt, (e)=>{ e.preventDefault(); e.stopPropagation(); dropArea.classList.add('dragover'); });
-  });
-  ;['dragleave','drop'].forEach(evt=>{
-    dropArea.addEventListener(evt, (e)=>{ e.preventDefault(); e.stopPropagation(); dropArea.classList.remove('dragover'); });
-  });
-  dropArea.addEventListener('drop', (e)=>{
-    const dt = e.dataTransfer;
-    const f = dt && dt.files && dt.files[0];
-    setFile(f || null);
-  });
-
+  input.addEventListener('change', e=>{ setFile(e.target.files?.[0] || null); });
+  ;['dragenter','dragover'].forEach(evt=> dropArea.addEventListener(evt, e=>{ e.preventDefault(); e.stopPropagation(); dropArea.classList.add('dragover'); }));
+  ;['dragleave','drop'].forEach(evt=> dropArea.addEventListener(evt, e=>{ e.preventDefault(); e.stopPropagation(); dropArea.classList.remove('dragover'); }));
+  dropArea.addEventListener('drop', e=>{ const f = e.dataTransfer?.files?.[0]; setFile(f||null); });
   btnLimparImport.addEventListener('click', resetImport);
 
-  // Normaliza nomes de colunas para os campos-alvo
-  function normalizeHeader(h){
-    h = (h||'').toString().trim().toLowerCase();
-    h = h.normalize('NFD').replace(/[\u0300-\u036f]/g,''); // remove acentos
-    return h;
-  }
-  function mapColumnName(h){
-    const n = normalizeHeader(h);
-    if (/(^ean$|ean13|codigo\s*ean|codbarras|cod\.?barras)/.test(n)) return 'ean';
-    if (/(^descricao$|descrição|nome\s*produto|produto|item)/.test(n)) return 'descricao';
-    if (/(^precocusto$|preco\s*custo|custo|pcusto)/.test(n)) return 'preco_custo';
-    if (/(^precovenda$|preco\s*venda|venda|pvenda)/.test(n)) return 'preco_venda';
+  function normHeader(h){ return String(h||'').trim(); }
+
+  function headerGuessMap(h){
+    const n = normHeader(h).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    if (/(^id(\s|_|-)*produto$|^id$|codigo(\s|_|-)*(interno)?$)/.test(n)) return 'id_produto';
+    if (/^(ean13|ean|codigo(\s|_|-)*barras|cod(\.|igo)?(\s|_|-)*barras)$/.test(n)) return 'ean13';
+    if (/^(descricao|descrição|produto|item|nome(\s|_|-)*produto)$/.test(n)) return 'descricao';
+    if (/^(preco(\s|_|-)*custo|custo|preco(\s|_|-)*compra|pcusto)$/.test(n)) return 'preco_custo';
+    if (/^(preco(\s|_|-)*venda|venda|pvenda|preco)$/.test(n)) return 'preco_venda';
+    if (/^(qtde(\s|_|-)*(vendida)?|quantidade(\s|_|-)*(vendida)?|qtd(\s|_|-)*(vendida)?|volume)$/.test(n)) return 'qtde_vendida';
     return null;
   }
-  function toNumberBR(v){
-    if (v==null) return null;
-    if (typeof v === 'number') return v;
-    let s = String(v).trim();
-    if (s==='') return null;
-    // trata formatos "1.234,56" ou "1234,56" ou "1234.56"
-    if (/,\d{1,2}$/.test(s)) { // tem centavos com vírgula
-      s = s.replace(/\./g,'').replace(',','.');
-    } else {
-      s = s.replace(',','.');
-    }
-    const num = Number(s);
-    return Number.isFinite(num) ? num : null;
+
+  function isLetters(val){ return /[A-Za-zÁ-Úá-ú]/.test(String(val||'')); }
+  function isIntegerLike(val){
+    if (val==null || val==='') return false;
+    if (typeof val==='number') return Number.isInteger(val);
+    const s=String(val).replace(/\s+/g,'');
+    return /^-?\d+$/.test(s);
+  }
+  function isDecimalLike(val){
+    if (val==null || val==='') return false;
+    if (typeof val==='number') return !Number.isNaN(val) && !Number.isInteger(val);
+    const s=String(val).trim();
+    return /^-?\d[\d\.]*,\d{1,3}$/.test(s) || /^-?\d[\d,]*\.\d{1,3}$/.test(s);
+  }
+  function asDigits(val){ return digitsOnly(String(val||'')); }
+  function looksEAN13(val){ const d=asDigits(val); return d.length===13; }
+  function looksPrice(val){
+    const n = toNumberBR(val);
+    return n!=null && n>=0 && n<=1e7; // preço plausível
+  }
+  function looksQty(val){
+    const n = toNumberBR(val);
+    return n!=null && n>=0 && n<=1e6; // quantidade plausível
   }
 
-  async function parseSelectedFile(previewOnly=false){
-    if (!selectedFile){ showBanner('Selecione um arquivo primeiro.', 'warn'); return; }
-    importStats.innerHTML = '<span class="spinner" aria-hidden="true"></span> Lendo planilha...';
+  function detectMapping(sampleRows){
+    // sampleRows: até 10 linhas (objetos com chaves = headers)
+    const cols = headers;
+    // estatísticas por coluna
+    const stats = cols.map((h,idx)=>{
+      let letters=0,intLike=0,decLike=0,eanLike=0,priceLike=0,qtyLike=0,nonEmpty=0, samples=[];
+      for (const r of sampleRows){
+        const v = r[h];
+        if (v!==null && v!==undefined && String(v).trim()!=='') nonEmpty++;
+        if (isLetters(v)) letters++;
+        if (isIntegerLike(v)) intLike++;
+        if (isDecimalLike(v)) decLike++;
+        if (looksEAN13(v)) eanLike++;
+        if (looksPrice(v)) priceLike++;
+        if (looksQty(v)) qtyLike++;
+        samples.push(v);
+      }
+      return { h, idx, nonEmpty, letters, intLike, decLike, eanLike, priceLike, qtyLike, samples };
+    });
 
+    const result = { id_produto:null, ean13:null, descricao:null, preco_custo:null, preco_venda:null, qtde_vendida:null, alerts:[], hints:[] };
+
+    // 1) Por header name direto
+    for (const s of stats){
+      const g = headerGuessMap(s.h);
+      if (g && !result[g]) result[g]=s.h;
+    }
+
+    // 2) Dados: descrição = coluna com mais "letters"
+    if (!result.descricao){
+      const cand = [...stats].sort((a,b)=> (b.letters - a.letters) || (b.nonEmpty - a.nonEmpty))[0];
+      if (cand && cand.letters>0) result.descricao = cand.h;
+    }
+
+    // 3) Dados: EAN13 = coluna com mais matches de 13 dígitos
+    if (!result.ean13){
+      const cand = [...stats].sort((a,b)=> (b.eanLike - a.eanLike) || (b.nonEmpty - a.nonEmpty))[0];
+      if (cand && cand.eanLike>0) result.ean13 = cand.h;
+    }
+
+    // 4) ID Produto = inteiro like (mas não EAN13)
+    if (!result.id_produto){
+      const ints = stats.filter(s=> s.intLike>0 && s.eanLike===0);
+      const cand = ints.sort((a,b)=> (b.intLike - a.intLike) || (b.nonEmpty - a.nonEmpty))[0];
+      if (cand) result.id_produto = cand.h;
+    }
+
+    // 5) Preços (custo/venda): escolha duas colunas price-like; maior tende a ser venda.
+    const prices = stats.filter(s=> s.priceLike>0 && s.h!==result.ean13 && s.h!==result.id_produto);
+    prices.sort((a,b)=> (b.priceLike - a.priceLike) || (b.decLike - a.decLike));
+    if (!result.preco_venda && prices[0]) result.preco_venda = prices[0].h;
+    if (!result.preco_custo && prices[1]) result.preco_custo = prices[1].h;
+
+    // 6) Qtde: qty-like (preferir inteiro)
+    if (!result.qtde_vendida){
+      const qtys = stats.filter(s=> s.qtyLike>0 && s.h!==result.preco_venda && s.h!==result.preco_custo && s.h!==result.ean13);
+      qtys.sort((a,b)=> (b.intLike - a.intLike) || (b.qtyLike - a.qtyLike));
+      if (qtys[0]) result.qtde_vendida = qtys[0].h;
+    }
+
+    // Checks obrigatórios
+    if (!result.ean13) result.alerts.push('Não foi possível identificar com segurança a coluna EAN13 (13 dígitos). Selecione manualmente.');
+    if (!result.descricao) result.alerts.push('Não foi possível identificar com segurança a coluna Descrição. Selecione manualmente.');
+    if (!result.preco_venda) result.alerts.push('Não foi possível identificar com segurança a coluna Preço de Venda. Selecione manualmente.');
+
+    // Dica: validar custo ≤ venda nas amostras
+    if (result.preco_custo && result.preco_venda){
+      let inversoes = 0, comp = 0;
+      for (const r of sampleRows){
+        const vc = toNumberBR(r[result.preco_custo]);
+        const vv = toNumberBR(r[result.preco_venda]);
+        if (vc!=null && vv!=null){ comp++; if (vc>vv) inversoes++; }
+      }
+      if (comp>0 && inversoes/comp>0.3){
+        result.hints.push('Mais de 30% dos exemplos têm Custo > Venda. Verifique se as colunas de preço foram trocadas.');
+      }
+    }
+
+    return result;
+  }
+
+  function fillSelectOptions(select, items, selected){
+    select.innerHTML = '';
+    const opNone = document.createElement('option'); opNone.value=''; opNone.textContent='(não usar)';
+    select.appendChild(opNone);
+    for (const h of items){
+      const o = document.createElement('option');
+      o.value = h; o.textContent = h;
+      if (selected && selected===h) o.selected = true;
+      select.appendChild(o);
+    }
+  }
+  function buildMappingUI(map){
+    mapWrap.style.display = 'grid';
+    mapAlerts.innerHTML = map.alerts.length ? ('<ul>'+map.alerts.map(a=>`<li class="warn">${a}</li>`).join('')+'</ul>') : '<span class="ok">Mapeamento automático parece consistente.</span>';
+    mapHints.textContent = map.hints.join(' • ');
+
+    const H = headers;
+    fillSelectOptions(sel_id_produto,   H, map.id_produto||'');
+    fillSelectOptions(sel_ean13,        H, map.ean13||'');
+    fillSelectOptions(sel_descricao,    H, map.descricao||'');
+    fillSelectOptions(sel_preco_custo,  H, map.preco_custo||'');
+    fillSelectOptions(sel_preco_venda,  H, map.preco_venda||'');
+    fillSelectOptions(sel_qtde_vendida, H, map.qtde_vendida||'');
+
+    function onChange(){
+      mapping = {
+        id_produto  : sel_id_produto.value || null,
+        ean13       : sel_ean13.value || null,
+        descricao   : sel_descricao.value || null,
+        preco_custo : sel_preco_custo.value || null,
+        preco_venda : sel_preco_venda.value || null,
+        qtde_vendida: sel_qtde_vendida.value || null,
+      };
+      const okRequired = !!(mapping.ean13 && mapping.descricao && mapping.preco_venda);
+      btnInserir.disabled = !okRequired || !rowsAll.length;
+      btnLimparImport.disabled = true; // habilita após parse
+    }
+    [sel_id_produto, sel_ean13, sel_descricao, sel_preco_custo, sel_preco_venda, sel_qtde_vendida]
+      .forEach(el=> el.addEventListener('change', onChange));
+    onChange();
+  }
+
+  async function parseAndDetect(){
+    if (!selectedFile){ showBanner('Selecione um arquivo primeiro.','warn'); return; }
+    importStats.innerHTML = '<span class="spinner"></span> Lendo planilha...';
     try{
       const data = await selectedFile.arrayBuffer();
       const wb = XLSX.read(data, { type:'array' });
       const sheetName = wb.SheetNames[0];
       const ws = wb.Sheets[sheetName];
+      rowsAll = XLSX.utils.sheet_to_json(ws, { defval:null, raw:true });
+      if (!rowsAll.length){ importStats.textContent = 'Planilha vazia.'; return; }
+      headers = Object.keys(rowsAll[0]).map(normHeader);
+      importStats.innerHTML = `Linhas totais: <strong>${rowsAll.length}</strong> | Colunas: <strong>${headers.length}</strong>`;
 
-      // SheetJS -> array de objetos a partir do cabeçalho
-      const rowsRaw = XLSX.utils.sheet_to_json(ws, { defval:null, raw:true });
-      if (!rowsRaw.length){ importStats.textContent = 'Planilha vazia.'; return; }
+      // Amostra para detecção
+      const sample = rowsAll.slice(0, 10);
+      const detected = detectMapping(sample);
+      mapping = detected;
+      buildMappingUI(detected);
 
-      // Mapeia colunas do cabeçalho
-      const headers = Object.keys(rowsRaw[0]);
-      const map = {};
-      headers.forEach(h=>{
-        const dest = mapColumnName(h);
-        if (dest) map[dest] = h;
+      // Pré-visualização (12 linhas)
+      const samplePreview = rowsAll.slice(0, 12);
+      previewWrap.style.display = 'block';
+      previewTable.innerHTML = '';
+      const thead = document.createElement('thead');
+      thead.innerHTML = '<tr>'+headers.map(h=>`<th>${h}</th>`).join('')+'</tr>';
+      previewTable.appendChild(thead);
+      const tbody = document.createElement('tbody');
+      samplePreview.forEach(r=>{
+        const tr = document.createElement('tr');
+        tr.innerHTML = headers.map(h=>`<td>${r[h]??''}</td>`).join('');
+        tbody.appendChild(tr);
       });
+      previewTable.appendChild(tbody);
 
-      // Verifica colunas requeridas
-      const required = ['ean','descricao','preco_custo','preco_venda'];
-      const missing = required.filter(k=>!map[k]);
-      mapInfo.textContent = missing.length
-        ? `Mapeamento parcial. Colunas ausentes: ${missing.join(', ')}`
-        : 'Mapeamento OK: EAN, Descricao, PrecoCusto, PrecoVenda.';
-
-      // Normaliza linhas
-      const normalized = [];
-      for (const r of rowsRaw){
-        const ean = map.ean ? String(r[map.ean] ?? '').trim() : '';
-        const eanDigits = digitsOnly(ean);
-        const descricao = map.descricao ? String(r[map.descricao] ?? '').trim() : '';
-        const preco_custo = toNumberBR(map.preco_custo ? r[map.preco_custo] : null);
-        const preco_venda = toNumberBR(map.preco_venda ? r[map.preco_venda] : null);
-
-        if (!eanDigits || !descricao) continue; // pula linhas incompletas
-        normalized.push({ ean: eanDigits, descricao, preco_custo, preco_venda });
-      }
-
-      parsedRows = normalized;
-      importStats.innerHTML = `Linhas lidas: <strong>${rowsRaw.length}</strong> • Linhas válidas: <strong>${parsedRows.length}</strong>`;
-
-      // Pré-visualização (primeiras 12)
-      const sample = parsedRows.slice(0, 12);
-      if (sample.length){
-        previewWrap.style.display = 'block';
-        previewTable.innerHTML = '';
-        const thead = document.createElement('thead');
-        thead.innerHTML = '<tr><th>#</th><th>EAN</th><th>Descrição</th><th>Preço custo</th><th>Preço venda</th></tr>';
-        previewTable.appendChild(thead);
-        const tbody = document.createElement('tbody');
-        sample.forEach((r, i)=>{
-          const tr = document.createElement('tr');
-          tr.innerHTML = `<td>${i+1}</td><td>${r.ean}</td><td>${r.descricao}</td><td>${r.preco_custo ?? ''}</td><td>${r.preco_venda ?? ''}</td>`;
-          tbody.appendChild(tr);
-        });
-        previewTable.appendChild(tbody);
-      } else {
-        previewWrap.style.display = 'none';
-        previewTable.innerHTML = '';
-      }
-
-      btnInserir.disabled = parsedRows.length === 0;
-      showBanner(missing.length ? 'Algumas colunas não foram encontradas; somente linhas completas serão gravadas.' : 'Arquivo lido com sucesso!', missing.length ? 'warn' : 'ok');
+      btnLimparImport.disabled = false;
+      // Habilita inserir apenas se os obrigatórios estiverem mapeados
+      const okRequired = !!(mapping.ean13 && mapping.descricao && mapping.preco_venda);
+      btnInserir.disabled = !okRequired;
+      showBanner(detected.alerts.length ? 'Mapeamento parcial detectado — ajuste nos selects.' : 'Mapeamento detectado com sucesso!', detected.alerts.length ? 'warn' : 'ok');
     }catch(e){
       console.error(e);
-      showBanner('Falha ao ler planilha. Verifique o arquivo.', 'err');
+      showBanner('Falha ao ler planilha. Verifique o arquivo.','err');
       importStats.textContent = 'Erro ao ler planilha.';
     }
   }
 
-  btnPrever.addEventListener('click', ()=>parseSelectedFile(true));
+  btnPrever.addEventListener('click', parseAndDetect);
+
+  function normalizeRows(){
+    // usa mapping para transformar rowsAll → parsedRows
+    const M = mapping;
+    const out = [];
+    for (const r of rowsAll){
+      const ean = M.ean13 ? digitsOnly(r[M.ean13]) : '';
+      const descricao = M.descricao ? String(r[M.descricao] ?? '').trim() : '';
+      const preco_venda = M.preco_venda ? toNumberBR(r[M.preco_venda]) : null;
+      const preco_custo = M.preco_custo ? toNumberBR(r[M.preco_custo]) : null;
+      const id_produto  = M.id_produto ? String(r[M.id_produto] ?? '').trim() : null;
+      const qtde_vendida= M.qtde_vendida ? toNumberBR(r[M.qtde_vendida]) : null;
+
+      if (!ean || ean.length!==13) continue;          // EAN obrigatório (13 dígitos)
+      if (!descricao) continue;                       // Descrição obrigatória
+      if (preco_venda==null) continue;                // Preço venda obrigatório
+
+      // Se custo > venda, troca (heurística)
+      let pv = preco_venda, pc = preco_custo;
+      if (pc!=null && pv!=null && pc>pv){ [pc,pv] = [pv,pc]; }
+
+      out.push({
+        user_id: sessionUser.id,
+        ean13: ean,
+        descricao: descricao,
+        preco_custo: pc,
+        preco_venda: pv,
+        id_produto: id_produto && id_produto!=='' ? id_produto : null,
+        qtde_vendida: qtde_vendida
+      });
+    }
+    return out;
+  }
 
   async function insertBatches(){
-    if (!parsedRows.length){ showBanner('Nada para inserir. Faça a leitura primeiro.', 'warn'); return; }
-    btnInserir.disabled = true;
-    btnPrever.disabled = true;
-    btnLimparImport.disabled = true;
+    if (!rowsAll.length){ showBanner('Nada para inserir. Faça a leitura primeiro.','warn'); return; }
 
-    const BATCH = 500; // lote
+    const requiredOk = !!(mapping.ean13 && mapping.descricao && mapping.preco_venda);
+    if (!requiredOk){ showBanner('Mapeie EAN13, Descrição e Preço de Venda para prosseguir.','warn'); return; }
+
+    btnInserir.disabled = true; btnPrever.disabled = true; btnLimparImport.disabled = true;
+    showBanner('Preparando registros…','ok', 2500);
+
+    parsedRows = normalizeRows();
+    if (!parsedRows.length){
+      showBanner('Nenhuma linha válida após normalização (verifique EAN13/Descrição/Preço de Venda).','warn', 6000);
+      btnInserir.disabled = false; btnPrever.disabled = false; btnLimparImport.disabled = false;
+      return;
+    }
+
+    const BATCH = 500;
     let ok = 0, fail = 0, pos = 0;
-
-    showBanner('Inserindo registros em lotes...', 'ok', 3000);
     while (pos < parsedRows.length){
-      const batch = parsedRows.slice(pos, pos + BATCH).map(r => ({
-        user_id: sessionUser.id,
-        ean: r.ean,
-        descricao: r.descricao,
-        preco_custo: r.preco_custo,
-        preco_venda: r.preco_venda
-      }));
-
+      const batch = parsedRows.slice(pos, pos+BATCH);
       try{
-        // Se você criar a UNIQUE (user_id, ean), pode trocar para upsert({ onConflict: 'user_id,ean' })
-        const { error } = await sb.from('produtos_cliente').upsert(batch, { onConflict: 'user_id,ean' });
+        const { error } = await sb.from('produtos_cliente').upsert(batch, { onConflict: 'user_id,ean13' });
         if (error) throw error;
         ok += batch.length;
       }catch(err){
@@ -638,35 +717,19 @@ function initExcelImport(){
       importStats.innerHTML = `Progresso: ${Math.min(pos, parsedRows.length)} / ${parsedRows.length} • Sucesso: <span class="ok">${ok}</span> • Erros: <span class="err">${fail}</span>`;
     }
 
-    if (fail === 0){
-      showBanner(`Importação concluída: ${ok} registros inseridos/atualizados.`, 'ok', 6000);
-    } else {
-      showBanner(`Importação com falhas: ${ok} OK, ${fail} erros. Veja o console.`, 'warn', 8000);
-    }
+    if (fail===0) showBanner(`Importação concluída: ${ok} registro(s) inserido(s)/atualizado(s).`, 'ok', 7000);
+    else showBanner(`Importação com falhas: ${ok} OK, ${fail} erro(s). Veja o console.`, 'warn', 8000);
 
-    btnPrever.disabled = false;
-    btnLimparImport.disabled = false;
-    btnInserir.disabled = false;
+    btnInserir.disabled = false; btnPrever.disabled = false; btnLimparImport.disabled = false;
   }
 
   btnInserir.addEventListener('click', insertBatches);
-
-  // Atalho: ao escolher arquivo, já habilita prévia
-  fileRow.style.display = 'none';
-  input.addEventListener('change', ()=>{ btnPrever.disabled = !input.files?.length; });
-
-  // Inicial
-  resetImport();
 }
 
-</script>
-
-<script>
 /* =========================================================
-   SEÇÃO: Seleção de Sites (tabela: sites; vínculo: user_sites)
+   Seção: Seleção de Sites (tabela sites; vínculo user_sites)
    ========================================================= */
 const PLAN_LIMIT = { trial: 2, basico: 4, intermediario: 6, premium: 8 };
-
 const sitesWrap  = document.getElementById('sitesWrap');
 const limitInfo  = document.getElementById('limitInfo');
 const counterEl  = document.getElementById('counter');
@@ -674,8 +737,8 @@ const btnSalvarSites = document.getElementById('btnSalvarSites');
 const btnLimparSites = document.getElementById('btnLimparSites');
 
 let planLimit = PLAN_LIMIT[currentPlan] ?? PLAN_LIMIT.trial;
-let allSites = [];             // [{id, nome, site}]
-let selectedIds = new Set();   // Set<number>
+let allSites = [];
+let selectedIds = new Set();
 
 function cap(s){ return (s||'').charAt(0).toUpperCase() + (s||'').slice(1); }
 
@@ -684,154 +747,66 @@ async function initSitesSection(){
   const pretty = cap(currentPlan).replace('Basico','Básico').replace('Intermediario','Intermediário');
   limitInfo.textContent = `Limite do plano (${pretty}): ${planLimit} site${planLimit>1?'s':''}`;
 
-  await loadSites();
-  await loadUserSelection();
-  renderSites();
-  updateCounter();
+  await loadSites(); await loadUserSelection(); renderSites(); updateCounter();
 }
-
 async function loadSites(){
   try{
-    const { data, error } = await sb
-      .from('sites')
-      .select('id,nome,site')
-      .order('nome', { ascending: true });
+    const { data, error } = await sb.from('sites').select('id,nome,site').order('nome',{ascending:true});
     if (error) throw error;
-    allSites = data || [];
-  }catch(e){
-    console.error(e);
-    allSites = [];
-    showBanner('Erro ao carregar lista de sites (tabela "sites").', 'err');
-  }
+    allSites = data||[];
+  }catch(e){ console.error(e); allSites=[]; showBanner('Erro ao carregar lista de sites (tabela "sites").','err'); }
 }
-
 async function loadUserSelection(){
   try{
-    const { data, error } = await sb
-      .from('user_sites')           // (user_id uuid, site_id int)
-      .select('site_id')
-      .eq('user_id', sessionUser.id);
+    const { data, error } = await sb.from('user_sites').select('site_id').eq('user_id', sessionUser.id);
     if (error) throw error;
-    selectedIds = new Set((data||[]).map(r => r.site_id));
-  }catch(e){
-    console.error(e);
-    selectedIds = new Set();
-    if (allSites.length) showBanner('Não foi possível carregar sua seleção anterior (tabela "user_sites").', 'warn', 5000);
-  }
+    selectedIds = new Set((data||[]).map(r=>r.site_id));
+  }catch(e){ console.error(e); selectedIds=new Set(); if (allSites.length) showBanner('Não foi possível carregar sua seleção anterior (tabela "user_sites").','warn', 5000); }
 }
-
 function renderSites(){
   sitesWrap.innerHTML = '';
-  sitesWrap.setAttribute('aria-busy', 'true');
-
+  sitesWrap.setAttribute('aria-busy','true');
   if (!allSites.length){
-    const empty = document.createElement('div');
-    empty.className = 'muted';
-    empty.textContent = 'Nenhum site disponível cadastrado.';
-    sitesWrap.appendChild(empty);
-    sitesWrap.setAttribute('aria-busy', 'false');
-    return;
+    const empty=document.createElement('div'); empty.className='muted'; empty.textContent='Nenhum site disponível cadastrado.'; sitesWrap.appendChild(empty);
+    sitesWrap.setAttribute('aria-busy','false'); return;
   }
-
   const reached = selectedIds.size >= planLimit;
-
   for (const s of allSites){
-    const checked = selectedIds.has(s.id);
-    const disabled = !checked && reached;
-
-    const wrap = document.createElement('label');
-    wrap.className = 'site-item' + (disabled ? ' disabled' : '');
-    wrap.htmlFor = `chk_${s.id}`;
-
-    const chk = document.createElement('input');
-    chk.type = 'checkbox';
-    chk.id = `chk_${s.id}`;
-    chk.value = String(s.id);
-    chk.checked = checked;
-    chk.disabled = disabled;
-    chk.addEventListener('change', onToggleSite);
-
-    const block = document.createElement('div');
-    const title = document.createElement('div');
-    title.className = 'site-title';
-    title.textContent = s.nome || '(sem nome)';
-
-    const url = document.createElement('div');
-    url.className = 'site-url';
-    const a = document.createElement('a');
-    a.href = s.site || '#';
-    a.target = '_blank';
-    a.rel = 'noopener';
-    a.textContent = s.site || '(sem URL)';
-    url.appendChild(a);
-
-    block.appendChild(title);
-    block.appendChild(url);
-
-    wrap.appendChild(chk);
-    wrap.appendChild(block);
-    sitesWrap.appendChild(wrap);
+    const checked = selectedIds.has(s.id); const disabled = !checked && reached;
+    const wrap=document.createElement('label'); wrap.className='site-item'+(disabled?' disabled':''); wrap.htmlFor=`chk_${s.id}`;
+    const chk=document.createElement('input'); chk.type='checkbox'; chk.id=`chk_${s.id}`; chk.value=String(s.id); chk.checked=checked; chk.disabled=disabled; chk.addEventListener('change', onToggleSite);
+    const block=document.createElement('div');
+    const title=document.createElement('div'); title.className='site-title'; title.textContent=s.nome||'(sem nome)';
+    const url=document.createElement('div'); url.className='site-url'; const a=document.createElement('a'); a.href=s.site||'#'; a.target='_blank'; a.rel='noopener'; a.textContent=s.site||'(sem URL)'; url.appendChild(a);
+    block.appendChild(title); block.appendChild(url); wrap.appendChild(chk); wrap.appendChild(block); sitesWrap.appendChild(wrap);
   }
-
-  if (reached){
-    showBanner(`Você atingiu o limite do seu plano (${planLimit}). Para marcar mais, desmarque algum ou atualize seu plano.`, 'warn', 3000);
-  }
-
-  sitesWrap.setAttribute('aria-busy', 'false');
+  if (reached) showBanner(`Você atingiu o limite do seu plano (${planLimit}). Para marcar mais, desmarque algum ou atualize seu plano.`,'warn', 3000);
+  sitesWrap.setAttribute('aria-busy','false');
 }
-
 function onToggleSite(ev){
   const id = Number(ev.target.value);
   if (ev.target.checked){
-    if (selectedIds.size >= planLimit){
-      ev.target.checked = false;
-      showBanner(`Limite do plano (${planLimit}) atingido.`, 'warn', 2500);
-      return;
-    }
+    if (selectedIds.size >= planLimit){ ev.target.checked=false; showBanner(`Limite do plano (${planLimit}) atingido.`,'warn',2500); return; }
     selectedIds.add(id);
-  } else {
-    selectedIds.delete(id);
-  }
-  renderSites();
-  updateCounter();
+  } else selectedIds.delete(id);
+  renderSites(); updateCounter();
 }
-
-function updateCounter(){
-  counterEl.textContent = `Selecionados: ${selectedIds.size} / ${planLimit}`;
-}
-
-btnLimparSites.addEventListener('click', ()=>{
-  selectedIds.clear();
-  renderSites();
-  updateCounter();
-});
-
+function updateCounter(){ counterEl.textContent = `Selecionados: ${selectedIds.size} / ${planLimit}`; }
+btnLimparSites.addEventListener('click', ()=>{ selectedIds.clear(); renderSites(); updateCounter(); });
 btnSalvarSites.addEventListener('click', async ()=>{
   try{
-    btnSalvarSites.disabled = true;
-
-    // Apaga seleção anterior do usuário
-    const { error: delErr } = await sb
-      .from('user_sites')
-      .delete()
-      .eq('user_id', sessionUser.id);
+    btnSalvarSites.disabled=true;
+    const { error: delErr } = await sb.from('user_sites').delete().eq('user_id', sessionUser.id);
     if (delErr) throw delErr;
-
-    // Insere a seleção atual (respeitando o limite)
     const ids = Array.from(selectedIds).slice(0, planLimit);
     if (ids.length){
       const payload = ids.map(site_id => ({ user_id: sessionUser.id, site_id }));
       const { error: insErr } = await sb.from('user_sites').insert(payload);
       if (insErr) throw insErr;
     }
-
-    showBanner('Seleção salva com sucesso!', 'ok');
-  }catch(e){
-    console.error(e);
-    showBanner('Falha ao salvar sua seleção. Verifique permissões/RLS de "user_sites".', 'err');
-  }finally{
-    btnSalvarSites.disabled = false;
-  }
+    showBanner('Seleção salva com sucesso!','ok');
+  }catch(e){ console.error(e); showBanner('Falha ao salvar sua seleção. Verifique permissões/RLS de "user_sites".','err'); }
+  finally{ btnSalvarSites.disabled=false; }
 });
 </script>
 </body>
