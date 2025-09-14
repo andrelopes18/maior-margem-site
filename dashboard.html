@@ -34,11 +34,11 @@
   .err { display:none; color:#ff5d5d; margin:8px 0; font-size:13px; }
 
   .wrap { overflow:auto; border:1px solid #2a2a2a; border-radius:10px; position: relative; }
-  #generalWrap { height: 55vh; }
+  #generalWrap { height:55vh; }
 
-  table { width:100%; border-collapse: separate; border-spacing: 0; }
-  thead { position: sticky; top: 0; z-index: 3; }
-  thead th { position: sticky; top: 0; background:#0f0f0f; z-index: 4; }
+  table { width:100%; border-collapse:separate; border-spacing:0; }
+  thead { position:sticky; top:0; z-index:3; }
+  thead th { position:sticky; top:0; background:#0f0f0f; z-index:4; }
   th, td { border-bottom:1px solid #2a2a2a; padding:10px; text-align:left; font-size:14px; vertical-align:top; }
   tbody tr:hover { background:#1a1a1a; }
 
@@ -46,7 +46,7 @@
   .col-sku { width:160px; font-family: ui-monospace,Consolas,monospace; }
   .col-desc { min-width:260px; }
   .price { font-weight:700; display:inline-block; font-size:16px; vertical-align:middle; }
-  @media (min-width: 1200px) { .price { font-size:18px; } }
+  @media (min-width:1200px){ .price{ font-size:18px; } }
   .price.min { color:#ff4d4f; }
   .price.max { color:#00d084; }
   .muted { display:none; }
@@ -54,15 +54,19 @@
 
   .counts { margin-top:10px; font-size:12px; color:#9aa0a6; display:flex; gap:12px; flex-wrap:wrap; }
 
+  .resizer { height:10px; margin-top:6px; border:1px solid #2a2a2a; border-radius:8px; cursor:ns-resize; background:linear-gradient(180deg,#1c1c1c,#111); display:flex; align-items:center; justify-content:center; }
+  .resizer:after { content:""; width:40px; height:3px; border-radius:3px; background:#3a3a3a; }
+  body.resizing, body.resizing * { cursor: ns-resize !important; user-select: none; }
+
   th[data-locked="true"] { position: relative; color: #aaa; }
-  th[data-locked="true"]::after { content: "🔒"; margin-left: 6px; opacity: .8; font-size: 14px; }
+  th[data-locked="true"]::after { content:"🔒"; margin-left:6px; opacity:.8; font-size:14px; }
   td.locked-cell .price { filter: blur(3px); }
   td.locked-cell .unlock { display:none; }
   td.locked-cell:hover .unlock { display:inline-flex; align-items:center; gap:6px; margin-left:8px; padding:4px 8px; border-radius:6px; border:1px solid #2e2e2e; background:#141414; color:#ddd; font-size:12px; cursor:pointer; }
   td.locked-cell .unlock:hover { background:#1b1b1b; }
 
   /* Debug */
-  #debugPanel pre { white-space: pre-wrap; font-family: ui-monospace,Consolas,monospace; background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px; padding:8px; color:#bfe3ff; max-height:260px; overflow:auto; }
+  #debugPanel pre { white-space:pre-wrap; font-family: ui-monospace,Consolas,monospace; background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px; padding:8px; color:#bfe3ff; max-height:260px; overflow:auto; }
 </style>
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="./config.js"></script>
@@ -74,7 +78,7 @@
     <span id="planChip" class="chip plan">Plano: —</span>
     <div class="userChipWrap">
       <span id="userChip" class="chip">Usuário</span>
-      <div id="userDropdown" class="dropdown" role="menu" aria-hidden="true">
+      <div class="dropdown" role="menu" aria-hidden="true">
         <button class="dd-item" id="ddMeusDados">Meus dados</button>
         <button class="dd-item" id="ddPlanos">Planos</button>
       </div>
@@ -104,7 +108,7 @@
       <tbody></tbody>
     </table>
   </div>
-  <div id="favResizer" class="resizer" title="Arraste para redimensionar. Duplo clique: voltar ao auto."></div>
+  <div id="favResizer" class="resizer" title="Arraste para redimensionar. Duplo clique volta ao automático."></div>
 </section>
 
 <section id="generalPanel" class="panel">
@@ -146,65 +150,66 @@
 </div>
 
 <script>
-/* ===== Erros visíveis ===== */
-addEventListener('error', e => { const el=err; el.style.display='block'; el.textContent='Erro JS: '+e.message; });
-addEventListener('unhandledrejection', e => { const el=err; el.style.display='block'; el.textContent='Erro assíncrono: '+(e.reason?.message||e.reason); });
+/* ===== util de debug ===== */
+const dbg = document.getElementById('dbg');
+function dlog(o){ dbg.textContent += (typeof o==='string' ? o : JSON.stringify(o,null,2)) + "\n"; }
+document.getElementById('toggleDbg').addEventListener('click', ()=>{
+  const btn = document.getElementById('toggleDbg');
+  const open = btn.getAttribute('aria-expanded')==='true';
+  btn.setAttribute('aria-expanded', String(!open));
+  document.getElementById('dbgWrap').style.display = open ? 'none' : 'block';
+  btn.textContent = open ? 'Maximizar' : 'Minimizar';
+});
 
-/* ===== Config / Supabase ===== */
+/* ===== erros visíveis ===== */
+const errEl = document.getElementById('err');
+addEventListener('error', e => { errEl.style.display='block'; errEl.textContent='Erro JS: '+e.message; });
+addEventListener('unhandledrejection', e => { errEl.style.display='block'; errEl.textContent='Erro assíncrono: '+(e.reason?.message||e.reason); });
+
+/* ===== Supabase ===== */
 const CFG = window.CONFIG || {};
-if (!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY) { const el=err; el.style.display='block'; el.textContent="Erro de configuração: config.js não carregado."; throw new Error("CONFIG ausente"); }
-const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth:{ persistSession:true, autoRefreshToken:true, detectSessionInUrl:true } });
+if(!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY){
+  errEl.style.display='block'; errEl.textContent='CONFIG ausente (config.js)';
+  throw new Error('CONFIG ausente');
+}
+const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth:{ persistSession:true, autoRefreshToken:true, detectSessionInUrl:true }});
 
-/* ===== Constantes ===== */
-const VIEW = "vw_precos_com_desc";
-const PAGE_SIZE = 200;
-const RENDER_CHUNK = 60;
-
-/* ===== Elementos ===== */
+/* ===== elementos ===== */
 const statusEl = document.getElementById('status');
-const err = document.getElementById('err');
-const userChip = document.getElementById('userChip');
-const planChip = document.getElementById('planChip');
+const planChip  = document.getElementById('planChip');
+const userChip  = document.getElementById('userChip');
 const ddMeusDados = document.getElementById('ddMeusDados');
-const ddPlanos = document.getElementById('ddPlanos');
-const btnSair = document.getElementById('btnSair');
-const btnReload = document.getElementById('btnReload');
-const eanFilter = document.getElementById('eanFilter');
-const descFilter = document.getElementById('descFilter');
+const ddPlanos    = document.getElementById('ddPlanos');
+const btnSair     = document.getElementById('btnSair');
+const btnReload   = document.getElementById('btnReload');
+const eanFilter   = document.getElementById('eanFilter');
+const descFilter  = document.getElementById('descFilter');
 
-const favWrap = document.getElementById('favWrap');
-const favBody = document.querySelector('#favTable tbody');
+const favWrap  = document.getElementById('favWrap');
+const favBody  = document.querySelector('#favTable tbody');
 const favHeaderRow = document.getElementById('favHeaderRow');
-const favResizer = document.getElementById('favResizer');
+const favResizer  = document.getElementById('favResizer');
 
 const generalWrap = document.getElementById('generalWrap');
 const generalBody = document.querySelector('#produtosTable tbody');
 const generalHeaderRow = document.getElementById('generalHeaderRow');
-const endMarker = document.getElementById('endMarker');
+const endMarker   = document.getElementById('endMarker');
+const countShown  = document.getElementById('countShown');
+const countTotal  = document.getElementById('countTotal');
+const countFavs   = document.getElementById('countFavs');
 
-const countShown = document.getElementById('countShown');
-const countTotal = document.getElementById('countTotal');
-const countFavs  = document.getElementById('countFavs');
-
-const dbgWrap = document.getElementById('dbgWrap');
-const dbg = document.getElementById('dbg');
-const toggleDbg = document.getElementById('toggleDbg');
-toggleDbg.addEventListener('click', ()=>{
-  const open = toggleDbg.getAttribute('aria-expanded')==='true';
-  toggleDbg.setAttribute('aria-expanded', String(!open));
-  dbgWrap.style.display = open ? 'none' : 'block';
-  toggleDbg.textContent = open ? 'Maximizar' : 'Minimizar';
-});
-
-/* ===== Estado ===== */
+/* ===== estado ===== */
 const DEFAULT_PLAN_SITE_LIMIT = { trial:2, basico:4, intermediario:5, premium:8 };
+const VIEW = 'vw_precos_com_desc';
+const PAGE_SIZE = 200;
+const RENDER_CHUNK = 60;
 
-let chosen = [];                  // [{site_id, label, view_key}] na ordem do user_sites
-let unlocked = new Set();
-let locked   = new Set();
+let chosen = [];            // [{site_id,label,view_key}]
+let unlocked = new Set();   // sites liberados
+let locked   = new Set();   // excedentes do plano
 
 let favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
-let produtosMap = new Map();      // Map<ean, { sku, desc, sites:{ [label]:{precoRaw,precoNum,data} } }>
+let produtosMap = new Map();  // Map<ean, {sku, desc, sites:{[label]:{precoRaw,precoNum,data}}}>
 let produtosList = [];
 let itemsRendered = 0;
 
@@ -219,33 +224,48 @@ let loadingMore = false;
 let suppressGeneralChange = false;
 const generalChkMap = new Map();
 
+let favHeightUser = Number(localStorage.getItem('mm_fav_height')) || null;
 let favFirstAutoRenderDone = false;
 
-/* ===== Helpers ===== */
+/* ===== helpers ===== */
 function setStatus(t){ statusEl.textContent = t||''; }
-function showErr(e){ err.style.display='block'; err.textContent = String(e||'').trim(); }
-function hideErr(){ err.style.display='none'; err.textContent=''; }
+function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
+function debounce(fn,ms=500){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); } }
 function favSave(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet])); }
 function isFav(sku){ return favSet.has(String(sku)); }
-function debounce(fn,delay=500){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),delay); } }
-function formatBRL(n){ try { return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); } catch { return String(n); } }
-function comp(s){ return (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9]/g,''); }
-function debugLog(obj){ dbg.textContent += (typeof obj==='string' ? obj : JSON.stringify(obj, null, 2)) + "\n"; }
+function formatBRL(n){ try{ return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) }catch{ return String(n) } }
+function norm(s){ return (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]/g,'').toLowerCase(); }
 
-/* ===== Cabeçalhos ===== */
+/* Mapa de nomes -> view_key da VIEW (fundamental para casar com vw_precos_com_desc.site) */
+const NAME_TO_VIEW = {
+  redemac:       'PrecoRedeMac',
+  leroymerlin:   'PrecoLeroyMerlin',
+  tumelero:      'PrecoTumelero',
+  cassol:        'PrecoCassol',
+  queroquero:    'PrecoQueroQuero',
+  supremeinox:   'PrecoSupremeinox',
+  mestretinho:   'PrecoMestreTinho',
+  ghaus:         'PrecoGhaus'
+};
+function computeViewKey(label){
+  const key = norm(label);
+  return NAME_TO_VIEW[key] || ('Preco' + (label||'').toString().replace(/[^A-Za-z0-9]/g,'')); // fallback
+}
+
+/* ===== cabeçalhos ===== */
 function buildHeaders(){
-  const fav = `<th class="col-fav">★</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
-  const sitesTh = chosen.map(c=>{
+  const base = `<th class="col-fav">★</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
+  const ths = chosen.map(c=>{
     const lockAttr = locked.has(c.site_id) ? ' data-locked="true"' : ' data-locked="false"';
     return `<th data-siteid="${c.site_id}"${lockAttr}>${c.label}</th>`;
   }).join('');
-  generalHeaderRow.innerHTML = fav + sitesTh;
+  generalHeaderRow.innerHTML = base + ths;
 
-  const favHead = `<th class="col-fav">Ação</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>` + sitesTh;
-  favHeaderRow.innerHTML = favHead;
+  const favBase = `<th class="col-fav">Ação</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
+  favHeaderRow.innerHTML = favBase + ths;
 }
 
-/* ===== Plano ===== */
+/* ===== plano ===== */
 async function getSitesLimitForPlan(planKey){
   const k = (planKey||'').toLowerCase();
   try{
@@ -258,37 +278,35 @@ async function getSitesLimitForPlan(planKey){
   return DEFAULT_PLAN_SITE_LIMIT[k] ?? 2;
 }
 
-/* ===== Seleção do usuário -> colunas ===== */
+/* ===== user_sites -> chosen ===== */
 async function loadUserSelection(userId, planKey){
   dbg.textContent = '';
-  debugLog('--- PASSO 1: Sessão ---');
-  debugLog({ user_id: userId, planKey });
+  dlog('--- PASSO 1: Sessão ---');
+  dlog({ user_id:userId, planKey });
 
-  // 1) user_sites (qualquer nome de coluna de usuário)
-  debugLog('--- PASSO 2: Lendo user_sites (todos os campos) ---');
-  let allUserSites = [];
+  // 1) user_sites
+  dlog('--- PASSO 2: user_sites (select "*") ---');
+  let rows = [];
   try{
     const { data, error } = await sb.from('user_sites').select('*');
     if (error) throw error;
-    allUserSites = data || [];
-  }catch(e){ debugLog('ERRO user_sites: '+e.message); }
+    rows = (data||[]).filter(r => String(r.user_id||r.user_uid||r.user_uuid||r.uid||r.user||'') === String(userId));
+  }catch(e){ dlog('ERRO user_sites: '+e.message); rows = []; }
 
-  const keys = ['user_id','user_uid','user_uuid','user_id_uuid','uid','user'];
-  const rows = allUserSites.filter(r => keys.some(k => String(r?.[k]||'') === String(userId)));
-  debugLog({ total_user_sites: allUserSites.length, meus_user_sites: rows.length, exemplo: rows[0] });
+  dlog({ meus_user_sites: rows.length, exemplo: rows[0] });
 
-  // ordena por position -> created_at -> id
+  // ordenar por position -> created_at -> id
   rows.sort((a,b)=>{
     const pa=a.position??null, pb=b.position??null;
-    if (pa!=null && pb!=null && pa!==pb) return pa - pb;
+    if(pa!=null && pb!=null && pa!==pb) return pa-pb;
     const ca=a.created_at?new Date(a.created_at).getTime():0;
     const cb=b.created_at?new Date(b.created_at).getTime():0;
-    if (ca!==cb) return ca - cb;
-    return (a.id||0) - (b.id||0);
+    if(ca!==cb) return ca-cb;
+    return (a.id||0)-(b.id||0);
   });
 
   const siteIds = rows.map(r=>r.site_id).filter(x=>x!=null);
-  debugLog({ ordem_site_ids: siteIds });
+  dlog({ ordem_site_ids: siteIds });
 
   if (!siteIds.length){
     chosen=[]; unlocked=new Set(); locked=new Set(); buildHeaders();
@@ -296,46 +314,46 @@ async function loadUserSelection(userId, planKey){
     return;
   }
 
-  // 2) sites (usa select('*') para não quebrar por coluna ausente) -> label + view_key dinâmico
-  debugLog('--- PASSO 3: Buscando sites (select("*")) ---');
+  // 2) sites
+  dlog('--- PASSO 3: sites (select "*") ---');
   let sites = [];
   try{
     const { data, error } = await sb.from('sites').select('*').in('id', siteIds);
     if (error) throw error;
     sites = data || [];
-  }catch(e){ debugLog('ERRO sites: '+e.message); }
+  }catch(e){ dlog('ERRO sites: '+e.message); }
 
   const byId = new Map(sites.map(s=>[s.id,s]));
   const ordered = [];
-  for (const id of siteIds){ const s=byId.get(id); if (s && !ordered.includes(s)) ordered.push(s); }
+  for (const id of siteIds){ const s=byId.get(id); if(s && !ordered.includes(s)) ordered.push(s); }
 
   chosen = ordered.map(s=>{
-    const lbl = (s.nome || s.site || s.name || `Site ${s.id}`).toString().trim();
-    const vk  = 'Preco' + comp(lbl); // casa com vw_precos_com_desc.site
-    return { site_id:s.id, label:lbl, view_key:vk };
+    const label = (s.nome || s.site || `Site ${s.id}`).toString().trim();
+    const vk    = computeViewKey(label);
+    return { site_id:s.id, label, view_key:vk };
   });
 
-  debugLog({ chosen });
+  dlog({ chosen });
 
   const lim = await getSitesLimitForPlan(planKey);
   unlocked = new Set(chosen.slice(0, lim).map(c=>c.site_id));
   locked   = new Set(chosen.slice(lim).map(c=>c.site_id));
-  debugLog({ plano_limite: lim, unlocked:[...unlocked], locked:[...locked] });
+  dlog({ plano_limite:lim, unlocked:[...unlocked], locked:[...locked] });
 
   buildHeaders();
   setStatus(`Sites: ${chosen.map(c=>c.label).join(' · ')}`);
 }
 
-/* ===== Agrega linhas da view (usa view_key de chosen) ===== */
+/* ===== agrega linhas da view (filtra pelos view_key permitidos) ===== */
 function upsertRowsIntoProdutos(rows){
-  const allowed = new Map(chosen.map(c=>[c.view_key, c.label]));
+  const allowed = new Map(chosen.map(c=>[c.view_key, c.label])); // vk -> label
   for (const r of rows){
-    const ean = String(r.ean ?? '');
-    const vk  = String(r.site ?? ''); // ex.: PrecoGhaus
+    const vk = String(r.site||'');
     const label = allowed.get(vk);
     if (!label) continue; // ignora sites não selecionados
 
-    if (!produtosMap.has(ean)) produtosMap.set(ean, { sku: ean, desc: r.descricao || '', sites:{} });
+    const ean = String(r.ean||'');
+    if (!produtosMap.has(ean)) produtosMap.set(ean, { sku:ean, desc:r.descricao||'', sites:{} });
     const item = produtosMap.get(ean);
     if (!item.desc && r.descricao) item.desc = r.descricao;
 
@@ -347,7 +365,7 @@ function upsertRowsIntoProdutos(rows){
   produtosList = Array.from(produtosMap.values());
 }
 
-/* ===== Render ===== */
+/* ===== render ===== */
 function chartButtonSVG(){
   return `<svg class="chart-icon" viewBox="0 0 24 24" aria-hidden="true">
     <rect x="3" y="11" width="3" height="7" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>
@@ -360,91 +378,94 @@ function computeMinMaxForRow(item){
   let min={label:null,val:Infinity}, max={label:null,val:-Infinity};
   for (const c of chosen){
     if (locked.has(c.site_id)) continue;
-    const d = item.sites[c.label];
+    const d=item.sites[c.label];
     if (!d || !Number.isFinite(d.precoNum)) continue;
-    if (d.precoNum < min.val) min={label:c.label, val:d.precoNum};
-    if (d.precoNum > max.val) max={label:c.label, val:d.precoNum};
+    if (d.precoNum<min.val) min={label:c.label,val:d.precoNum};
+    if (d.precoNum>max.val) max={label:c.label,val:d.precoNum};
   }
   return { min:min.label, max:max.label };
 }
 function createPriceCell(item, label, isLocked, minLabel, maxLabel){
-  const td = document.createElement('td');
+  const td=document.createElement('td');
   if (isLocked) td.classList.add('locked-cell');
-  const d = item.sites[label];
+  const d=item.sites[label];
 
   if (d){
     const dtStr = d.data ? new Date(d.data).toLocaleString('pt-BR') : '';
     if (Number.isFinite(d.precoNum)){
-      const span = document.createElement('span');
-      span.className = `price ${!isLocked && label===minLabel ? 'min' : (!isLocked && label===maxLabel ? 'max':'')}`;
-      span.title = isLocked ? 'Excedeu o limite do plano' : (dtStr ? `Atualizado em ${dtStr}` : '');
-      span.textContent = formatBRL(d.precoNum);
+      const span=document.createElement('span');
+      span.className=`price ${!isLocked && label===minLabel ? 'min' : (!isLocked && label===maxLabel ? 'max':'')}`;
+      span.title=isLocked?'Excedeu o limite do plano':(dtStr?`Atualizado em ${dtStr}`:'');
+      span.textContent=formatBRL(d.precoNum);
       td.appendChild(span);
 
-      const b = document.createElement('button');
+      const b=document.createElement('button');
       b.className='chart-btn'; b.type='button'; b.title=isLocked?'Disponível no upgrade':'Ver histórico';
-      b.innerHTML = chartButtonSVG();
-      b.addEventListener('click',(ev)=>{ if(isLocked){location.href='planos.html';return;} openChartFor(ev, item.sku, label); });
+      b.innerHTML=chartButtonSVG();
+      b.addEventListener('click',(ev)=>{ if(isLocked){location.href='planos.html';return;} openChartFor(ev,item.sku,label); });
       td.appendChild(b);
 
       if (isLocked){
-        const up = document.createElement('button');
-        up.className='unlock'; up.type='button'; up.title='Excedeu o limite do plano. Ver planos.'; up.textContent='Ver planos';
-        up.addEventListener('click', ()=> location.href='planos.html');
+        const up=document.createElement('button');
+        up.className='unlock'; up.type='button'; up.textContent='Ver planos';
+        up.addEventListener('click',()=>location.href='planos.html');
         td.appendChild(up);
       }
     }else{
-      const span = document.createElement('span');
+      const span=document.createElement('span');
       span.className='price';
-      span.title = isLocked ? 'Excedeu o limite do plano' : (dtStr ? `Atualizado em ${dtStr}` : '');
-      span.textContent = (d.precoRaw??'').toString();
+      span.title=isLocked?'Excedeu o limite do plano':(dtStr?`Atualizado em ${dtStr}`:'');
+      span.textContent=(d.precoRaw??'').toString();
       td.appendChild(span);
     }
   }else{
-    td.innerHTML = `<span class="muted">—</span>`;
+    td.innerHTML='<span class="muted">—</span>';
   }
   return td;
 }
-function renderRowInto(tr, item){
-  const tdFav = document.createElement('td'); tdFav.className='col-fav';
-  const chk = document.createElement('input'); chk.type='checkbox'; chk.checked=isFav(item.sku);
-  chk.addEventListener('change', ()=>{ if (chk.checked) favSet.add(item.sku); else favSet.delete(item.sku); favSave(); renderFavs(); updateFavHeight(); updateCounts(); });
+function renderRowInto(tr,item){
+  const tdFav=document.createElement('td'); tdFav.className='col-fav';
+  const chk=document.createElement('input'); chk.type='checkbox'; chk.checked=isFav(item.sku);
+  chk.addEventListener('change',()=>{ if(chk.checked) favSet.add(item.sku); else favSet.delete(item.sku); favSave(); renderFavs(); updateFavHeight(); updateCounts(); });
   tdFav.appendChild(chk); tr.appendChild(tdFav); generalChkMap.set(item.sku, chk);
 
-  const tdSku = document.createElement('td'); tdSku.className='col-sku'; tdSku.textContent=item.sku; tr.appendChild(tdSku);
-  const tdDesc= document.createElement('td'); tdDesc.className='col-desc'; tdDesc.innerHTML=(item.desc||'').replace(/</g,'&lt;'); tr.appendChild(tdDesc);
+  const tdSku=document.createElement('td'); tdSku.className='col-sku'; tdSku.textContent=item.sku; tr.appendChild(tdSku);
+  const tdDesc=document.createElement('td'); tdDesc.className='col-desc'; tdDesc.innerHTML=(item.desc||'').replace(/</g,'&lt;'); tr.appendChild(tdDesc);
 
-  const { min, max } = computeMinMaxForRow(item);
+  const {min,max}=computeMinMaxForRow(item);
   for (const c of chosen){ tr.appendChild(createPriceCell(item, c.label, locked.has(c.site_id), min, max)); }
 }
 function renderGeneralChunk(){
-  const end = Math.min(itemsRendered + RENDER_CHUNK, produtosList.length);
-  const frag = document.createDocumentFragment();
-  for (let i=itemsRendered;i<end;i++){ const it = produtosList[i]; const tr = document.createElement('tr'); renderRowInto(tr, it); frag.appendChild(tr); }
+  const end=Math.min(itemsRendered+RENDER_CHUNK, produtosList.length);
+  const frag=document.createDocumentFragment();
+  for(let i=itemsRendered;i<end;i++){ const it=produtosList[i]; const tr=document.createElement('tr'); renderRowInto(tr,it); frag.appendChild(tr); }
   generalBody.appendChild(frag);
-  itemsRendered = end;
-  endMarker.textContent = (serverExhausted && itemsRendered >= produtosList.length) ? 'Fim da lista' : '';
+  itemsRendered=end;
+  endMarker.textContent=(serverExhausted && itemsRendered>=produtosList.length)?'Fim da lista':'';
   updateCounts();
 }
 function resetGeneralDom(){ generalBody.innerHTML=''; generalChkMap.clear(); itemsRendered=0; endMarker.textContent=''; }
+
+/* ===== scroll / paginação ===== */
 function onGeneralScroll(){
   if (loadingMore) return;
   const nearBottom = generalWrap.scrollTop + generalWrap.clientHeight >= generalWrap.scrollHeight - 100;
-  if (nearBottom && itemsRendered < produtosList.length){ loadingMore=true; setTimeout(()=>{ renderGeneralChunk(); loadingMore=false; }, 30); return; }
+  if (nearBottom && itemsRendered < produtosList.length){ loadingMore=true; setTimeout(()=>{ renderGeneralChunk(); loadingMore=false; },30); return; }
   if (nearBottom && !serverExhausted && !fetching){ fetchNextPage(); }
 }
 generalWrap.addEventListener('scroll', onGeneralScroll);
 
-/* ===== Favoritos ===== */
+/* ===== favoritos ===== */
 function renderFavs(){
   favBody.innerHTML='';
   const favList = produtosList.filter(p=>isFav(p.sku));
-  const frag = document.createDocumentFragment();
+  const frag=document.createDocumentFragment();
   for (const item of favList){
-    const tr = document.createElement('tr');
+    const tr=document.createElement('tr');
+
     const tdAct=document.createElement('td'); tdAct.className='col-fav';
-    const btn=document.createElement('button'); btn.className='trash-btn'; btn.title='Remover'; btn.innerHTML='🗑️';
-    btn.addEventListener('click', ()=>{ favSet.delete(item.sku); favSave(); const chk=generalChkMap.get(item.sku); if (chk){ suppressGeneralChange=true; chk.checked=false; suppressGeneralChange=false; } renderFavs(); updateFavHeight(); updateCounts(); });
+    const btn=document.createElement('button'); btn.title='Remover'; btn.innerHTML='🗑️';
+    btn.addEventListener('click',()=>{ favSet.delete(item.sku); favSave(); const chk=generalChkMap.get(item.sku); if(chk){ chk.checked=false; } renderFavs(); updateFavHeight(); updateCounts(); });
     tdAct.appendChild(btn); tr.appendChild(tdAct);
 
     const tdSku=document.createElement('td'); tdSku.className='col-sku'; tdSku.textContent=item.sku; tr.appendChild(tdSku);
@@ -452,19 +473,20 @@ function renderFavs(){
 
     const {min,max}=computeMinMaxForRow(item);
     for (const c of chosen){ tr.appendChild(createPriceCell(item, c.label, locked.has(c.site_id), min, max)); }
+
     frag.appendChild(tr);
   }
   favBody.appendChild(frag);
 }
 
-/* ===== Contadores ===== */
+/* ===== contadores ===== */
 function updateCounts(){
   countShown.textContent = `Exibindo ${itemsRendered} de ${produtosList.length} no Geral (carregados)`;
   countTotal.textContent = serverExhausted ? `Total de SKUs carregados: ${produtosList.length}` : `Carregando… (${produtosList.length}+ )`;
   countFavs.textContent  = `Favoritos: ${favSet.size}`;
 }
 
-/* ===== Consulta paginada ===== */
+/* ===== query ===== */
 function buildQuery(){
   let q = sb.from(VIEW).select('ean, site, preco, data, descricao, preco_num', { count:'estimated' }).order('data', { ascending:false });
   if (currentEanQ)  q = q.ilike('ean', `%${currentEanQ}%`);
@@ -476,7 +498,7 @@ async function fetchNextPage(){
   fetching = true; hideErr(); setStatus(`Carregando… (offset ${serverOffset})`);
   try{
     const from = serverOffset, to = serverOffset + PAGE_SIZE - 1;
-    const { data, error } = await buildQuery().range(from, to);
+    const { data, error } = await buildQuery().range(from,to);
     if (error) throw error;
 
     if (!data || data.length===0){
@@ -490,22 +512,20 @@ async function fetchNextPage(){
       serverOffset += PAGE_SIZE;
       setStatus(`Carregados: ${produtosList.length} SKUs (parcial)`);
     }
-  }catch(e){ console.error(e); showErr('Falha ao carregar: ' + (e?.message || e)); setStatus('Erro ao carregar.'); }
-  finally { fetching=false; updateCounts(); }
+  }catch(e){ console.error(e); errEl.style.display='block'; errEl.textContent='Falha ao carregar: '+(e?.message||e); setStatus('Erro ao carregar.'); }
+  finally{ fetching=false; updateCounts(); }
 }
 
-/* ===== Reset ===== */
+/* ===== reset ===== */
 function resetAndQuery(){
   produtosMap.clear(); produtosList=[]; serverOffset=0; serverExhausted=false; favFirstAutoRenderDone=false;
-  resetGeneralDom();
-  renderFavs(); updateFavHeight(); updateCounts();
-  fetchNextPage();
+  resetGeneralDom(); renderFavs(); updateFavHeight(); updateCounts(); fetchNextPage();
 }
 
-/* ===== Navegação / filtros ===== */
+/* ===== UI extra ===== */
 ddMeusDados.addEventListener('click', ()=> location.href='meusdados.html');
 ddPlanos.addEventListener('click', ()=> location.href='planos.html');
-btnSair.addEventListener('click', async ()=>{ try{ await sb.auth.signOut(); } finally { localStorage.removeItem('mm_login_date'); location.href = CFG.SITE_URL || 'index.html'; } });
+btnSair.addEventListener('click', async ()=>{ try{ await sb.auth.signOut(); } finally{ localStorage.removeItem('mm_login_date'); location.href = CFG.SITE_URL || 'index.html'; }});
 
 const onFilterInput = debounce(()=>{ currentEanQ=(eanFilter.value||'').trim(); currentDescQ=(descFilter.value||'').trim(); resetAndQuery(); }, 500);
 eanFilter.addEventListener('input', onFilterInput);
@@ -517,38 +537,36 @@ btnReload.addEventListener('click', async ()=>{
     let planKey='basico';
     try{
       const { data, error } = await sb.from('profiles').select('plan').eq('id', s.user.id).maybeSingle();
-      if (!error) planKey = (data?.plan || 'basico').toString().toLowerCase();
-      planChip.textContent = `Plano: ${planKey.charAt(0).toUpperCase()+planKey.slice(1)}`;
+      if (!error){
+        const raw=(data?.plan||'basico').toString();
+        planKey = raw.toLowerCase();
+        planChip.textContent = `Plano: ${raw.charAt(0).toUpperCase()+raw.slice(1)}`;
+      }
     }catch{}
     await loadUserSelection(s.user.id, planKey);
   }
   resetAndQuery();
 });
 
-/* ===== favoritos: altura + resizer ===== */
-function measureRowHeight(){ const row = document.querySelector('#favTable tbody tr'); if (!row) return 44; const h = Math.round(row.getBoundingClientRect().height); return Math.max(36, h || 44); }
-function measureHeadHeight(){ const head = document.querySelector('#favTable thead'); if (!head) return 40; const h = Math.round(head.getBoundingClientRect().height); return Math.max(32, h || 40); }
-let favHeightUser = Number(localStorage.getItem('mm_fav_height')) || null;
-function applyFavHeight(px){ if (!px || !Number.isFinite(px)) return; const maxPx = Math.round(window.innerHeight * 0.85); const clamped = Math.max(120, Math.min(px, maxPx)); favWrap.style.height = clamped + 'px'; }
+/* ===== favoritos height / resizer ===== */
+function measureRowHeight(){ const row=document.querySelector('#favTable tbody tr'); if(!row) return 44; const h=Math.round(row.getBoundingClientRect().height); return Math.max(36, h||44); }
+function measureHeadHeight(){ const head=document.querySelector('#favTable thead'); if(!head) return 40; const h=Math.round(head.getBoundingClientRect().height); return Math.max(32, h||40); }
+function applyFavHeight(px){ if(!px||!Number.isFinite(px)) return; const maxPx=Math.round(window.innerHeight*0.85); const clamped=Math.max(120, Math.min(px, maxPx)); favWrap.style.height=clamped+'px'; }
 function updateFavHeight(){
-  if (favHeightUser) { applyFavHeight(favHeightUser); return; }
-  const rowsLen = favBody.children.length;
-  const rows = Math.min(rowsLen, 20);
-  const rowH = measureRowHeight();
-  const headH = measureHeadHeight();
-  const pad = 8;
-  const target = headH + rows * rowH + pad;
-  applyFavHeight(target);
+  if (favHeightUser){ applyFavHeight(favHeightUser); return; }
+  const rowsLen=favBody.children.length; const rows=Math.min(rowsLen, 20);
+  const rowH=measureRowHeight(); const headH=measureHeadHeight(); const pad=8;
+  const target=headH + rows*rowH + pad; applyFavHeight(target);
 }
 (function initResizer(){
-  let startY = 0, startH = 0;
-  function onMove(ev){ const dy = ev.clientY - startY; favHeightUser = startH + dy; localStorage.setItem('mm_fav_height', String(favHeightUser)); applyFavHeight(favHeightUser); }
+  let startY=0, startH=0;
+  function onMove(ev){ const dy=ev.clientY-startY; favHeightUser=startH+dy; localStorage.setItem('mm_fav_height', String(favHeightUser)); applyFavHeight(favHeightUser); }
   function stop(){ removeEventListener('mousemove', onMove); removeEventListener('mouseup', stop); document.body.classList.remove('resizing'); }
-  favResizer.addEventListener('mousedown', (ev)=>{ startY = ev.clientY; startH = favWrap.offsetHeight; document.body.classList.add('resizing'); addEventListener('mousemove', onMove); addEventListener('mouseup', stop); });
-  favResizer.addEventListener('dblclick', ()=>{ favHeightUser = null; localStorage.removeItem('mm_fav_height'); updateFavHeight(); });
+  favResizer.addEventListener('mousedown', (ev)=>{ startY=ev.clientY; startH=favWrap.offsetHeight; document.body.classList.add('resizing'); addEventListener('mousemove', onMove); addEventListener('mouseup', stop); });
+  favResizer.addEventListener('dblclick', ()=>{ favHeightUser=null; localStorage.removeItem('mm_fav_height'); updateFavHeight(); });
 })();
 
-/* ===== Gráfico ===== */
+/* ===== gráfico ===== */
 const pop = document.getElementById('chartPopover');
 const popTitle = document.getElementById('chartTitle');
 const popClose = document.getElementById('chartClose');
@@ -559,8 +577,8 @@ document.getElementById('chartClose').addEventListener('click', ()=> pop.style.d
 addEventListener('click', (ev)=>{ if(pop.style.display!=='none' && !pop.contains(ev.target)) pop.style.display='none'; });
 
 function drawSpark(points){
-  const ctx = sparkCtx, W=spark.width, H=spark.height; ctx.clearRect(0,0,W,H);
-  if (!points || points.length<3){ popMsg.style.display='block'; popMsg.textContent='Histórico insuficiente (≥3 pontos).'; return; }
+  const ctx=sparkCtx, W=spark.width, H=spark.height; ctx.clearRect(0,0,W,H);
+  if(!points || points.length<3){ popMsg.style.display='block'; popMsg.textContent='Histórico insuficiente (≥3 pontos).'; return; }
   popMsg.style.display='none';
   const m={l:40,r:14,t:12,b:28};
   const xs=points.map(p=>p.x.getTime()), ys=points.map(p=>p.y);
@@ -575,29 +593,42 @@ function drawSpark(points){
   ctx.fillStyle='#bfffc1'; for(const p of points){ const x=xS(p.x.getTime()), y=yS(p.y); ctx.beginPath(); ctx.arc(x,y,3.2,0,Math.PI*2); ctx.fill(); }
 }
 async function openChartFor(ev, ean, label){
-  const rect = ev.currentTarget.getBoundingClientRect();
+  const rect=ev.currentTarget.getBoundingClientRect();
   pop.style.display='block'; pop.style.left=(rect.right+12)+'px'; pop.style.top=(rect.bottom+12)+'px';
-  popTitle.textContent = `${label} • ${ean}`;
+  popTitle.textContent=`${label} • ${ean}`;
   popMsg.style.display='block'; popMsg.textContent='Carregando…'; sparkCtx.clearRect(0,0,spark.width,spark.height);
-
   try{
-    const vk = (chosen.find(c=>c.label===label)||{}).view_key || ('Preco'+comp(label));
+    const vk = (chosen.find(c=>c.label===label)||{}).view_key || computeViewKey(label);
     const { data, error } = await sb.from(VIEW).select('data, preco_num')
       .eq('ean', ean).eq('site', vk).not('preco_num','is',null).order('data',{ascending:true}).limit(60);
     if (error) throw error;
-    const pts = (data||[]).filter(r=>typeof r.preco_num==='number'&&Number.isFinite(r.preco_num)).map(r=>({x:new Date(r.data), y:r.preco_num}));
+    const pts=(data||[]).filter(r=>typeof r.preco_num==='number'&&Number.isFinite(r.preco_num)).map(r=>({x:new Date(r.data), y:r.preco_num}));
     drawSpark(pts);
   }catch(e){ popMsg.style.display='block'; popMsg.textContent='Falha ao carregar histórico.'; }
 }
 
-/* ===== INIT ===== */
+/* ===== init ===== */
 (async function init(){
   const { data:{ session } } = await sb.auth.getSession();
-  if (!session) { location.href = CFG.SITE_URL || 'index.html'; return; }
+  if (!session){ location.href = CFG.SITE_URL || 'index.html'; return; }
 
   userChip.textContent = session.user?.email || 'Logado';
   let planKey='basico';
   try{
     const { data, error } = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
     if (!error){
-      const raw =analysis
+      const raw=(data?.plan||'basico').toString();
+      planKey = raw.toLowerCase();
+      planChip.textContent = `Plano: ${raw.charAt(0).toUpperCase()+raw.slice(1)}`;
+    }
+  }catch(e){ planChip.textContent='Plano: —'; }
+
+  await loadUserSelection(session.user.id, planKey);
+
+  currentEanQ=''; currentDescQ='';
+  resetAndQuery();
+  generalWrap.dispatchEvent(new Event('scroll'));
+})();
+</script>
+</body>
+</html>
