@@ -19,12 +19,18 @@
   /* Dropdown do usuário */
   .userChipWrap { position: relative; display:inline-block; }
   .dropdown {
-    position: absolute; right: 0; top: calc(100% + 6px); display: none;
-    min-width: 180px; padding: 6px; background: #0f0f0f; border: 1px solid #2a2a2a; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.5);
+    position: absolute;
+    right: 0; top: calc(100% + 6px); display: none;
+    min-width: 180px; padding: 6px; background: #0f0f0f;
+    border: 1px solid #2a2a2a; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.5);
     z-index: 50;
   }
-  .userChipWrap:hover .dropdown, .userChipWrap.open .dropdown { display: block; }
-  .dd-item { width: 100%; background: transparent; border: none; color: #eee; text-align: left; padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 14px; }
+  .userChipWrap:hover .dropdown,
+  .userChipWrap.open .dropdown { display: block; }
+  .dd-item {
+    width: 100%; background: transparent; border: none; color: #eee; text-align: left;
+    padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 14px;
+  }
   .dd-item:hover { background: #1b1b1b; }
 
   /* Painéis */
@@ -63,12 +69,21 @@
 
   .panel.collapsed .wrap, .panel.collapsed .counts, .panel.collapsed .resizer { display:none; }
 
-  .resizer { height: 10px; margin-top: 6px; border: 1px solid #2a2a2a; border-radius: 8px; cursor: ns-resize; background: linear-gradient(180deg, #1c1c1c, #111); display:flex; align-items:center; justify-content:center; }
+  .resizer {
+    height: 10px; margin-top: 6px; border: 1px solid #2a2a2a; border-radius: 8px;
+    cursor: ns-resize; background: linear-gradient(180deg, #1c1c1c, #111);
+    display:flex; align-items:center; justify-content:center;
+  }
   .resizer:after { content: ""; width: 40px; height: 3px; border-radius: 3px; background: #3a3a3a; }
   body.resizing, body.resizing * { cursor: ns-resize !important; user-select: none; }
 
   /* Botão do gráfico */
-  .chart-btn { display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; margin-left:8px; border-radius:6px; border:1.5px solid #2e2e2e; background:#141414; color:#dcdcdc; cursor:pointer; box-shadow: 0 2px 6px rgba(0,0,0,.35); }
+  .chart-btn {
+    display:inline-flex; align-items:center; justify-content:center;
+    width:28px; height:28px; margin-left:8px; border-radius:6px;
+    border:1.5px solid #2e2e2e; background:#141414; color:#dcdcdc;
+    cursor:pointer; box-shadow: 0 2px 6px rgba(0,0,0,.35);
+  }
   .chart-btn:hover { background:#1b1b1b; border-color:#3a3a3a; }
   .chart-icon { width:16px; height:16px; display:block; }
 
@@ -127,7 +142,9 @@
   </div>
   <div id="favWrap" class="wrap">
     <table id="favTable">
-      <thead><tr id="favHeaderRow"></tr></thead>
+      <thead>
+        <tr id="favHeaderRow"><!-- via JS --></tr>
+      </thead>
       <tbody></tbody>
     </table>
   </div>
@@ -141,7 +158,9 @@
   </div>
   <div id="generalWrap" class="wrap">
     <table id="produtosTable">
-      <thead><tr id="generalHeaderRow"></tr></thead>
+      <thead>
+        <tr id="generalHeaderRow"><!-- via JS --></tr>
+      </thead>
       <tbody></tbody>
     </table>
     <div id="endMarker" class="end-marker"></div>
@@ -153,7 +172,7 @@
   </div>
 </section>
 
-<!-- Popover de gráfico -->
+<!-- Popover único para gráficos -->
 <div id="chartPopover" class="chart-popover" style="display:none;">
   <header>
     <span id="chartTitle">Histórico</span>
@@ -164,23 +183,23 @@
 </div>
 
 <script>
-/* ===== Erros visíveis ===== */
+/* ======== ERROS VISÍVEIS ======== */
 window.addEventListener('error', e => { const el=document.getElementById('err'); el.style.display='block'; el.textContent='Erro JS: '+e.message; });
 window.addEventListener('unhandledrejection', e => { const el=document.getElementById('err'); el.style.display='block'; el.textContent='Erro assíncrono: '+(e.reason?.message||e.reason); });
 
-/* ===== Config / Supabase ===== */
+/* ======== CONFIG / SUPABASE ======== */
 const CFG = window.CONFIG || {};
 const SUPABASE_URL = CFG.SUPABASE_URL;
 const SUPABASE_ANON_KEY = CFG.SUPABASE_ANON_KEY;
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) { const el=document.getElementById('err'); el.style.display='block'; el.textContent="Erro de configuração: config.js não carregado."; throw new Error("CONFIG ausente"); }
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
 
-/* ===== Constantes ===== */
+/* ======== CONSTANTES ======== */
 const VIEW = "vw_precos_com_desc";
 const PAGE_SIZE = 200;
 const RENDER_CHUNK = 60;
 
-/* ===== Elementos ===== */
+/* ======== ELEMENTOS ======== */
 const statusEl = document.getElementById('status');
 const errEl    = document.getElementById('err');
 const userChip = document.getElementById('userChip');
@@ -215,19 +234,19 @@ const popMsg     = document.getElementById('chartMsg');
 const sparkCanvas= document.getElementById('spark');
 const sparkCtx   = sparkCanvas.getContext('2d');
 
-/* ===== Estado com site_id como chave ===== */
+/* ======== ESTADO COM CHAVES POR site_id ======== */
 const DEFAULT_PLAN_SITE_LIMIT = { trial:2, basico:4, intermediario:5, premium:8 };
 
 let chosenSiteIds = [];            // [site_id] na ordem do user_sites
-let idToLabel     = new Map();     // site_id -> label (sites.nome/name/site)
-let idToQueryKey  = new Map();     // site_id -> chave para consultar a view (view_key OU "Preco"+nome normalizado)
-let keyToSiteId   = new Map();     // índice: múltiplas chaves possíveis -> site_id (p/ casar VIEW.site)
+let idToLabel     = new Map();     // site_id -> nome para exibir (sites.nome/name/site)
+let idToViewKey   = new Map();     // site_id -> view_key (ex.: "PrecoLeroyMerlin")
+let viewKeyToId   = new Map();     // view_key -> site_id
 
 let unlockedSiteIds = new Set();   // liberadas pelo plano
-let lockedSiteIds   = new Set();   // excedentes
+let lockedSiteIds   = new Set();   // excedentes do plano
 
 let favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
-let produtosMap = new Map();       // Map<ean,{ sku, desc, sites: { [site_id]: { precoRaw, precoNum, data } } }>
+let produtosMap = new Map();       // Map<ean, { sku, desc, sites: { [site_id]: {precoRaw, precoNum, data} } }>
 let produtosList = [];
 let itemsRendered = 0;
 
@@ -244,7 +263,7 @@ const generalChkMap = new Map();
 
 let favFirstAutoRenderDone = false;
 
-/* ===== Helpers ===== */
+/* ======== HELPERS ======== */
 function setStatus(t){ statusEl.textContent = t || ''; }
 function showErr(e){ errEl.style.display='block'; errEl.textContent = String(e||'').trim(); }
 function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
@@ -253,20 +272,7 @@ function debounce(fn, delay=500){ let t; return (...args)=>{ clearTimeout(t); t=
 function favSave(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet])); }
 function isFav(sku){ return favSet.has(String(sku)); }
 
-/* ===== Normalização de chaves ===== */
-function norm(s){
-  return (s||'').toString()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')   // remove acentos
-    .replace(/\s+/g,'')                                // remove espaços
-    .replace(/[^a-zA-Z0-9]/g,'')                       // só alfanum
-    .toLowerCase();
-}
-function withPrecoPrefix(baseNorm){
-  // Garante que a maioria dos view_keys tipo "PrecoLeroyMerlin" serão cobertos
-  return 'preco' + baseNorm;
-}
-
-/* ===== Cabeçalhos ===== */
+/* ======== CABEÇALHOS ======== */
 function buildHeaders(){
   const favHeadFixed = `<th class="col-fav">Ação</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
   const genHeadFixed = `<th class="col-fav">★</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
@@ -280,6 +286,7 @@ function buildHeaders(){
   favHeaderRow.innerHTML = favHeadFixed + sitesTh;
   generalHeaderRow.innerHTML = genHeadFixed + sitesTh;
 
+  // aplica opacidade/lock
   document.querySelectorAll('thead th[data-siteid]').forEach(th=>{
     const id = Number(th.getAttribute('data-siteid'));
     const locked = lockedSiteIds.has(id);
@@ -288,7 +295,7 @@ function buildHeaders(){
   });
 }
 
-/* ===== Limite do plano ===== */
+/* ======== LIMITE DO PLANO ======== */
 async function getSitesLimitForPlan(planKey){
   const key = (planKey || '').toString().trim().toLowerCase();
   try {
@@ -303,75 +310,11 @@ async function getSitesLimitForPlan(planKey){
   return DEFAULT_PLAN_SITE_LIMIT[key] ?? 2;
 }
 
-/* ===== Monta índice dinâmico de chaves p/ casar com VIEW.site ===== */
-function buildKeyIndexForSites(siteRows){
-  keyToSiteId.clear();
-  idToQueryKey.clear();
-
-  // Para estabilidade, se duas chaves apontarem para sites diferentes,
-  // priorizamos o que aparece primeiro em chosenSiteIds.
-  const priorityIndex = new Map(chosenSiteIds.map((id, i)=>[id, i]));
-
-  for (const s of siteRows){
-    const id = s.id;
-    const label = (s.nome || s.name || s.site || `Site ${id}`).toString();
-    idToLabel.set(id, label);
-
-    const candidates = new Set();
-
-    // 1) view_key direto
-    if (s.view_key) {
-      candidates.add(norm(s.view_key));
-      // também salvo a melhor chave para query
-      idToQueryKey.set(id, s.view_key);
-    }
-
-    // 2) Variações a partir de nome/name/site
-    const bases = [s.nome, s.name, s.site, label].filter(Boolean).map(x=>norm(x));
-    for (const b of bases){
-      // "Preco" + nome normalizado
-      candidates.add(withPrecoPrefix(b));
-      // só o base (caso a VIEW não use "Preco")
-      candidates.add(b);
-
-      // Heurística: algumas bases vêm com palavras extras ("centerlar","superbem","loja","lojas")
-      const simplified = b
-        .replace(/centerlar/g,'')
-        .replace(/superbem/g,'')
-        .replace(/lojas?/g,'')
-        .replace(/rede/g,''); // ex.: "redemac" vs "mac"
-      if (simplified && simplified !== b){
-        candidates.add(withPrecoPrefix(simplified));
-        candidates.add(simplified);
-      }
-    }
-
-    // Registra candidatos → site_id respeitando prioridade do user_sites
-    for (const c of candidates){
-      const existing = keyToSiteId.get(c);
-      if (existing == null) {
-        keyToSiteId.set(c, id);
-      } else {
-        // se já existe, decide por prioridade
-        const curP = priorityIndex.get(existing) ?? 1e9;
-        const newP = priorityIndex.get(id) ?? 1e9;
-        if (newP < curP) keyToSiteId.set(c, id);
-      }
-    }
-
-    // Se ainda não definimos queryKey, gera com "Preco"+label normalizado
-    if (!idToQueryKey.has(id)){
-      const base = norm(label);
-      idToQueryKey.set(id, 'Preco' + base);
-    }
-  }
-}
-
-/* ===== user_sites → colunas ===== */
+/* ======== SELEÇÃO DO USUÁRIO (user_sites) → COLUNAS ======== */
 async function loadUserSitesAndLocks(userId, planKey){
   const maxSites = await getSitesLimitForPlan(planKey);
 
-  // 1) Lê user_sites
+  // 1) Lê user_sites na ordem de criação
   let userRows = [];
   try{
     const { data, error } = await sb.from('user_sites')
@@ -382,7 +325,7 @@ async function loadUserSitesAndLocks(userId, planKey){
     if (error) throw error;
     userRows = data || [];
   }catch(e){
-    console.warn('user_sites: falha', e);
+    console.warn('user_sites: falha de leitura', e);
   }
 
   if (!userRows.length){
@@ -390,27 +333,27 @@ async function loadUserSitesAndLocks(userId, planKey){
     chosenSiteIds = [];
     unlockedSiteIds = new Set();
     lockedSiteIds = new Set();
-    idToLabel.clear(); idToQueryKey.clear(); keyToSiteId.clear();
+    idToLabel.clear(); idToViewKey.clear(); viewKeyToId.clear();
     buildHeaders();
     return;
   }
 
   // 2) Busca dados dos sites referenciados
   const ids = userRows.map(r=>r.site_id).filter(x=>x!=null);
-  let siteRows = [];
+  let sites = [];
   try{
     const { data, error } = await sb.from('sites')
       .select('id, view_key, nome, name, site')
       .in('id', ids);
     if (error) throw error;
-    siteRows = data || [];
+    sites = data || [];
   }catch(e){
-    console.warn('sites: falha', e);
+    console.warn('sites: falha de leitura', e);
   }
 
-  // 3) Define ordem final (sem duplicar) e indexa nomes/keys
-  idToLabel.clear();
-  const byId = new Map(siteRows.map(s => [s.id, s]));
+  // 3) Indexa e monta ordem final por site_id (sem duplicar)
+  idToLabel.clear(); idToViewKey.clear(); viewKeyToId.clear();
+  const byId = new Map(sites.map(s => [s.id, s]));
   const order = [];
   const seen = new Set();
   for (const r of userRows){
@@ -419,42 +362,35 @@ async function loadUserSitesAndLocks(userId, planKey){
     if (seen.has(s.id)) continue;
     seen.add(s.id);
     order.push(s.id);
+
+    const label = (s.nome || s.name || s.site || `Site ${s.id}`).toString();
+    idToLabel.set(s.id, label);
+    if (s.view_key){
+      idToViewKey.set(s.id, s.view_key);
+      viewKeyToId.set(s.view_key, s.id);
+    }
   }
   chosenSiteIds = order;
 
-  // 4) Monta índice de chaves possíveis para casar com VIEW.site
-  buildKeyIndexForSites(order.map(id => byId.get(id)).filter(Boolean));
-
-  // 5) Bloqueios do plano
+  // 4) Bloqueio por plano
   unlockedSiteIds = new Set(chosenSiteIds.slice(0, maxSites));
   lockedSiteIds   = new Set(chosenSiteIds.slice(maxSites));
 
-  // 6) Cabeçalhos
+  // 5) Cabeçalhos
   buildHeaders();
 
   setStatus(`Sites selecionados (ordem do usuário): ${chosenSiteIds.map(id=>idToLabel.get(id)).join(' · ')}`);
 }
 
-/* ===== Agregação (usa site_id como chave) ===== */
+/* ======== AGREGAÇÃO (usa site_id como chave) ======== */
 function upsertRowsIntoProdutos(rows){
-  let matched = 0;
   for (const row of rows){
     const ean = String(row.ean ?? '');
-    const siteField = String(row.site ?? ''); // ex.: "PrecoLeroyMerlin"
-    if (!ean || !siteField) continue;
+    const viewKey = String(row.site ?? '');   // exemplo: "PrecoLeroyMerlin"
+    const siteId = viewKeyToId.get(viewKey);
 
-    // mapeia VIEW.site → site_id com índice dinâmico
-    const key = norm(siteField);
-    let siteId = keyToSiteId.get(key);
-
-    // fallback: se vier com "preco" e não achou, tenta sem prefixo
-    if (!siteId && key.startsWith('preco')) {
-      siteId = keyToSiteId.get(key.slice(5));
-    }
-
+    // só agrega se esse site estiver entre os selecionados pelo usuário
     if (!siteId || !chosenSiteIds.includes(siteId)) continue;
-
-    matched++;
 
     if (!produtosMap.has(ean)) {
       produtosMap.set(ean, { sku: ean, desc: row.descricao || '', sites: {} });
@@ -467,16 +403,10 @@ function upsertRowsIntoProdutos(rows){
       item.sites[siteId] = { precoRaw: row.preco, precoNum: row.preco_num, data: row.data };
     }
   }
-
   produtosList = Array.from(produtosMap.values());
-
-  // Se nada casou na primeira página, avisa no status para facilitar debug
-  if (serverOffset === 0 && matched === 0) {
-    setStatus('Nenhum preço encontrado para os sites selecionados. Verifique se os sites da VIEW correspondem aos sites escolhidos em Meus Dados.');
-  }
 }
 
-/* ===== Render ===== */
+/* ======== RENDER ======== */
 function chartButtonSVG(){
   return `
     <svg class="chart-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -570,7 +500,7 @@ function onGeneralScroll(){
 }
 generalWrap.addEventListener('scroll', onGeneralScroll);
 
-/* ===== Favoritos ===== */
+/* ======== FAVORITOS ======== */
 function renderFavs(){
   favBody.innerHTML='';
   const favList = produtosList.filter(p=>isFav(p.sku));
@@ -594,7 +524,7 @@ function renderFavs(){
   favBody.appendChild(frag);
 }
 
-/* ===== Contadores ===== */
+/* ======== CONTADORES ======== */
 function updateCounts(){
   const favs=favSet.size;
   countShown.textContent = `Exibindo ${itemsRendered} de ${produtosList.length} no Geral (carregados)`;
@@ -602,7 +532,7 @@ function updateCounts(){
   countFavs.textContent  = `Favoritos: ${favs}`;
 }
 
-/* ===== Consulta paginada ===== */
+/* ======== CONSULTA (paginação) ======== */
 function buildQuery(){
   let q = sb.from(VIEW).select('ean, site, preco, data, descricao, preco_num', { count: 'estimated' }).order('data', { ascending: false });
   if (currentEanQ) q = q.ilike('ean', `%${currentEanQ}%`);
@@ -632,7 +562,7 @@ async function fetchNextPage(){
   finally { fetching = false; updateCounts(); }
 }
 
-/* ===== Reset ===== */
+/* ======== RESET ======== */
 function resetAndQuery(){
   produtosMap.clear(); produtosList=[]; serverOffset=0; serverExhausted=false; favFirstAutoRenderDone=false;
   resetGeneralDom();
@@ -640,7 +570,7 @@ function resetAndQuery(){
   fetchNextPage();
 }
 
-/* ===== Navegação / filtros ===== */
+/* ======== NAVEGAÇÃO / FILTROS ======== */
 ddMeusDados.addEventListener('click', () => { window.location.href = 'meusdados.html'; });
 ddPlanos.addEventListener('click', () => { window.location.href = 'planos.html'; });
 btnSair.addEventListener('click', async () => {
@@ -669,7 +599,7 @@ btnReload.addEventListener('click', async () => {
   resetAndQuery();
 });
 
-/* ===== Favoritos: altura e resizer ===== */
+/* ======== FAVORITOS: altura e resizer ======== */
 function measureRowHeight(){ const row = document.querySelector('#favTable tbody tr'); if (!row) return 44; const h = Math.round(row.getBoundingClientRect().height); return Math.max(36, h || 44); }
 function measureHeadHeight(){ const head = document.querySelector('#favTable thead'); if (!head) return 40; const h = Math.round(head.getBoundingClientRect().height); return Math.max(32, h || 40); }
 let favHeightUser = Number(localStorage.getItem('mm_fav_height')) || null;
@@ -692,7 +622,7 @@ function updateFavHeight(){
   favResizer.addEventListener('dblclick', ()=>{ favHeightUser = null; localStorage.removeItem('mm_fav_height'); updateFavHeight(); });
 })();
 
-/* ===== Mini-gráfico ===== */
+/* ======== MINI-GRÁFICO ======== */
 function closePopover(){ pop.style.display='none'; }
 function positionPopover(x, y){
   const pad = 12; const vw = window.innerWidth, vh = window.innerHeight;
@@ -704,7 +634,7 @@ function positionPopover(x, y){
 }
 document.addEventListener('click', (ev) => { if (pop.style.display !== 'none' && !pop.contains(ev.target)) closePopover(); });
 document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closePopover(); });
-document.getElementById('chartClose').addEventListener('click', closePopover);
+popClose.addEventListener('click', closePopover);
 
 function drawSparkline(points){
   const ctx = sparkCtx; const W = sparkCanvas.width, H = sparkCanvas.height; ctx.clearRect(0,0,W,H);
@@ -741,39 +671,38 @@ async function openChartFor(ev, ean, siteId){
   sparkCtx.clearRect(0,0,sparkCanvas.width,sparkCanvas.height);
   pop.style.display='block';
   try{
-    const key = idToQueryKey.get(siteId) || '';
-    if (!key) { popMsg.style.display='block'; popMsg.textContent = 'Site sem chave de consulta definida.'; return; }
+    const viewKey = idToViewKey.get(siteId) || '';
+    if (!viewKey) { popMsg.style.display='block'; popMsg.textContent = 'Site sem view_key mapeada.'; return; }
     const { data, error } = await sb.from(VIEW).select('data, preco_num')
       .eq('ean', ean)
-      .eq('site', key)
+      .eq('site', viewKey)
       .not('preco_num', 'is', null)
-      .order('data', { ascending: true })
-      .limit(60);
+      .order('data', { ascending: true }).limit(60);
     if (error) throw error;
     const points = (data||[]).filter(r => typeof r.preco_num === 'number' && Number.isFinite(r.preco_num)).map(r => ({ x: new Date(r.data), y: r.preco_num }));
     drawSparkline(points);
   } catch(e){ console.error(e); popMsg.style.display='block'; popMsg.textContent = 'Falha ao carregar histórico.'; }
 }
 
-/* ===== Init ===== */
+/* ======== INIT ======== */
 (async function init(){
   const { data: { session } } = await sb.auth.getSession();
   if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return; }
 
   userChip.textContent = session.user?.email || 'Logado';
-
   let planKey = 'basico';
   try{
     const { data, error } = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
-    if (!error){
-      const raw = (data?.plan || 'basico').toString();
-      planKey = raw.toLowerCase();
-      planChip.textContent = `Plano: ${raw.charAt(0).toUpperCase()+raw.slice(1)}`;
-    }
-  }catch(e){ console.warn(e); }
+    if (error) throw error;
+    const planRaw = (data?.plan || 'basico').toString();
+    planKey = planRaw.toLowerCase();
+    planChip.textContent = `Plano: ${planRaw.charAt(0).toUpperCase() + planRaw.slice(1)}`;
+  }catch(e){ console.error(e); planChip.textContent = 'Plano: —'; }
 
+  // Seleção de sites + cabeçalhos na ordem da seleção
   await loadUserSitesAndLocks(session.user.id, planKey);
 
+  // Primeira carga
   currentEanQ = ''; currentDescQ = '';
   resetAndQuery();
   generalWrap.dispatchEvent(new Event('scroll'));
