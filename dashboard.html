@@ -17,13 +17,10 @@
   .btn:hover { background:#009b38; }
 
   .userChipWrap { position: relative; display:inline-block; }
-  .dropdown {
-    position: absolute; right: 0; top: calc(100% + 6px); display: none; min-width: 180px; padding: 6px;
-    background: #0f0f0f; border: 1px solid #2a2a2a; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.5); z-index: 50;
-  }
-  .userChipWrap:hover .dropdown, .userChipWrap.open .dropdown { display: block; }
-  .dd-item { width: 100%; background: transparent; border: none; color: #eee; text-align: left; padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 14px; }
-  .dd-item:hover { background: #1b1b1b; }
+  .dropdown { position:absolute; right:0; top:calc(100% + 6px); display:none; min-width:180px; padding:6px; background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px; box-shadow:0 10px 30px rgba(0,0,0,.5); z-index:50; }
+  .userChipWrap:hover .dropdown, .userChipWrap.open .dropdown { display:block; }
+  .dd-item { width:100%; background:transparent; border:none; color:#eee; text-align:left; padding:10px 12px; border-radius:8px; cursor:pointer; font-size:14px; }
+  .dd-item:hover { background:#1b1b1b; }
 
   .panel { background:#202020; border:1px solid #2a2a2a; border-radius:12px; padding:12px; margin-bottom:18px; }
   .panel-header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }
@@ -57,32 +54,15 @@
 
   .counts { margin-top:10px; font-size:12px; color:#9aa0a6; display:flex; gap:12px; flex-wrap:wrap; }
 
-  .panel.collapsed .wrap, .panel.collapsed .counts, .panel.collapsed .resizer { display:none; }
-
-  .resizer { height: 10px; margin-top: 6px; border: 1px solid #2a2a2a; border-radius: 8px; cursor: ns-resize; background: linear-gradient(180deg, #1c1c1c, #111); display:flex; align-items:center; justify-content:center; }
-  .resizer:after { content: ""; width: 40px; height: 3px; border-radius: 3px; background: #3a3a3a; }
-  body.resizing, body.resizing * { cursor: ns-resize !important; user-select: none; }
-
-  .chart-btn { display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; margin-left:8px; border-radius:6px; border:1.5px solid #2e2e2e; background:#141414; color:#dcdcdc; cursor:pointer; box-shadow: 0 2px 6px rgba(0,0,0,.35); }
-  .chart-btn:hover { background:#1b1b1b; border-color:#3a3a3a; }
-  .chart-icon { width:16px; height:16px; display:block; }
-
-  .chart-popover { position:absolute; z-index:1000; width:240px; padding:10px; background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px; box-shadow: 0 10px 40px rgba(0,0,0,.6); }
-  .chart-popover header { font-size:12px; color:#b5b5b5; display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
-  .chart-popover .close { background:transparent; border:none; color:#aaa; font-size:16px; cursor:pointer; }
-  .chart-popover .msg { font-size:12px; color:#bbb; padding:8px; text-align:center; }
-  canvas.spark { width:200px; height:180px; display:block; background:#121212; border:1px solid #232323; border-radius:6px; }
-
   th[data-locked="true"] { position: relative; color: #aaa; }
   th[data-locked="true"]::after { content: "🔒"; margin-left: 6px; opacity: .8; font-size: 14px; }
   td.locked-cell .price { filter: blur(3px); }
   td.locked-cell .unlock { display:none; }
-  td.locked-cell:hover .unlock {
-    display:inline-flex; align-items:center; gap:6px;
-    margin-left:8px; padding:4px 8px; border-radius:6px;
-    border:1px solid #2e2e2e; background:#141414; color:#ddd; font-size:12px; cursor:pointer;
-  }
+  td.locked-cell:hover .unlock { display:inline-flex; align-items:center; gap:6px; margin-left:8px; padding:4px 8px; border-radius:6px; border:1px solid #2e2e2e; background:#141414; color:#ddd; font-size:12px; cursor:pointer; }
   td.locked-cell .unlock:hover { background:#1b1b1b; }
+
+  /* Painel de debug */
+  #debugPanel pre { white-space: pre-wrap; font-family: ui-monospace,Consolas,monospace; background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px; padding:8px; color:#bfe3ff; max-height:260px; overflow:auto; }
 </style>
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="./config.js"></script>
@@ -146,6 +126,18 @@
   </div>
 </section>
 
+<!-- Painel de Debug -->
+<section id="debugPanel" class="panel">
+  <div class="panel-header">
+    <h2>Debug</h2>
+    <button id="toggleDbg" class="toggle-btn" aria-expanded="false">Maximizar</button>
+  </div>
+  <div id="dbgWrap" class="wrap" style="display:none;">
+    <pre id="dbg"></pre>
+  </div>
+</section>
+
+<!-- Popover único para gráficos -->
 <div id="chartPopover" class="chart-popover" style="display:none;">
   <header>
     <span id="chartTitle">Histórico</span>
@@ -156,68 +148,65 @@
 </div>
 
 <script>
-/* ===== visibilidade de erros ===== */
-window.addEventListener('error', e => { const el=document.getElementById('err'); el.style.display='block'; el.textContent='Erro JS: '+e.message; });
-window.addEventListener('unhandledrejection', e => { const el=document.getElementById('err'); el.style.display='block'; el.textContent='Erro assíncrono: '+(e.reason?.message||e.reason); });
+/* ===== Erros visíveis ===== */
+addEventListener('error', e => { const el=err; el.style.display='block'; el.textContent='Erro JS: '+e.message; });
+addEventListener('unhandledrejection', e => { const el=err; el.style.display='block'; el.textContent='Erro assíncrono: '+(e.reason?.message||e.reason); });
 
-/* ===== supabase ===== */
+/* ===== Config / Supabase ===== */
 const CFG = window.CONFIG || {};
-const SUPABASE_URL = CFG.SUPABASE_URL;
-const SUPABASE_ANON_KEY = CFG.SUPABASE_ANON_KEY;
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) { const el=document.getElementById('err'); el.style.display='block'; el.textContent="Erro de configuração: config.js não carregado."; throw new Error("CONFIG ausente"); }
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+if (!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY) { const el=err; el.style.display='block'; el.textContent="Erro de configuração: config.js não carregado."; throw new Error("CONFIG ausente"); }
+const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth:{ persistSession:true, autoRefreshToken:true, detectSessionInUrl:true } });
 
-/* ===== constantes ===== */
+/* ===== Constantes ===== */
 const VIEW = "vw_precos_com_desc";
 const PAGE_SIZE = 200;
 const RENDER_CHUNK = 60;
 
-/* ===== elementos ===== */
+/* ===== Elementos ===== */
 const statusEl = document.getElementById('status');
-const errEl    = document.getElementById('err');
+const err = document.getElementById('err');
 const userChip = document.getElementById('userChip');
 const planChip = document.getElementById('planChip');
 const ddMeusDados = document.getElementById('ddMeusDados');
-const ddPlanos    = document.getElementById('ddPlanos');
-const btnSair     = document.getElementById('btnSair');
-const btnReload   = document.getElementById('btnReload');
-const eanFilter   = document.getElementById('eanFilter');
-const descFilter  = document.getElementById('descFilter');
+const ddPlanos = document.getElementById('ddPlanos');
+const btnSair = document.getElementById('btnSair');
+const btnReload = document.getElementById('btnReload');
+const eanFilter = document.getElementById('eanFilter');
+const descFilter = document.getElementById('descFilter');
 
-const favWrap  = document.getElementById('favWrap');
-const favBody  = document.querySelector('#favTable tbody');
-const favHeaderRow     = document.getElementById('favHeaderRow');
+const favWrap = document.getElementById('favWrap');
+const favBody = document.querySelector('#favTable tbody');
+const favHeaderRow = document.getElementById('favHeaderRow');
 const favResizer = document.getElementById('favResizer');
 
 const generalWrap = document.getElementById('generalWrap');
 const generalBody = document.querySelector('#produtosTable tbody');
 const generalHeaderRow = document.getElementById('generalHeaderRow');
-const endMarker   = document.getElementById('endMarker');
+const endMarker = document.getElementById('endMarker');
 
-const countShown  = document.getElementById('countShown');
-const countTotal  = document.getElementById('countTotal');
-const countFavs   = document.getElementById('countFavs');
+const countShown = document.getElementById('countShown');
+const countTotal = document.getElementById('countTotal');
+const countFavs  = document.getElementById('countFavs');
 
-/* ===== estado ===== */
+const dbgWrap = document.getElementById('dbgWrap');
+const dbg = document.getElementById('dbg');
+const toggleDbg = document.getElementById('toggleDbg');
+toggleDbg.addEventListener('click', ()=>{
+  const open = toggleDbg.getAttribute('aria-expanded')==='true';
+  toggleDbg.setAttribute('aria-expanded', String(!open));
+  dbgWrap.style.display = open ? 'none' : 'block';
+  toggleDbg.textContent = open ? 'Maximizar' : 'Minimizar';
+});
+
+/* ===== Estado ===== */
 const DEFAULT_PLAN_SITE_LIMIT = { trial:2, basico:4, intermediario:5, premium:8 };
 
-const siteMap = { // view_key -> rótulo
-  "PrecoLeroyMerlin": "LeroyMerlin",
-  "PrecoQueroQuero": "QueroQuero",
-  "PrecoCassol": "Cassol",
-  "PrecoRedeMac": "RedeMac",
-  "PrecoMestreTinho": "MestreTinho",
-  "PrecoTumelero": "Tumelero",
-  "PrecoSupremeinox": "Supremeinox",
-  "PrecoGhaus": "Ghaus"
-};
-
-let chosenLabels = [];            // rótulos na ordem do user_sites
-let unlockedLabels = new Set();   // liberadas pelo plano
-let lockedLabels   = new Set();   // excedentes
+let chosen = [];                  // [{site_id, label, view_key}] na ordem do user_sites
+let unlocked = new Set();         // liberadas pelo plano
+let locked   = new Set();         // excedentes
 
 let favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
-let produtosMap = new Map();      // Map<ean, { sku, desc, sites:{ [label]:{precoRaw, precoNum, data} } }>
+let produtosMap = new Map();      // Map<ean, { sku, desc, sites:{ [label]:{precoRaw,precoNum,data} } }>
 let produtosList = [];
 let itemsRendered = 0;
 
@@ -234,141 +223,141 @@ const generalChkMap = new Map();
 
 let favFirstAutoRenderDone = false;
 
-/* ===== helpers ===== */
+/* ===== Helpers ===== */
 function setStatus(t){ statusEl.textContent = t||''; }
-function showErr(e){ errEl.style.display='block'; errEl.textContent = String(e||'').trim(); }
-function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
-function debounce(fn,delay=500){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),delay); } }
+function showErr(e){ err.style.display='block'; err.textContent = String(e||'').trim(); }
+function hideErr(){ err.style.display='none'; err.textContent=''; }
 function favSave(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet])); }
 function isFav(sku){ return favSet.has(String(sku)); }
+function debounce(fn,delay=500){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),delay); } }
 function formatBRL(n){ try { return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); } catch { return String(n); } }
+function comp(s){ return (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9]/g,''); }
 
-function normalize(x){
-  return (x||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-    .replace(/\s+/g,'').replace(/[^a-zA-Z0-9]/g,'').toLowerCase();
-}
-function labelFromName(raw){
-  const n = normalize(raw);
-  if (n==='leroymerlin') return 'LeroyMerlin';
-  if (n==='queroquero')  return 'QueroQuero';
-  if (n==='cassol'||n==='cassolcenterlar') return 'Cassol';
-  if (n==='redemac'||n==='redemacsuperbem'||n==='superbem') return 'RedeMac';
-  if (n==='mestretinho'||n==='mestrettinho') return 'MestreTinho';
-  if (n==='tumelero') return 'Tumelero';
-  if (n==='supremeinox'||n==='supreme inox') return 'Supremeinox';
-  if (n==='ghaus'||n==='g-haus'||n==='gháus') return 'Ghaus';
-  return (raw||'').toString().replace(/\s+/g,'').replace(/[^\w]/g,'');
-}
-
-/* ===== cabeçalhos ===== */
+/* ===== Cabeçalhos ===== */
 function buildHeaders(){
-  const favFixed = `<th class="col-fav">Ação</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
-  const genFixed = `<th class="col-fav">★</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
-  const sitesTh = chosenLabels.map(lbl=>{
-    const locked = lockedLabels.has(lbl) ? ' data-locked="true"' : ' data-locked="false"';
-    return `<th data-site="${lbl}"${locked}>${lbl}</th>`;
+  const fav = `<th class="col-fav">★</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
+  const sitesTh = chosen.map(c=>{
+    const lockAttr = locked.has(c.site_id) ? ' data-locked="true"' : ' data-locked="false"';
+    return `<th data-siteid="${c.site_id}"${lockAttr}>${c.label}</th>`;
   }).join('');
-  favHeaderRow.innerHTML = favFixed + sitesTh;
-  generalHeaderRow.innerHTML = genFixed + sitesTh;
+  generalHeaderRow.innerHTML = fav + sitesTh;
+
+  const favHead = `<th class="col-fav">Ação</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>` + sitesTh;
+  favHeaderRow.innerHTML = favHead;
 }
 
-/* ===== plano ===== */
+/* ===== Plano ===== */
 async function getSitesLimitForPlan(planKey){
-  const key = (planKey||'').toLowerCase();
+  const k = (planKey||'').toLowerCase();
   try{
-    const { data, error } = await sb.from('billing_plans').select('sites_limit, max_sites').eq('plan_key', key).maybeSingle();
-    if (error) throw error;
-    const lim = Number(data?.sites_limit ?? data?.max_sites);
-    if (Number.isFinite(lim) && lim>0) return lim;
-  }catch(e){ console.warn('billing_plans fallback', e); }
-  return DEFAULT_PLAN_SITE_LIMIT[key] ?? 2;
+    const { data, error } = await sb.from('billing_plans').select('sites_limit, max_sites').eq('plan_key', k).maybeSingle();
+    if (!error){
+      const v = Number(data?.sites_limit ?? data?.max_sites);
+      if (Number.isFinite(v) && v>0) return v;
+    }
+  }catch(e){}
+  return DEFAULT_PLAN_SITE_LIMIT[k] ?? 2;
 }
 
-/* ===== user_sites -> ordem das colunas ===== */
-async function loadUserSitesAndLocks(userId, planKey){
-  const maxSites = await getSitesLimitForPlan(planKey);
+/* ===== DEBUG helper ===== */
+function debugLog(obj){ dbg.textContent += (typeof obj==='string' ? obj : JSON.stringify(obj, null, 2)) + "\n"; }
 
-  // 1) Busca flexível do user_sites (independente do nome da coluna do usuário)
-  let rows = [];
+/* ===== Seleção do usuário -> colunas ===== */
+async function loadUserSelection(userId, planKey){
+  dbg.textContent = '';
+  debugLog('--- PASSO 1: Sessão ---');
+  debugLog({ user_id: userId, planKey });
+
+  // 1) user_sites (qualquer nome de coluna de usuário)
+  debugLog('--- PASSO 2: Lendo user_sites (todos os campos) ---');
+  let rawRows = [];
   try{
     const { data, error } = await sb.from('user_sites').select('*');
     if (error) throw error;
-    rows = (data||[]).filter(r=>{
-      const uid = r.user_id ?? r.user_uid ?? r.user ?? r.uid ?? r.user_uuid;
-      return String(uid||'') === String(userId);
-    });
-  }catch(e){ console.warn('user_sites erro', e); }
+    rawRows = data || [];
+  }catch(e){ debugLog('ERRO user_sites: '+e.message); rawRows = []; }
 
-  // ordenação estável: position -> created_at -> id
-  rows.sort((a,b)=>{
-    const pa = a.position ?? null, pb = b.position ?? null;
-    if (pa!=null && pb!=null && pa!==pb) return pa - pb;
-    const ca = a.created_at ? new Date(a.created_at).getTime() : 0;
-    const cb = b.created_at ? new Date(b.created_at).getTime() : 0;
-    if (ca!==cb) return ca - cb;
-    return (a.id||0) - (b.id||0);
+  const userKeys = ['user_id','user_uid','user_uuid','user_id_uuid','uid','user'];
+  const myRows = rawRows.filter(r => userKeys.some(k => String(r?.[k]||'') === String(userId)));
+
+  debugLog({ total_user_sites: rawRows.length, meus_user_sites: myRows.length, user_keys_detectadas: userKeys.filter(k=>k in (myRows[0]||{})) });
+
+  // 2) ordenar: position -> created_at -> id
+  myRows.sort((a,b)=>{
+    const pa=a.position??null, pb=b.position??null;
+    if(pa!=null&&pb!=null&&pa!==pb) return pa-pb;
+    const ca=a.created_at?new Date(a.created_at).getTime():0;
+    const cb=b.created_at?new Date(b.created_at).getTime():0;
+    if(ca!==cb) return ca-cb;
+    return (a.id||0)-(b.id||0);
   });
 
-  if (!rows.length){
-    chosenLabels = [];
-    unlockedLabels = new Set();
-    lockedLabels = new Set();
+  const siteIds = myRows.map(r=>r.site_id).filter(x=>x!=null);
+  debugLog({ ordem_site_ids: siteIds });
+
+  if (!siteIds.length){
+    chosen = [];
     buildHeaders();
     setStatus('Nenhum site selecionado em Meus Dados.');
     return;
   }
 
-  // 2) Traz nomes e view_keys dos sites escolhidos
-  const ids = rows.map(r=>r.site_id).filter(x=>x!=null);
+  // 3) buscar dados dos sites
+  debugLog('--- PASSO 3: Buscando sites por id ---');
   let sites = [];
   try{
-    const { data, error } = await sb.from('sites').select('id, view_key, nome, name, site').in('id', ids);
+    const { data, error } = await sb.from('sites').select('id, view_key, nome, name, site').in('id', siteIds);
     if (error) throw error;
     sites = data || [];
-  }catch(e){ console.warn('sites erro', e); }
+  }catch(e){ debugLog('ERRO sites: '+e.message); sites=[]; }
 
   const byId = new Map(sites.map(s=>[s.id,s]));
-  const labels = [];
-  const seen = new Set();
-  for (const r of rows){
-    const s = byId.get(r.site_id);
-    if (!s) continue;
-    if (seen.has(s.id)) continue;
-    seen.add(s.id);
+  const ordered = [];
+  for(const id of siteIds){ const s=byId.get(id); if(s && !ordered.includes(s)) ordered.push(s); }
 
-    let lbl = siteMap[s.view_key] || labelFromName(s.nome || s.name || s.site || '');
-    if (lbl) labels.push(lbl);
-  }
+  // 4) construir chosen: label e view_key
+  chosen = ordered.map(s=>{
+    const label = (s.nome || s.name || s.site || `Site ${s.id}`).toString();
+    const labelClean = label.trim();
+    const vk = s.view_key || ('Preco'+comp(label));
+    return { site_id:s.id, label:labelClean, view_key:vk };
+  });
 
-  chosenLabels   = labels;                      // ordem fiel ao user_sites
-  unlockedLabels = new Set(chosenLabels.slice(0, maxSites));
-  lockedLabels   = new Set(chosenLabels.slice(maxSites));
+  debugLog({ chosen });
 
+  // 5) bloquear excedentes do plano
+  const lim = await getSitesLimitForPlan(planKey);
+  unlocked = new Set(chosen.slice(0, lim).map(c=>c.site_id));
+  locked   = new Set(chosen.slice(lim).map(c=>c.site_id));
+  debugLog({ plano_limite: lim, unlocked:[...unlocked], locked:[...locked] });
+
+  // 6) cabeçalhos
   buildHeaders();
-  setStatus(`Sites selecionados: ${chosenLabels.join(' · ')}`);
+  setStatus(`Sites: ${chosen.map(c=>c.label).join(' · ')}`);
 }
 
-/* ===== agrega dados da VIEW, respeitando apenas colunas escolhidas ===== */
+/* ===== Agrega linhas da view apenas para os view_key selecionados ===== */
 function upsertRowsIntoProdutos(rows){
+  const allowedVK = new Map(chosen.map(c=>[c.view_key, c.label]));
   for (const r of rows){
     const ean = String(r.ean ?? '');
-    const viewKey = String(r.site ?? '');     // ex.: "PrecoGhaus"
-    const lbl = siteMap[viewKey];             // ex.: "Ghaus"
-    if (!lbl || !chosenLabels.includes(lbl)) continue;
+    const vk = String(r.site ?? '');
+    const label = allowedVK.get(vk);
+    if (!label) continue; // ignora sites não selecionados
 
     if (!produtosMap.has(ean)) produtosMap.set(ean, { sku: ean, desc: r.descricao || '', sites: {} });
     const item = produtosMap.get(ean);
     if (!item.desc && r.descricao) item.desc = r.descricao;
 
-    const prev = item.sites[lbl];
+    const prev = item.sites[label];
     if (!prev || new Date(r.data) > new Date(prev.data)){
-      item.sites[lbl] = { precoRaw:r.preco, precoNum:r.preco_num, data:r.data };
+      item.sites[label] = { precoRaw:r.preco, precoNum:r.preco_num, data:r.data };
     }
   }
   produtosList = Array.from(produtosMap.values());
 }
 
-/* ===== render ===== */
+/* ===== Render ===== */
 function chartButtonSVG(){
   return `<svg class="chart-icon" viewBox="0 0 24 24" aria-hidden="true">
     <rect x="3" y="11" width="3" height="7" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>
@@ -378,48 +367,46 @@ function chartButtonSVG(){
   </svg>`;
 }
 function computeMinMaxForRow(item){
-  let min = { site:null, val:Infinity }, max={ site:null, val:-Infinity };
-  for (const s of chosenLabels){
-    if (lockedLabels.has(s)) continue;
-    const d = item.sites[s];
+  let min={ id:null, val:Infinity }, max={ id:null, val:-Infinity };
+  for(const c of chosen){
+    if (locked.has(c.site_id)) continue;
+    const d = item.sites[c.label];
     if (!d || !Number.isFinite(d.precoNum)) continue;
-    if (d.precoNum < min.val) min = { site:s, val:d.precoNum };
-    if (d.precoNum > max.val) max = { site:s, val:d.precoNum };
+    if (d.precoNum < min.val) min={ id:c.label, val:d.precoNum };
+    if (d.precoNum > max.val) max={ id:c.label, val:d.precoNum };
   }
-  return { minSite:min.site, maxSite:max.site };
+  return { minLabel:min.id, maxLabel:max.id };
 }
-function createPriceCell(item, label, minSite, maxSite){
+function createPriceCell(item, label, isLocked, minLabel, maxLabel){
   const td = document.createElement('td');
-  const d = item.sites[label];
-  const isLocked = lockedLabels.has(label);
   if (isLocked) td.classList.add('locked-cell');
+  const d = item.sites[label];
 
   if (d){
-    const dtStr = d.data ? new Date(d.data).toLocaleString('pt-BR') : '';
+    const dataStr = d.data ? new Date(d.data).toLocaleString('pt-BR') : '';
     if (Number.isFinite(d.precoNum)){
       const span = document.createElement('span');
-      span.className = `price ${!isLocked && label===minSite ? 'min' : (!isLocked && label===maxSite ? 'max':'')}`;
-      span.title = isLocked ? 'Excedeu o limite do plano' : (dtStr ? `Atualizado em ${dtStr}` : '');
+      span.className = `price ${!isLocked && label===minLabel ? 'min' : (!isLocked && label===maxLabel ? 'max':'')}`;
+      span.title = isLocked ? 'Excedeu o limite do plano' : (dataStr ? `Atualizado em ${dataStr}` : '');
       span.textContent = formatBRL(d.precoNum);
       td.appendChild(span);
 
       const b = document.createElement('button');
-      b.className='chart-btn'; b.type='button';
-      b.title = isLocked ? 'Disponível no upgrade' : 'Ver histórico';
+      b.className='chart-btn'; b.type='button'; b.title=isLocked?'Disponível no upgrade':'Ver histórico';
       b.innerHTML = chartButtonSVG();
-      b.addEventListener('click',(ev)=>{ if(isLocked){location.href='planos.html';return;} openChartFor(ev, item.sku, label); });
+      b.addEventListener('click', (ev)=>{ if(isLocked){ location.href='planos.html'; return; } openChartFor(ev, item.sku, label); });
       td.appendChild(b);
 
       if (isLocked){
         const up = document.createElement('button');
-        up.className='unlock'; up.type='button'; up.title='Excedeu o limite do plano. Ver planos.'; up.textContent='Ver planos';
+        up.className='unlock'; up.type='button'; up.textContent='Ver planos';
         up.addEventListener('click', ()=> location.href='planos.html');
         td.appendChild(up);
       }
     }else{
       const span = document.createElement('span');
       span.className='price';
-      span.title = isLocked ? 'Excedeu o limite do plano' : (dtStr ? `Atualizado em ${dtStr}` : '');
+      span.title = isLocked ? 'Excedeu o limite do plano' : (dataStr ? `Atualizado em ${dataStr}` : '');
       span.textContent = (d.precoRaw??'').toString();
       td.appendChild(span);
     }
@@ -431,14 +418,14 @@ function createPriceCell(item, label, minSite, maxSite){
 function renderRowInto(tr, item){
   const tdFav = document.createElement('td'); tdFav.className='col-fav';
   const chk = document.createElement('input'); chk.type='checkbox'; chk.checked=isFav(item.sku);
-  chk.addEventListener('change', ()=>{ if(chk.checked) favSet.add(item.sku); else favSet.delete(item.sku); favSave(); renderFavs(); updateFavHeight(); updateCounts(); });
+  chk.addEventListener('change', ()=>{ if (chk.checked) favSet.add(item.sku); else favSet.delete(item.sku); favSave(); renderFavs(); updateFavHeight(); updateCounts(); });
   tdFav.appendChild(chk); tr.appendChild(tdFav); generalChkMap.set(item.sku, chk);
 
   const tdSku = document.createElement('td'); tdSku.className='col-sku'; tdSku.textContent=item.sku; tr.appendChild(tdSku);
   const tdDesc= document.createElement('td'); tdDesc.className='col-desc'; tdDesc.innerHTML=(item.desc||'').replace(/</g,'&lt;'); tr.appendChild(tdDesc);
 
-  const {minSite,maxSite} = computeMinMaxForRow(item);
-  for (const lbl of chosenLabels){ tr.appendChild(createPriceCell(item, lbl, minSite, maxSite)); }
+  const { minLabel, maxLabel } = computeMinMaxForRow(item);
+  for (const c of chosen){ tr.appendChild(createPriceCell(item, c.label, locked.has(c.site_id), minLabel, maxLabel)); }
 }
 function renderGeneralChunk(){
   const end = Math.min(itemsRendered + RENDER_CHUNK, produtosList.length);
@@ -458,14 +445,13 @@ function onGeneralScroll(){
 }
 generalWrap.addEventListener('scroll', onGeneralScroll);
 
-/* ===== favoritos ===== */
+/* ===== Favoritos ===== */
 function renderFavs(){
   favBody.innerHTML='';
   const favList = produtosList.filter(p=>isFav(p.sku));
   const frag = document.createDocumentFragment();
   for (const item of favList){
     const tr = document.createElement('tr');
-
     const tdAct=document.createElement('td'); tdAct.className='col-fav';
     const btn=document.createElement('button'); btn.className='trash-btn'; btn.title='Remover'; btn.innerHTML='🗑️';
     btn.addEventListener('click', ()=>{ favSet.delete(item.sku); favSave(); const chk=generalChkMap.get(item.sku); if (chk){ suppressGeneralChange=true; chk.checked=false; suppressGeneralChange=false; } renderFavs(); updateFavHeight(); updateCounts(); });
@@ -474,36 +460,21 @@ function renderFavs(){
     const tdSku=document.createElement('td'); tdSku.className='col-sku'; tdSku.textContent=item.sku; tr.appendChild(tdSku);
     const tdDesc=document.createElement('td'); tdDesc.className='col-desc'; tdDesc.innerHTML=(item.desc||'').replace(/</g,'&lt;'); tr.appendChild(tdDesc);
 
-    const {minSite,maxSite}=computeMinMaxForRow(item);
-    for (const lbl of chosenLabels){ tr.appendChild(createPriceCell(item, lbl, minSite, maxSite)); }
-
+    const {minLabel,maxLabel}=computeMinMaxForRow(item);
+    for (const c of chosen){ tr.appendChild(createPriceCell(item, c.label, locked.has(c.site_id), minLabel, maxLabel)); }
     frag.appendChild(tr);
   }
   favBody.appendChild(frag);
 }
 
-/* ===== auxiliares UI ===== */
-function attachToggle(panel, button){
-  function setState(expanded){
-    panel.classList.toggle('collapsed', !expanded);
-    button.textContent = expanded ? 'Minimizar' : 'Maximizar';
-    button.setAttribute('aria-expanded', String(expanded));
-  }
-  button.addEventListener('click', ()=>{ const isExpanded = button.getAttribute('aria-expanded') === 'true'; setState(!isExpanded); });
-  setState(true);
-}
-attachToggle(document.getElementById('favPanel'), document.getElementById('toggleFav'));
-attachToggle(document.getElementById('generalPanel'), document.getElementById('toggleGen'));
-
-/* ===== contadores ===== */
+/* ===== Contadores ===== */
 function updateCounts(){
-  const favs=favSet.size;
   countShown.textContent = `Exibindo ${itemsRendered} de ${produtosList.length} no Geral (carregados)`;
   countTotal.textContent = serverExhausted ? `Total de SKUs carregados: ${produtosList.length}` : `Carregando… (${produtosList.length}+ )`;
-  countFavs.textContent  = `Favoritos: ${favs}`;
+  countFavs.textContent  = `Favoritos: ${favSet.size}`;
 }
 
-/* ===== consulta paginada ===== */
+/* ===== Consulta paginada ===== */
 function buildQuery(){
   let q = sb.from(VIEW).select('ean, site, preco, data, descricao, preco_num', { count:'estimated' }).order('data', { ascending:false });
   if (currentEanQ)  q = q.ilike('ean', `%${currentEanQ}%`);
@@ -533,7 +504,7 @@ async function fetchNextPage(){
   finally { fetching=false; updateCounts(); }
 }
 
-/* ===== reset ===== */
+/* ===== Reset ===== */
 function resetAndQuery(){
   produtosMap.clear(); produtosList=[]; serverOffset=0; serverExhausted=false; favFirstAutoRenderDone=false;
   resetGeneralDom();
@@ -541,10 +512,10 @@ function resetAndQuery(){
   fetchNextPage();
 }
 
-/* ===== navegação / filtros ===== */
+/* ===== Navegação / filtros ===== */
 ddMeusDados.addEventListener('click', ()=> location.href='meusdados.html');
 ddPlanos.addEventListener('click', ()=> location.href='planos.html');
-btnSair.addEventListener('click', async ()=>{ try{ await sb.auth.signOut(); }finally{ localStorage.removeItem('mm_login_date'); location.href = CFG.SITE_URL || 'index.html'; } });
+btnSair.addEventListener('click', async ()=>{ try{ await sb.auth.signOut(); } finally { localStorage.removeItem('mm_login_date'); location.href = CFG.SITE_URL || 'index.html'; } });
 
 const onFilterInput = debounce(()=>{ currentEanQ=(eanFilter.value||'').trim(); currentDescQ=(descFilter.value||'').trim(); resetAndQuery(); }, 500);
 eanFilter.addEventListener('input', onFilterInput);
@@ -553,18 +524,18 @@ descFilter.addEventListener('input', onFilterInput);
 btnReload.addEventListener('click', async ()=>{
   const s=(await sb.auth.getSession()).data.session;
   if (s?.user?.id){
-    let planKey = 'basico';
+    let planKey='basico';
     try{
       const { data, error } = await sb.from('profiles').select('plan').eq('id', s.user.id).maybeSingle();
       if (!error) planKey = (data?.plan || 'basico').toString().toLowerCase();
       planChip.textContent = `Plano: ${planKey.charAt(0).toUpperCase()+planKey.slice(1)}`;
     }catch{}
-    await loadUserSitesAndLocks(s.user.id, planKey);
+    await loadUserSelection(s.user.id, planKey);
   }
   resetAndQuery();
 });
 
-/* ===== favoritos height / resizer ===== */
+/* ===== Favoritos: altura + resizer ===== */
 function measureRowHeight(){ const row = document.querySelector('#favTable tbody tr'); if (!row) return 44; const h = Math.round(row.getBoundingClientRect().height); return Math.max(36, h || 44); }
 function measureHeadHeight(){ const head = document.querySelector('#favTable thead'); if (!head) return 40; const h = Math.round(head.getBoundingClientRect().height); return Math.max(32, h || 40); }
 let favHeightUser = Number(localStorage.getItem('mm_fav_height')) || null;
@@ -582,32 +553,24 @@ function updateFavHeight(){
 (function initResizer(){
   let startY = 0, startH = 0;
   function onMove(ev){ const dy = ev.clientY - startY; favHeightUser = startH + dy; localStorage.setItem('mm_fav_height', String(favHeightUser)); applyFavHeight(favHeightUser); }
-  function stop(){ document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', stop); document.body.classList.remove('resizing'); }
-  favResizer.addEventListener('mousedown', (ev)=>{ startY = ev.clientY; startH = favWrap.offsetHeight; document.body.classList.add('resizing'); document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', stop); });
+  function stop(){ removeEventListener('mousemove', onMove); removeEventListener('mouseup', stop); document.body.classList.remove('resizing'); }
+  favResizer.addEventListener('mousedown', (ev)=>{ startY = ev.clientY; startH = favWrap.offsetHeight; document.body.classList.add('resizing'); addEventListener('mousemove', onMove); addEventListener('mouseup', stop); });
   favResizer.addEventListener('dblclick', ()=>{ favHeightUser = null; localStorage.removeItem('mm_fav_height'); updateFavHeight(); });
 })();
 
-/* ===== gráfico ===== */
-const pop        = document.getElementById('chartPopover');
-const popTitle   = document.getElementById('chartTitle');
-const popClose   = document.getElementById('chartClose');
-const popMsg     = document.getElementById('chartMsg');
-const sparkCanvas= document.getElementById('spark');
-const sparkCtx   = sparkCanvas.getContext('2d');
+/* ===== Gráfico (usa view_key exata do chosen) ===== */
+const pop = document.getElementById('chartPopover');
+const popTitle = document.getElementById('chartTitle');
+const popClose = document.getElementById('chartClose');
+const popMsg = document.getElementById('chartMsg');
+const spark = document.getElementById('spark');
+const sparkCtx = spark.getContext('2d');
+document.getElementById('chartClose').addEventListener('click', ()=> pop.style.display='none');
+addEventListener('click', (ev)=>{ if(pop.style.display!=='none' && !pop.contains(ev.target)) pop.style.display='none'; });
 
-function closePopover(){ pop.style.display='none'; }
-function positionPopover(x,y){
-  const pad=12, vw=innerWidth, vh=innerHeight; let left=x+pad, top=y+pad; const W=240, H=260;
-  if (left+W>vw) left=x-W-pad; if (top+H>vh) top=y-H-pad;
-  pop.style.left=Math.max(8,left)+'px'; pop.style.top=Math.max(8,top)+'px';
-}
-document.addEventListener('click', (ev)=>{ if(pop.style.display!=='none' && !pop.contains(ev.target)) closePopover(); });
-document.addEventListener('keydown', (ev)=>{ if(ev.key==='Escape') closePopover(); });
-popClose.addEventListener('click', closePopover);
-
-function drawSparkline(points){
-  const ctx=sparkCtx, W=sparkCanvas.width, H=sparkCanvas.height; ctx.clearRect(0,0,W,H);
-  if(!points||points.length<3){ popMsg.style.display='block'; popMsg.textContent='Histórico insuficiente (≥3 pontos).'; return; }
+function drawSpark(points){
+  const ctx = sparkCtx, W=spark.width, H=spark.height; ctx.clearRect(0,0,W,H);
+  if (!points || points.length<3){ popMsg.style.display='block'; popMsg.textContent='Histórico insuficiente (≥3 pontos).'; return; }
   popMsg.style.display='none';
   const m={l:40,r:14,t:12,b:28};
   const xs=points.map(p=>p.x.getTime()), ys=points.map(p=>p.y);
@@ -621,30 +584,28 @@ function drawSparkline(points){
   points.forEach((p,i)=>{ const x=xS(p.x.getTime()), y=yS(p.y); if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); }); ctx.stroke();
   ctx.fillStyle='#bfffc1'; for(const p of points){ const x=xS(p.x.getTime()), y=yS(p.y); ctx.beginPath(); ctx.arc(x,y,3.2,0,Math.PI*2); ctx.fill(); }
 }
-async function openChartFor(ev, ean, siteLabel){
-  ev.stopPropagation();
-  const rect = ev.currentTarget.getBoundingClientRect(); positionPopover(rect.right, rect.bottom);
-  popTitle.textContent = `${siteLabel} • ${ean}`;
-  popMsg.style.display='block'; popMsg.textContent='Carregando…'; sparkCtx.clearRect(0,0,sparkCanvas.width,sparkCanvas.height); pop.style.display='block';
+async function openChartFor(ev, ean, label){
+  const rect = ev.currentTarget.getBoundingClientRect();
+  pop.style.display='block'; pop.style.left=(rect.right+12)+'px'; pop.style.top=(rect.bottom+12)+'px';
+  popTitle.textContent = `${label} • ${ean}`;
+  popMsg.style.display='block'; popMsg.textContent='Carregando…'; sparkCtx.clearRect(0,0,spark.width,spark.height);
+
   try{
-    // tenta view_key típica da view
-    const vkKnown = Object.entries(siteMap).find(([vk,lbl])=>lbl===siteLabel)?.[0];
-    const viewKey = vkKnown || ('Preco' + siteLabel.replace(/[^A-Za-z0-9]/g,''));
+    const vk = (chosen.find(c=>c.label===label)||{}).view_key || ('Preco'+comp(label));
     const { data, error } = await sb.from(VIEW).select('data, preco_num')
-      .eq('ean', ean).eq('site', viewKey).not('preco_num','is',null).order('data',{ascending:true}).limit(60);
+      .eq('ean', ean).eq('site', vk).not('preco_num','is',null).order('data',{ascending:true}).limit(60);
     if (error) throw error;
     const pts = (data||[]).filter(r=>typeof r.preco_num==='number'&&Number.isFinite(r.preco_num)).map(r=>({x:new Date(r.data), y:r.preco_num}));
-    drawSparkline(pts);
-  }catch(e){ console.error(e); popMsg.style.display='block'; popMsg.textContent='Falha ao carregar histórico.'; }
+    drawSpark(pts);
+  }catch(e){ popMsg.style.display='block'; popMsg.textContent='Falha ao carregar histórico.'; }
 }
 
-/* ===== init ===== */
+/* ===== INIT ===== */
 (async function init(){
   const { data:{ session } } = await sb.auth.getSession();
-  if (!session) { window.location.href = CFG.SITE_URL || 'index.html'; return; }
+  if (!session) { location.href = CFG.SITE_URL || 'index.html'; return; }
 
   userChip.textContent = session.user?.email || 'Logado';
-
   let planKey='basico';
   try{
     const { data, error } = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
@@ -653,11 +614,12 @@ async function openChartFor(ev, ean, siteLabel){
       planKey = raw.toLowerCase();
       planChip.textContent = `Plano: ${raw.charAt(0).toUpperCase()+raw.slice(1)}`;
     }
-  }catch(e){ console.error(e); planChip.textContent = 'Plano: —'; }
+  }catch(e){ planChip.textContent = 'Plano: —'; }
 
-  await loadUserSitesAndLocks(session.user.id, planKey);
+  await loadUserSelection(session.user.id, planKey);
 
-  currentEanQ=''; currentDescQ='';
+  // Primeira carga
+  currentEanQ = ''; currentDescQ = '';
   resetAndQuery();
   generalWrap.dispatchEvent(new Event('scroll'));
 })();
