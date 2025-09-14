@@ -17,11 +17,13 @@
   .btn:hover{background:#009b38}
   .btn.outline{background:transparent;border:1px solid #2a2a2a;color:#ddd}
   .btn.outline:hover{background:#1b1b1b}
+  .btn.muted{background:#2a2a2a}
+  .btn.muted:hover{background:#333}
 
   .chip{font-size:12px;background:#1e1e1e;border:1px solid #333;padding:6px 10px;border-radius:999px}
   .chip.plan{color:#bfffc1;border-color:#2f5a2f;background:#132313}
 
-  .container{max-width:880px;margin:0 auto}
+  .container{max-width:980px;margin:0 auto}
   .card{background:#0f0f0f;border:1px solid #2a2a2a;border-radius:12px;padding:18px;margin-bottom:16px}
 
   .grid{display:grid;grid-template-columns:1fr 1fr;column-gap:16px;row-gap:22px}
@@ -59,9 +61,33 @@
   .footer-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-top:14px}
   .counter{font-size:13px;color:#9aa0a6}
   input[type="checkbox"]{width:18px;height:18px;margin-top:2px}
+
+  /* ===== Upload Excel (sem armazenar) ===== */
+  .dz{
+    border:1px dashed #2a2a2a;border-radius:12px;background:#0e0e0e;
+    padding:18px;text-align:center;transition:all .15s ease-in-out
+  }
+  .dz:hover{background:#121212}
+  .dz.dragover{border-color:#00b140;background:#0d170f}
+  .dz small{display:block;color:#9aa0a6;margin-top:8px}
+  .file-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px;flex-wrap:wrap}
+  .file-name{font-size:14px;color:#ddd;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .spinner{width:16px;height:16px;border:2px solid #2a2a2a;border-top-color:#00b140;border-radius:50%;display:inline-block;animation:spin 1s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  table.preview{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}
+  table.preview th, table.preview td{border:1px solid #2a2a2a;padding:6px 8px;text-align:left}
+  table.preview th{background:#161616;color:#bdbdbd}
+  .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid #2a2a2a;color:#bdbdbd}
+  .ok{color:#b7fbb7}
+  .warn{color:#ffc966}
+  .err{color:#ff9a9a}
 </style>
+<!-- Supabase -->
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="./config.js"></script>
+<!-- SheetJS (XLSX) para ler Excel no browser -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 <header class="container">
@@ -128,7 +154,43 @@
     </div>
   </div>
 
-  <!-- ===== NOVA SEÇÃO: Seleção de sites para monitorar ===== -->
+  <!-- ===== NOVA SEÇÃO: Importar produtos (Excel) -> Gravar na base ===== -->
+  <div class="card" id="importCard">
+    <h2 style="margin:0 0 8px 0;">Importar produtos (Excel) → Gravar na base</h2>
+    <p class="muted" style="margin-top:0">
+      Envie uma planilha com as colunas <strong>EAN</strong>, <strong>Descricao</strong>, <strong>PrecoCusto</strong>, <strong>PrecoVenda</strong>.
+      Suporte a <em>.xlsx, .xls ou .csv</em>. Nada será armazenado; o conteúdo é lido no navegador e inserido diretamente na tabela <code>produtos_cliente</code>.
+    </p>
+
+    <div class="dz" id="dropArea" aria-label="Área para arrastar e soltar arquivo">
+      <div>Arraste e solte o arquivo aqui</div>
+      <small>ou</small>
+      <div style="margin-top:8px">
+        <input id="fileExcel" type="file" accept=".xlsx,.xls,.csv" />
+      </div>
+      <small>Formatos: .xlsx, .xls, .csv • Tamanho sugerido ≤ 5 MB</small>
+    </div>
+
+    <div class="file-row" id="fileRow" style="display:none">
+      <div class="file-name" id="fileName">Nenhum arquivo selecionado</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button id="btnPrever" class="btn outline" disabled>👁️ Pré-visualizar</button>
+        <button id="btnInserir" class="btn" disabled>⬇️ Gravar na base</button>
+        <button id="btnLimparImport" class="btn muted" disabled>Limpar</button>
+      </div>
+    </div>
+
+    <div id="importStats" class="help" style="margin-top:8px"></div>
+    <div id="previewWrap" style="margin-top:10px; display:none">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span class="badge">Prévia (primeiras 12 linhas)</span>
+        <span id="mapInfo" class="help"></span>
+      </div>
+      <table class="preview" id="previewTable" aria-label="Pré-visualização"></table>
+    </div>
+  </div>
+
+  <!-- ===== Seção existente: Seleção de sites ===== -->
   <div class="card" id="sitesCard">
     <h2 style="margin-top:0;margin-bottom:8px">Selecionar sites para monitorar</h2>
     <p class="muted" id="introSites">
@@ -138,7 +200,7 @@
     <p class="limit-info" id="limitInfo">Limite do plano: —</p>
 
     <div id="sitesWrap" class="sites-grid" aria-live="polite" aria-busy="true">
-      <!-- Lista de sites renderizada aqui -->
+      <!-- Lista renderizada aqui -->
     </div>
 
     <div class="footer-actions">
@@ -167,25 +229,9 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 });
 
 /* =========================
-   Elementos (perfil)
+   Utilidades e UI
    ========================= */
-const emailEl = document.getElementById('email');
-const nomeEl = document.getElementById('nome');
-const sobrenomeEl = document.getElementById('sobrenome');
-const cpfCnpjEl = document.getElementById('cpfCnpj');
-const telefoneEl = document.getElementById('telefone');
-const planoEl = document.getElementById('plano');
-const razaoWrap = document.getElementById('razaoWrap');
-const razaoSocialEl = document.getElementById('razaoSocial');
-
-const btnSalvar = document.getElementById('btnSalvar');
-const btnSair = document.getElementById('btnSair');
-
 const bannerEl = document.getElementById('banner');
-const telHelp = document.getElementById('telHelp');
-const docHelp = document.getElementById('docHelp');
-const planChip = document.getElementById('planChip');
-
 function showBanner(text, type = 'ok', timeoutMs = 4200) {
   bannerEl.textContent = text;
   bannerEl.className = 'banner ' + (type === 'warn' ? 'warn' : (type === 'err' ? 'err' : 'ok'));
@@ -194,7 +240,21 @@ function showBanner(text, type = 'ok', timeoutMs = 4200) {
 }
 function digitsOnly(s){ return (s||'').replace(/\D+/g, ''); }
 
-/* ======== CPF/CNPJ/Telefone helpers (mesmo do seu arquivo base) ======== */
+/* ======== CPF/CNPJ/Telefone helpers (iguais à sua base) ======== */
+const emailEl = document.getElementById('email');
+const nomeEl = document.getElementById('nome');
+const sobrenomeEl = document.getElementById('sobrenome');
+const cpfCnpjEl = document.getElementById('cpfCnpj');
+const telefoneEl = document.getElementById('telefone');
+const planoEl = document.getElementById('plano');
+const razaoWrap = document.getElementById('razaoWrap');
+const razaoSocialEl = document.getElementById('razaoSocial');
+const btnSalvar = document.getElementById('btnSalvar');
+const btnSair = document.getElementById('btnSair');
+const telHelp = document.getElementById('telHelp');
+const docHelp = document.getElementById('docHelp');
+const planChip = document.getElementById('planChip');
+
 function formatCPF(d) {
   d = d.slice(0,11);
   if (d.length <= 3) return d;
@@ -312,13 +372,13 @@ let currentPlan = 'trial';
       planChip.textContent = `Plano: ${prettyBR}`;
     }
 
-    // Depois de ler o plano, inicializa a seção de sites (carrega também a seleção salva)
-    await initSitesSection();
+    await initSitesSection();       // carrega lista + seleção sites
+    initExcelImport();              // ativa importador de Excel
   }catch(e){
     console.error(e);
     showBanner('Erro ao carregar dados (tabela "profiles").', 'err');
-    // Mesmo com erro, tenta iniciar a seção de sites com plano trial
     await initSitesSection();
+    initExcelImport();
   }
 })();
 
@@ -376,6 +436,233 @@ btnSalvar.addEventListener('click', async ()=>{
 });
 
 /* =========================================================
+   SEÇÃO: Importar Excel -> Inserir direto na tabela
+   ========================================================= */
+function initExcelImport(){
+  const input = document.getElementById('fileExcel');
+  const dropArea = document.getElementById('dropArea');
+  const fileRow = document.getElementById('fileRow');
+  const fileNameEl = document.getElementById('fileName');
+  const btnPrever = document.getElementById('btnPrever');
+  const btnInserir = document.getElementById('btnInserir');
+  const btnLimparImport = document.getElementById('btnLimparImport');
+  const importStats = document.getElementById('importStats');
+  const previewWrap = document.getElementById('previewWrap');
+  const previewTable = document.getElementById('previewTable');
+  const mapInfo = document.getElementById('mapInfo');
+
+  let selectedFile = null;
+  let parsedRows = []; // linhas normalizadas {ean, descricao, preco_custo, preco_venda}
+
+  function resetImport(){
+    selectedFile = null;
+    parsedRows = [];
+    fileNameEl.textContent = 'Nenhum arquivo selecionado';
+    fileRow.style.display = 'none';
+    btnPrever.disabled = true;
+    btnInserir.disabled = true;
+    btnLimparImport.disabled = true;
+    importStats.textContent = '';
+    previewWrap.style.display = 'none';
+    previewTable.innerHTML = '';
+    mapInfo.textContent = '';
+    input.value = '';
+  }
+
+  function setFile(file){
+    if (!file){ resetImport(); return; }
+    const okExt = /\.(xlsx|xls|csv)$/i.test(file.name);
+    if (!okExt){ showBanner('Formato inválido. Use .xlsx, .xls ou .csv', 'warn'); return; }
+    if (file.size > 8*1024*1024){ showBanner('Arquivo grande (> 8MB). Considere dividir.', 'warn'); }
+    selectedFile = file;
+    fileNameEl.textContent = `${file.name} • ${(file.size/1024/1024).toFixed(2)} MB`;
+    fileRow.style.display='flex';
+    btnPrever.disabled = false;
+    btnLimparImport.disabled = false;
+    importStats.textContent = 'Pronto para ler o arquivo.';
+  }
+
+  input.addEventListener('change', (e)=>{
+    const f = e.target.files && e.target.files[0];
+    setFile(f || null);
+  });
+
+  ;['dragenter','dragover'].forEach(evt=>{
+    dropArea.addEventListener(evt, (e)=>{ e.preventDefault(); e.stopPropagation(); dropArea.classList.add('dragover'); });
+  });
+  ;['dragleave','drop'].forEach(evt=>{
+    dropArea.addEventListener(evt, (e)=>{ e.preventDefault(); e.stopPropagation(); dropArea.classList.remove('dragover'); });
+  });
+  dropArea.addEventListener('drop', (e)=>{
+    const dt = e.dataTransfer;
+    const f = dt && dt.files && dt.files[0];
+    setFile(f || null);
+  });
+
+  btnLimparImport.addEventListener('click', resetImport);
+
+  // Normaliza nomes de colunas para os campos-alvo
+  function normalizeHeader(h){
+    h = (h||'').toString().trim().toLowerCase();
+    h = h.normalize('NFD').replace(/[\u0300-\u036f]/g,''); // remove acentos
+    return h;
+  }
+  function mapColumnName(h){
+    const n = normalizeHeader(h);
+    if (/(^ean$|ean13|codigo\s*ean|codbarras|cod\.?barras)/.test(n)) return 'ean';
+    if (/(^descricao$|descrição|nome\s*produto|produto|item)/.test(n)) return 'descricao';
+    if (/(^precocusto$|preco\s*custo|custo|pcusto)/.test(n)) return 'preco_custo';
+    if (/(^precovenda$|preco\s*venda|venda|pvenda)/.test(n)) return 'preco_venda';
+    return null;
+  }
+  function toNumberBR(v){
+    if (v==null) return null;
+    if (typeof v === 'number') return v;
+    let s = String(v).trim();
+    if (s==='') return null;
+    // trata formatos "1.234,56" ou "1234,56" ou "1234.56"
+    if (/,\d{1,2}$/.test(s)) { // tem centavos com vírgula
+      s = s.replace(/\./g,'').replace(',','.');
+    } else {
+      s = s.replace(',','.');
+    }
+    const num = Number(s);
+    return Number.isFinite(num) ? num : null;
+  }
+
+  async function parseSelectedFile(previewOnly=false){
+    if (!selectedFile){ showBanner('Selecione um arquivo primeiro.', 'warn'); return; }
+    importStats.innerHTML = '<span class="spinner" aria-hidden="true"></span> Lendo planilha...';
+
+    try{
+      const data = await selectedFile.arrayBuffer();
+      const wb = XLSX.read(data, { type:'array' });
+      const sheetName = wb.SheetNames[0];
+      const ws = wb.Sheets[sheetName];
+
+      // SheetJS -> array de objetos a partir do cabeçalho
+      const rowsRaw = XLSX.utils.sheet_to_json(ws, { defval:null, raw:true });
+      if (!rowsRaw.length){ importStats.textContent = 'Planilha vazia.'; return; }
+
+      // Mapeia colunas do cabeçalho
+      const headers = Object.keys(rowsRaw[0]);
+      const map = {};
+      headers.forEach(h=>{
+        const dest = mapColumnName(h);
+        if (dest) map[dest] = h;
+      });
+
+      // Verifica colunas requeridas
+      const required = ['ean','descricao','preco_custo','preco_venda'];
+      const missing = required.filter(k=>!map[k]);
+      mapInfo.textContent = missing.length
+        ? `Mapeamento parcial. Colunas ausentes: ${missing.join(', ')}`
+        : 'Mapeamento OK: EAN, Descricao, PrecoCusto, PrecoVenda.';
+
+      // Normaliza linhas
+      const normalized = [];
+      for (const r of rowsRaw){
+        const ean = map.ean ? String(r[map.ean] ?? '').trim() : '';
+        const eanDigits = digitsOnly(ean);
+        const descricao = map.descricao ? String(r[map.descricao] ?? '').trim() : '';
+        const preco_custo = toNumberBR(map.preco_custo ? r[map.preco_custo] : null);
+        const preco_venda = toNumberBR(map.preco_venda ? r[map.preco_venda] : null);
+
+        if (!eanDigits || !descricao) continue; // pula linhas incompletas
+        normalized.push({ ean: eanDigits, descricao, preco_custo, preco_venda });
+      }
+
+      parsedRows = normalized;
+      importStats.innerHTML = `Linhas lidas: <strong>${rowsRaw.length}</strong> • Linhas válidas: <strong>${parsedRows.length}</strong>`;
+
+      // Pré-visualização (primeiras 12)
+      const sample = parsedRows.slice(0, 12);
+      if (sample.length){
+        previewWrap.style.display = 'block';
+        previewTable.innerHTML = '';
+        const thead = document.createElement('thead');
+        thead.innerHTML = '<tr><th>#</th><th>EAN</th><th>Descrição</th><th>Preço custo</th><th>Preço venda</th></tr>';
+        previewTable.appendChild(thead);
+        const tbody = document.createElement('tbody');
+        sample.forEach((r, i)=>{
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td>${i+1}</td><td>${r.ean}</td><td>${r.descricao}</td><td>${r.preco_custo ?? ''}</td><td>${r.preco_venda ?? ''}</td>`;
+          tbody.appendChild(tr);
+        });
+        previewTable.appendChild(tbody);
+      } else {
+        previewWrap.style.display = 'none';
+        previewTable.innerHTML = '';
+      }
+
+      btnInserir.disabled = parsedRows.length === 0;
+      showBanner(missing.length ? 'Algumas colunas não foram encontradas; somente linhas completas serão gravadas.' : 'Arquivo lido com sucesso!', missing.length ? 'warn' : 'ok');
+    }catch(e){
+      console.error(e);
+      showBanner('Falha ao ler planilha. Verifique o arquivo.', 'err');
+      importStats.textContent = 'Erro ao ler planilha.';
+    }
+  }
+
+  btnPrever.addEventListener('click', ()=>parseSelectedFile(true));
+
+  async function insertBatches(){
+    if (!parsedRows.length){ showBanner('Nada para inserir. Faça a leitura primeiro.', 'warn'); return; }
+    btnInserir.disabled = true;
+    btnPrever.disabled = true;
+    btnLimparImport.disabled = true;
+
+    const BATCH = 500; // lote
+    let ok = 0, fail = 0, pos = 0;
+
+    showBanner('Inserindo registros em lotes...', 'ok', 3000);
+    while (pos < parsedRows.length){
+      const batch = parsedRows.slice(pos, pos + BATCH).map(r => ({
+        user_id: sessionUser.id,
+        ean: r.ean,
+        descricao: r.descricao,
+        preco_custo: r.preco_custo,
+        preco_venda: r.preco_venda
+      }));
+
+      try{
+        // Se você criar a UNIQUE (user_id, ean), pode trocar para upsert({ onConflict: 'user_id,ean' })
+        const { error } = await sb.from('produtos_cliente').upsert(batch, { onConflict: 'user_id,ean' });
+        if (error) throw error;
+        ok += batch.length;
+      }catch(err){
+        console.error('Erro no lote', err);
+        fail += batch.length;
+      }
+      pos += BATCH;
+      importStats.innerHTML = `Progresso: ${Math.min(pos, parsedRows.length)} / ${parsedRows.length} • Sucesso: <span class="ok">${ok}</span> • Erros: <span class="err">${fail}</span>`;
+    }
+
+    if (fail === 0){
+      showBanner(`Importação concluída: ${ok} registros inseridos/atualizados.`, 'ok', 6000);
+    } else {
+      showBanner(`Importação com falhas: ${ok} OK, ${fail} erros. Veja o console.`, 'warn', 8000);
+    }
+
+    btnPrever.disabled = false;
+    btnLimparImport.disabled = false;
+    btnInserir.disabled = false;
+  }
+
+  btnInserir.addEventListener('click', insertBatches);
+
+  // Atalho: ao escolher arquivo, já habilita prévia
+  fileRow.style.display = 'none';
+  input.addEventListener('change', ()=>{ btnPrever.disabled = !input.files?.length; });
+
+  // Inicial
+  resetImport();
+}
+
+</script>
+
+<script>
+/* =========================================================
    SEÇÃO: Seleção de Sites (tabela: sites; vínculo: user_sites)
    ========================================================= */
 const PLAN_LIMIT = { trial: 2, basico: 4, intermediario: 6, premium: 8 };
@@ -397,8 +684,8 @@ async function initSitesSection(){
   const pretty = cap(currentPlan).replace('Basico','Básico').replace('Intermediario','Intermediário');
   limitInfo.textContent = `Limite do plano (${pretty}): ${planLimit} site${planLimit>1?'s':''}`;
 
-  await loadSites();          // carrega todos os sites (id, nome, site)
-  await loadUserSelection();  // carrega seleção salva do usuário
+  await loadSites();
+  await loadUserSelection();
   renderSites();
   updateCounter();
 }
@@ -406,8 +693,8 @@ async function initSitesSection(){
 async function loadSites(){
   try{
     const { data, error } = await sb
-      .from('sites')                // <<<<<< tabela correta
-      .select('id,nome,site')       // <<<<<< busca id + colunas
+      .from('sites')
+      .select('id,nome,site')
       .order('nome', { ascending: true });
     if (error) throw error;
     allSites = data || [];
