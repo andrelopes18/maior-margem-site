@@ -65,8 +65,17 @@
   td.locked-cell:hover .unlock { display:inline-flex; align-items:center; gap:6px; margin-left:8px; padding:4px 8px; border-radius:6px; border:1px solid #2e2e2e; background:#141414; color:#ddd; font-size:12px; cursor:pointer; }
   td.locked-cell .unlock:hover { background:#1b1b1b; }
 
-  /* Debug */
-  #debugPanel pre { white-space:pre-wrap; font-family: ui-monospace,Consolas,monospace; background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px; padding:8px; color:#bfe3ff; max-height:260px; overflow:auto; }
+  /* Debug escondido (Ctrl+Alt+D para alternar) */
+  #dbgWrap { display:none; position:fixed; right:16px; bottom:16px; width:420px; max-height:50vh; z-index:9999;
+             background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px; padding:10px; box-shadow:0 10px 30px rgba(0,0,0,.6); }
+  #dbgWrap h3 { margin:0 0 8px 0; font-size:14px; color:#bfe3ff; }
+  #dbg { white-space:pre-wrap; font-family: ui-monospace,Consolas,monospace; font-size:12px; color:#bfe3ff; max-height:38vh; overflow:auto; }
+
+  /* Popover gráfico (estilo simples) */
+  #chartPopover { position:fixed; z-index:9998; background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px; padding:10px; box-shadow:0 10px 30px rgba(0,0,0,.6); }
+  #chartPopover header { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+  #chartPopover .close { background:transparent; border:1px solid #333; color:#ddd; padding:2px 8px; border-radius:6px; cursor:pointer; }
+  #chartPopover .msg { font-size:12px; color:#9aa0a6; margin-top:6px; }
 </style>
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="./config.js"></script>
@@ -130,43 +139,39 @@
   </div>
 </section>
 
-<section id="debugPanel" class="panel">
-  <div class="panel-header">
-    <h2>Debug</h2>
-    <button id="toggleDbg" class="toggle-btn" aria-expanded="false">Maximizar</button>
-  </div>
-  <div id="dbgWrap" class="wrap" style="display:none;">
-    <pre id="dbg"></pre>
-  </div>
-</section>
+<!-- Debug oculto -->
+<div id="dbgWrap">
+  <h3>Debug</h3>
+  <pre id="dbg"></pre>
+</div>
 
-<div id="chartPopover" class="chart-popover" style="display:none;">
+<!-- Popover de gráfico -->
+<div id="chartPopover" style="display:none;">
   <header>
     <span id="chartTitle">Histórico</span>
     <button class="close" id="chartClose" aria-label="Fechar">×</button>
   </header>
-  <canvas id="spark" class="spark" width="200" height="180"></canvas>
+  <canvas id="spark" width="220" height="180"></canvas>
   <div id="chartMsg" class="msg" style="display:none;"></div>
 </div>
 
 <script>
-/* ===== util de debug ===== */
+/* ========= util debug (oculto; Ctrl+Alt+D para alternar) ========= */
+const dbgWrap = document.getElementById('dbgWrap');
 const dbg = document.getElementById('dbg');
 function dlog(o){ dbg.textContent += (typeof o==='string' ? o : JSON.stringify(o,null,2)) + "\n"; }
-document.getElementById('toggleDbg').addEventListener('click', ()=>{
-  const btn = document.getElementById('toggleDbg');
-  const open = btn.getAttribute('aria-expanded')==='true';
-  btn.setAttribute('aria-expanded', String(!open));
-  document.getElementById('dbgWrap').style.display = open ? 'none' : 'block';
-  btn.textContent = open ? 'Maximizar' : 'Minimizar';
+document.addEventListener('keydown', (e)=>{
+  if (e.ctrlKey && e.altKey && (e.key==='d' || e.key==='D')){
+    dbgWrap.style.display = (dbgWrap.style.display==='none' || !dbgWrap.style.display) ? 'block' : 'none';
+  }
 });
 
-/* ===== erros visíveis ===== */
+/* ========= erros visíveis ========= */
 const errEl = document.getElementById('err');
 addEventListener('error', e => { errEl.style.display='block'; errEl.textContent='Erro JS: '+e.message; });
 addEventListener('unhandledrejection', e => { errEl.style.display='block'; errEl.textContent='Erro assíncrono: '+(e.reason?.message||e.reason); });
 
-/* ===== Supabase ===== */
+/* ========= Supabase ========= */
 const CFG = window.CONFIG || {};
 if(!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY){
   errEl.style.display='block'; errEl.textContent='CONFIG ausente (config.js)';
@@ -174,7 +179,7 @@ if(!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY){
 }
 const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth:{ persistSession:true, autoRefreshToken:true, detectSessionInUrl:true }});
 
-/* ===== elementos ===== */
+/* ========= elementos ========= */
 const statusEl = document.getElementById('status');
 const planChip  = document.getElementById('planChip');
 const userChip  = document.getElementById('userChip');
@@ -189,16 +194,19 @@ const favWrap  = document.getElementById('favWrap');
 const favBody  = document.querySelector('#favTable tbody');
 const favHeaderRow = document.getElementById('favHeaderRow');
 const favResizer  = document.getElementById('favResizer');
+const toggleFavBtn = document.getElementById('toggleFav');
 
 const generalWrap = document.getElementById('generalWrap');
 const generalBody = document.querySelector('#produtosTable tbody');
 const generalHeaderRow = document.getElementById('generalHeaderRow');
 const endMarker   = document.getElementById('endMarker');
+const toggleGenBtn = document.getElementById('toggleGen');
+
 const countShown  = document.getElementById('countShown');
 const countTotal  = document.getElementById('countTotal');
 const countFavs   = document.getElementById('countFavs');
 
-/* ===== estado ===== */
+/* ========= estado ========= */
 const DEFAULT_PLAN_SITE_LIMIT = { trial:2, basico:4, intermediario:5, premium:8 };
 const VIEW = 'vw_precos_com_desc';
 const PAGE_SIZE = 200;
@@ -221,13 +229,12 @@ let currentEanQ = '';
 let currentDescQ = '';
 
 let loadingMore = false;
-let suppressGeneralChange = false;
 const generalChkMap = new Map();
 
 let favHeightUser = Number(localStorage.getItem('mm_fav_height')) || null;
 let favFirstAutoRenderDone = false;
 
-/* ===== helpers ===== */
+/* ========= helpers ========= */
 function setStatus(t){ statusEl.textContent = t||''; }
 function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
 function debounce(fn,ms=500){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); } }
@@ -236,7 +243,7 @@ function isFav(sku){ return favSet.has(String(sku)); }
 function formatBRL(n){ try{ return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) }catch{ return String(n) } }
 function norm(s){ return (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]/g,'').toLowerCase(); }
 
-/* Mapa de nomes -> view_key da VIEW (fundamental para casar com vw_precos_com_desc.site) */
+/* nomes -> chave da view */
 const NAME_TO_VIEW = {
   redemac:       'PrecoRedeMac',
   leroymerlin:   'PrecoLeroyMerlin',
@@ -249,10 +256,10 @@ const NAME_TO_VIEW = {
 };
 function computeViewKey(label){
   const key = norm(label);
-  return NAME_TO_VIEW[key] || ('Preco' + (label||'').toString().replace(/[^A-Za-z0-9]/g,'')); // fallback
+  return NAME_TO_VIEW[key] || ('Preco' + (label||'').toString().replace(/[^A-Za-z0-9]/g,''));
 }
 
-/* ===== cabeçalhos ===== */
+/* ========= cabeçalhos ========= */
 function buildHeaders(){
   const base = `<th class="col-fav">★</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
   const ths = chosen.map(c=>{
@@ -265,7 +272,7 @@ function buildHeaders(){
   favHeaderRow.innerHTML = favBase + ths;
 }
 
-/* ===== plano ===== */
+/* ========= plano ========= */
 async function getSitesLimitForPlan(planKey){
   const k = (planKey||'').toLowerCase();
   try{
@@ -278,22 +285,20 @@ async function getSitesLimitForPlan(planKey){
   return DEFAULT_PLAN_SITE_LIMIT[k] ?? 2;
 }
 
-/* ===== user_sites -> chosen ===== */
+/* ========= user_sites -> chosen ========= */
 async function loadUserSelection(userId, planKey){
   dbg.textContent = '';
-  dlog('--- PASSO 1: Sessão ---');
+  dlog('--- Seleção de sites ---');
   dlog({ user_id:userId, planKey });
 
-  // 1) user_sites
-  dlog('--- PASSO 2: user_sites (select "*") ---');
+  // user_sites
   let rows = [];
   try{
     const { data, error } = await sb.from('user_sites').select('*');
     if (error) throw error;
     rows = (data||[]).filter(r => String(r.user_id||r.user_uid||r.user_uuid||r.uid||r.user||'') === String(userId));
   }catch(e){ dlog('ERRO user_sites: '+e.message); rows = []; }
-
-  dlog({ meus_user_sites: rows.length, exemplo: rows[0] });
+  dlog({ meus_user_sites: rows.length });
 
   // ordenar por position -> created_at -> id
   rows.sort((a,b)=>{
@@ -314,8 +319,7 @@ async function loadUserSelection(userId, planKey){
     return;
   }
 
-  // 2) sites
-  dlog('--- PASSO 3: sites (select "*") ---');
+  // sites
   let sites = [];
   try{
     const { data, error } = await sb.from('sites').select('*').in('id', siteIds);
@@ -332,7 +336,6 @@ async function loadUserSelection(userId, planKey){
     const vk    = computeViewKey(label);
     return { site_id:s.id, label, view_key:vk };
   });
-
   dlog({ chosen });
 
   const lim = await getSitesLimitForPlan(planKey);
@@ -344,7 +347,7 @@ async function loadUserSelection(userId, planKey){
   setStatus(`Sites: ${chosen.map(c=>c.label).join(' · ')}`);
 }
 
-/* ===== agrega linhas da view (filtra pelos view_key permitidos) ===== */
+/* ========= agrega linhas da view ========= */
 function upsertRowsIntoProdutos(rows){
   const allowed = new Map(chosen.map(c=>[c.view_key, c.label])); // vk -> label
   for (const r of rows){
@@ -365,7 +368,7 @@ function upsertRowsIntoProdutos(rows){
   produtosList = Array.from(produtosMap.values());
 }
 
-/* ===== render ===== */
+/* ========= render ========= */
 function chartButtonSVG(){
   return `<svg class="chart-icon" viewBox="0 0 24 24" aria-hidden="true">
     <rect x="3" y="11" width="3" height="7" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>
@@ -446,7 +449,7 @@ function renderGeneralChunk(){
 }
 function resetGeneralDom(){ generalBody.innerHTML=''; generalChkMap.clear(); itemsRendered=0; endMarker.textContent=''; }
 
-/* ===== scroll / paginação ===== */
+/* ========= scroll / paginação ========= */
 function onGeneralScroll(){
   if (loadingMore) return;
   const nearBottom = generalWrap.scrollTop + generalWrap.clientHeight >= generalWrap.scrollHeight - 100;
@@ -455,7 +458,7 @@ function onGeneralScroll(){
 }
 generalWrap.addEventListener('scroll', onGeneralScroll);
 
-/* ===== favoritos ===== */
+/* ========= favoritos ========= */
 function renderFavs(){
   favBody.innerHTML='';
   const favList = produtosList.filter(p=>isFav(p.sku));
@@ -479,14 +482,14 @@ function renderFavs(){
   favBody.appendChild(frag);
 }
 
-/* ===== contadores ===== */
+/* ========= contadores ========= */
 function updateCounts(){
   countShown.textContent = `Exibindo ${itemsRendered} de ${produtosList.length} no Geral (carregados)`;
   countTotal.textContent = serverExhausted ? `Total de SKUs carregados: ${produtosList.length}` : `Carregando… (${produtosList.length}+ )`;
   countFavs.textContent  = `Favoritos: ${favSet.size}`;
 }
 
-/* ===== query ===== */
+/* ========= query ========= */
 function buildQuery(){
   let q = sb.from(VIEW).select('ean, site, preco, data, descricao, preco_num', { count:'estimated' }).order('data', { ascending:false });
   if (currentEanQ)  q = q.ilike('ean', `%${currentEanQ}%`);
@@ -516,13 +519,13 @@ async function fetchNextPage(){
   finally{ fetching=false; updateCounts(); }
 }
 
-/* ===== reset ===== */
+/* ========= reset ========= */
 function resetAndQuery(){
   produtosMap.clear(); produtosList=[]; serverOffset=0; serverExhausted=false; favFirstAutoRenderDone=false;
   resetGeneralDom(); renderFavs(); updateFavHeight(); updateCounts(); fetchNextPage();
 }
 
-/* ===== UI extra ===== */
+/* ========= UI extra ========= */
 ddMeusDados.addEventListener('click', ()=> location.href='meusdados.html');
 ddPlanos.addEventListener('click', ()=> location.href='planos.html');
 btnSair.addEventListener('click', async ()=>{ try{ await sb.auth.signOut(); } finally{ localStorage.removeItem('mm_login_date'); location.href = CFG.SITE_URL || 'index.html'; }});
@@ -548,7 +551,7 @@ btnReload.addEventListener('click', async ()=>{
   resetAndQuery();
 });
 
-/* ===== favoritos height / resizer ===== */
+/* ========= favoritos height / resizer ========= */
 function measureRowHeight(){ const row=document.querySelector('#favTable tbody tr'); if(!row) return 44; const h=Math.round(row.getBoundingClientRect().height); return Math.max(36, h||44); }
 function measureHeadHeight(){ const head=document.querySelector('#favTable thead'); if(!head) return 40; const h=Math.round(head.getBoundingClientRect().height); return Math.max(32, h||40); }
 function applyFavHeight(px){ if(!px||!Number.isFinite(px)) return; const maxPx=Math.round(window.innerHeight*0.85); const clamped=Math.max(120, Math.min(px, maxPx)); favWrap.style.height=clamped+'px'; }
@@ -566,15 +569,16 @@ function updateFavHeight(){
   favResizer.addEventListener('dblclick', ()=>{ favHeightUser=null; localStorage.removeItem('mm_fav_height'); updateFavHeight(); });
 })();
 
-/* ===== gráfico ===== */
+/* ========= gráfico ========= */
 const pop = document.getElementById('chartPopover');
 const popTitle = document.getElementById('chartTitle');
 const popClose = document.getElementById('chartClose');
 const popMsg = document.getElementById('chartMsg');
 const spark = document.getElementById('spark');
 const sparkCtx = spark.getContext('2d');
-document.getElementById('chartClose').addEventListener('click', ()=> pop.style.display='none');
-addEventListener('click', (ev)=>{ if(pop.style.display!=='none' && !pop.contains(ev.target)) pop.style.display='none'; });
+
+popClose.addEventListener('click', ()=> pop.style.display='none');
+addEventListener('click', (ev)=>{ if(pop.style.display!=='none' && !pop.contains(ev.target) && !ev.target.closest('.chart-btn')) pop.style.display='none'; });
 
 function drawSpark(points){
   const ctx=sparkCtx, W=spark.width, H=spark.height; ctx.clearRect(0,0,W,H);
@@ -607,7 +611,27 @@ async function openChartFor(ev, ean, label){
   }catch(e){ popMsg.style.display='block'; popMsg.textContent='Falha ao carregar histórico.'; }
 }
 
-/* ===== init ===== */
+/* ========= Minimizar/Maximizar (Favoritos & Geral) ========= */
+function applyToggle(btn, wrap, extraEl, key){
+  const collapsed = localStorage.getItem(key) === '1';
+  function setState(isCollapsed){
+    btn.setAttribute('aria-expanded', String(!isCollapsed));
+    btn.textContent = isCollapsed ? 'Maximizar' : 'Minimizar';
+    wrap.style.display = isCollapsed ? 'none' : 'block';
+    if (extraEl) extraEl.style.display = isCollapsed ? 'none' : '';
+  }
+  setState(collapsed);
+  btn.addEventListener('click', ()=>{
+    const curr = btn.getAttribute('aria-expanded') === 'true';
+    const nextCollapsed = curr; // se está expandido (true), ao clicar colapsa
+    localStorage.setItem(key, nextCollapsed ? '1' : '0');
+    setState(nextCollapsed);
+  });
+}
+applyToggle(toggleFavBtn, favWrap, document.getElementById('favResizer'), 'mm_tgl_fav');
+applyToggle(toggleGenBtn, generalWrap, null, 'mm_tgl_gen');
+
+/* ========= init ========= */
 (async function init(){
   const { data:{ session } } = await sb.auth.getSession();
   if (!session){ location.href = CFG.SITE_URL || 'index.html'; return; }
