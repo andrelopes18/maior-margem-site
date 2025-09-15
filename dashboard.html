@@ -81,8 +81,6 @@
   .chart-btn { margin-left:8px; background:transparent; border:1px solid #333; padding:4px; border-radius:6px; cursor:pointer; vertical-align:middle; }
   .chart-btn:hover { background:#1b1b1b; }
   .chart-icon { width:18px; height:18px; display:block; }
-
-  /* (sem alterações no restante do layout) */
 </style>
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="./config.js"></script>
@@ -117,7 +115,7 @@
   <div class="panel-header">
     <h2>Favoritos</h2>
     <div>
-      <!-- NOVO: botão de impressão -->
+      <!-- NOVO: botão de impressão (somente este item foi adicionado) -->
       <button id="btnPrintFav" class="toggle-btn" title="Imprimir favoritos">Imprimir</button>
       <button id="toggleFav" class="toggle-btn" aria-expanded="true">Minimizar</button>
     </div>
@@ -643,18 +641,16 @@ function applyToggle(btn, wrap, extraEl, key){
 applyToggle(toggleFavBtn, favWrap, document.getElementById('favResizer'), 'mm_tgl_fav');
 applyToggle(toggleGenBtn, generalWrap, null, 'mm_tgl_gen');
 
-/* ========= Impressão de Favoritos (relatório simples, sem linhas) ========= */
+/* ========= Impressão de Favoritos (relatório sem linhas) ========= */
 function getFavRows(){
   return produtosList.filter(p=>isFav(p.sku));
 }
 function getHeaderLabelsFromFav(){
-  // Pega os THs atuais (exceto "Ação")
+  // THs atuais (exceto "Ação")
   const ths = Array.from(favHeaderRow.children).map(th=>th.textContent.trim());
-  // fav header é: ["Ação","EAN","Descrição", ...sites]
   return ths.filter((t,i)=> i!==0);
 }
 function getCellForPrint(item, c){
-  // c é o objeto chosen (site)
   const isLocked = locked.has(c.site_id);
   const d = item.sites[c.label];
   if (!d) return '—';
@@ -665,8 +661,8 @@ function getCellForPrint(item, c){
 function buildPrintHTML(){
   const rows = getFavRows();
   const hasRows = rows.length>0;
-  const headers = getHeaderLabelsFromFav(); // ["EAN","Descrição", ...labels sites]
-  const siteColumns = chosen.map(c=>c.label); // para iterar em ordem conhecida
+  const headers = getHeaderLabelsFromFav(); // ["EAN","Descrição", ...sites]
+  const siteColumns = chosen.map(c=>c.label);
 
   const now = new Date();
   const meta = `${now.toLocaleDateString('pt-BR')} ${now.toLocaleTimeString('pt-BR')}`;
@@ -682,7 +678,6 @@ function buildPrintHTML(){
       const cells = [
         `<td>${item.sku}</td>`,
         `<td>${(item.desc||'').toString().replace(/</g,'&lt;')}</td>`,
-        // Para cada site em "chosen", em mesma ordem do cabeçalho da página
         ...siteColumns.map(lbl=>{
           const c = chosen.find(x=>x.label===lbl);
           return `<td>${getCellForPrint(item, c)}</td>`;
@@ -692,7 +687,6 @@ function buildPrintHTML(){
     }
   }
 
-  // CSS sem linhas/bordas; apenas dados
   const css = `
     *{ box-sizing:border-box; }
     body{ font-family:Arial, sans-serif; color:#000; background:#fff; padding:24px; }
@@ -701,10 +695,7 @@ function buildPrintHTML(){
     table{ width:100%; border-collapse:collapse; }
     thead th{ text-align:left; font-weight:700; padding:6px 0; }
     tbody td{ padding:4px 0; }
-    /* nada de bordas/linhas */
-    @media print {
-      body{ padding:0; }
-    }
+    @media print { body{ padding:0; } }
   `;
 
   return `
@@ -726,8 +717,6 @@ function printFavReport(){
   win.document.write(buildPrintHTML());
   win.document.close();
 }
-
-// Aciona impressão
 btnPrintFav.addEventListener('click', printFavReport);
 
 /* ========= init ========= */
