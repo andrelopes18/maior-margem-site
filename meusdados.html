@@ -708,68 +708,68 @@ function initExcelImport(){
       const requiredOk = !!(mapping.ean13 && mapping.descricao && mapping.preco_venda);
       if (!requiredOk){ showBanner('Mapeie EAN13, Descrição e Preço de Venda para prosseguir.','warn'); return; }
 
-      // Normaliza conforme mapeamento atual
+      // Normaliza linhas conforme mapeamento atual
       parsedRows = normalizeRows();
       if (!parsedRows.length){
         showBanner('Nenhuma linha válida após normalização (verifique EAN13/Descrição/Preço de Venda).','warn', 6000);
         return;
       }
 
-      // DEDUP por EAN13 (última ocorrência vence)
+      // Garante que temos um usuário logado antes de gravar
+      if (!sessionUser || !sessionUser.id){
+        showBanner('Sessão inválida. Faça login novamente.', 'err', 7000);
+        return;
+      }
+
+      // DEDUP por EAN13 — a última ocorrência na planilha vence
       const mapByEAN = new Map();
       for (const r of parsedRows){ mapByEAN.set(r.ean13, r); }
       const rows = Array.from(mapByEAN.values());
 
       btnInserir.disabled = true; btnPrever.disabled = true; btnLimparImport.disabled = true;
-      showBanner(`Processando ${rows.length} registro(s) conforme regra de negócio...`, 'ok', 3500);
+      showBanner('Processando ' + rows.length + ' registro(s)...', 'ok', 3000);
 
       let ok = 0, fail = 0, idx = 0, lastErr = null;
 
       for (const r of rows){
         idx++;
 
-        // Monta payload de atualização/inserção
-        // Regra: atualizar colunas disponíveis e ZERAR (null) as demais; associar ao usuário logado.
+        // Payload com regra de negócio:
+        // - Atualiza colunas disponíveis;
+        // - Zera (null) as demais conhecidas;
+        // - Define user_id do usuário logado.
         const payload = {
-          user_id: sessionUser?.id || null,
+          user_id: sessionUser.id,
           ean13: r.ean13,
-          descricao: r.descricao ?? null,
-          preco_venda: r.preco_venda ?? null,
-          // opcionais: se não vieram na planilha, zeramos
-          preco_custo: (r.preco_custo !== undefined) ? r.preco_custo : null,
-          id_produto: (r.id_produto !== undefined) ? r.id_produto : null,
-          qtde_vendida: (r.qtde_vendida !== undefined) ? r.qtde_vendida : null
+          descricao: (typeof r.descricao !== 'undefined') ? r.descricao : null,
+          preco_venda: (typeof r.preco_venda !== 'undefined') ? r.preco_venda : null,
+          preco_custo: (typeof r.preco_custo !== 'undefined') ? r.preco_custo : null,
+          id_produto: (typeof r.id_produto !== 'undefined') ? r.id_produto : null,
+          qtde_vendida: (typeof r.qtde_vendida !== 'undefined') ? r.qtde_vendida : null
         };
 
         try{
-          // Busca por EAN13 (qualquer usuário). Se houver mais de um, prioriza o do próprio usuário.
-          const { data: found, error: selErr } = await sb
-            .from('produtos_cliente')
+          // Busca por EAN13 (qualquer user). Preferimos linha do próprio user, se existir
+          const sel = await sb.from('produtos_cliente')
             .select('id,user_id')
             .eq('ean13', r.ean13)
             .limit(50);
-          if (selErr) throw selErr;
+
+          if (sel.error) throw sel.error;
 
           let targetId = null;
-          if (found && found.length){
-            const mine = sessionUser ? found.find(x => x.user_id === sessionUser.id) : null;
-            targetId = (mine ? mine.id : found[0].id);
+          if (sel.data && sel.data.length){
+            const mine = sel.data.find(function(x){ return x.user_id === sessionUser.id; });
+            targetId = mine ? mine.id : sel.data[0].id;
           }
 
           if (targetId){
-            // UPDATE (sem ON CONFLICT): evita "command cannot affect row a second time"
-            const { error: updErr } = await sb
-              .from('produtos_cliente')
-              .update(payload)
-              .eq('id', targetId);
-            if (updErr) throw updErr;
+            const upd = await sb.from('produtos_cliente').update(payload).eq('id', targetId);
+            if (upd.error) throw upd.error;
             ok++;
           } else {
-            // INSERT novo
-            const { error: insErr } = await sb
-              .from('produtos_cliente')
-              .insert([payload]);
-            if (insErr) throw insErr;
+            const ins = await sb.from('produtos_cliente').insert([payload]);
+            if (ins.error) throw ins.error;
             ok++;
           }
         }catch(err){
@@ -778,24 +778,25 @@ function initExcelImport(){
           fail++;
         }
 
-        importStats.innerHTML = `Progresso: ${idx} / ${rows.length} • Sucesso: <span class="ok">${ok}</span> • Erros: <span class="err">${fail}</span>`;
+        importStats.innerHTML = 'Progresso: ' + idx + ' / ' + rows.length +
+          ' • Sucesso: <span class=\"ok\">' + ok + '</span>' +
+          ' • Erros: <span class=\"err\">' + fail + '</span>';
       }
 
       if (fail===0){
-        showBanner(`Importação concluída: ${ok} registro(s) atualizados/inseridos.`, 'ok', 7000);
+        showBanner('Importação concluída: ' + ok + ' registro(s) inseridos/atualizados.', 'ok', 7000);
       } else {
-        const msg = lastErr?.message || 'Erro não informado';
-        showBanner(`Importação com falhas: ${ok} OK, ${fail} erro(s). Detalhe: ${msg}`, 'err', 9000);
+        const msg = (lastErr && lastErr.message) ? lastErr.message : 'Erro não informado';
+        showBanner('Importação com falhas: ' + ok + ' OK, ' + fail + ' erro(s). Detalhe: ' + msg, 'err', 9000);
       }
     }catch(e){
       console.error('Falha geral na importação:', e);
-      showBanner(`Falha geral: ${e?.message || e}`, 'err', 9000);
+      const msg = (e && e.message) ? e.message : String(e);
+      showBanner('Falha geral: ' + msg, 'err', 9000);
     }finally{
       btnInserir.disabled = false; btnPrever.disabled = false; btnLimparImport.disabled = false;
     }
-  }
-  btnInserir.addEventListener('click', insertBatches);}
-  btnInserir.addEventListener('click', insertBatches);
+  }btnInserir.addEventListener('click', insertBatches);
 }
 
 /* =========================================================
