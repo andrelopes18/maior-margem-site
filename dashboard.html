@@ -51,10 +51,15 @@
   .col-fav { width:40px; text-align:center; }
   .col-sku { width:160px; font-family: ui-monospace,Consolas,monospace; }
   .col-desc { min-width:260px; }
+  .col-param { width:140px; }
+
   .price { font-weight:700; display:inline-block; font-size:16px; vertical-align:middle; }
   @media (min-width:1200px){ .price{ font-size:18px; } }
   .price.min { color:#ff4d4f; }
   .price.max { color:#00d084; }
+  /* amarelo do “Meu preço” */
+  .price.param { color:#ffd54f; } /* amarelo suave que contrasta no dark */
+
   .muted { display:none; }
   .end-marker { text-align:center; padding:10px; color:#9aa0a6; }
 
@@ -81,19 +86,19 @@
   td.locked-cell:hover .unlock { opacity:1; pointer-events:auto; }
   td.locked-cell .unlock:hover { background:#1b1b1b; }
 
-  /* Botão do gráfico: visível e clicável */
+  /* Botão do gráfico */
   .chart-btn { margin-left:6px; background:transparent; border:0; padding:0; vertical-align:middle; cursor:pointer; }
   .chart-btn svg { width:18px; height:18px; display:block; }
   .chart-btn:hover svg rect { fill:#373737; }
   .chart-btn:active svg path { opacity:.9; }
 
-  /* Debug escondido (Ctrl+Alt+D para alternar) */
+  /* Debug escondido (Ctrl+Alt+D) */
   #dbgWrap { display:none; position:fixed; right:16px; bottom:16px; width:420px; max-height:50vh; z-index:9999;
              background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px; padding:10px; box-shadow:0 10px 30px rgba(0,0,0,.6); }
   #dbgWrap h3 { margin:0 0 8px 0; font-size:14px; color:#bfe3ff; }
   #dbg { white-space:pre-wrap; font-family: ui-monospace,Consolas,monospace; font-size:12px; color:#bfe3ff; max-height:38vh; overflow:auto; }
 
-  /* Popover gráfico (estilo simples) */
+  /* Popover gráfico */
   #chartPopover { position:fixed; z-index:9998; background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px; padding:10px; box-shadow:0 10px 30px rgba(0,0,0,.6); }
   #chartPopover header { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
   #chartPopover .close { background:transparent; border:1px solid #333; color:#ddd; padding:2px 8px; border-radius:6px; cursor:pointer; }
@@ -240,26 +245,25 @@ const countFavs   = document.getElementById('countFavs');
 const scopeGroup = document.getElementById('scopeGroup');
 
 /* ========= estado ========= */
-/* Fallback: intermediário = 6 (mantém dinâmica via billing_plans quando disponível) */
 const DEFAULT_PLAN_SITE_LIMIT = { trial:2, basico:4, intermediario:6, premium:8 };
 const VIEW = 'vw_precos_com_desc';
 const PAGE_SIZE = 200;
 const RENDER_CHUNK = 60;
 
 let chosen = [];            // [{site_id,label,view_key}]
-let unlocked = new Set();   // sites liberados
-let locked   = new Set();   // excedentes do plano
+let unlocked = new Set();
+let locked   = new Set();
 
-// Master (para ambas abas)
-let produtosMap = new Map();  // Map<ean, {sku, desc, sites:{[label]:{precoRaw,precoNum,data}}}>
-let produtosList = [];        // lista mestre (alimenta Favoritos e Geral)
+// Master
+let produtosMap = new Map();  // Map<ean, {sku, desc, paramNum?, sites:{[label]:{precoRaw,precoNum,data}}}>
+let produtosList = [];
 let serverOffset = 0;
 let serverExhausted = false;
 let fetching = false;
 
-// View da aba Geral (filtrada no cliente)
-let generalView = [];         // subconjunto filtrado de produtosList
-let itemsRendered = 0;        // progresso de render da view
+// View (cliente)
+let generalView = [];
+let itemsRendered = 0;
 
 let favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
 let loadingMore = false;
@@ -270,8 +274,6 @@ let favFirstAutoRenderDone = false;
 
 let currentEanQ = '';
 let currentDescQ = '';
-
-// escopo: força padrão "both" ao iniciar (pré-selecionado)
 let searchScope = 'both';
 
 /* ========= helpers ========= */
@@ -295,16 +297,45 @@ function computeViewKey(label){
   return NAME_TO_VIEW[key] || ('Preco' + (label||'').toString().replace(/[^A-Za-z0-9]/g,''));
 }
 
+/* ============ NOVO: carregar produtos do cliente (produtos_cliente) ============ */
+let clientPriceMap = new Map(); // Map<ean13, preco_venda>
+let clientDescMap  = new Map(); // Map<ean13, descricao>
+function parseNumberBR(n){ // aceita 12,34; 12.34; "R$ 12,34"
+  if (n==null) return null;
+  if (typeof n === 'number' && Number.isFinite(n)) return n;
+  const s = String(n).replace(/[^\d,.\-]/g,'').replace(/\.(?=\d{3}(?:\D|$))/g,'').replace(',','.');
+  const v = Number(s);
+  return Number.isFinite(v) ? v : null;
+}
+async function loadClientProducts(userId){
+  clientPriceMap.clear(); clientDescMap.clear();
+  try{
+    const { data, error } = await sb.from('produtos_cliente')
+      .select('ean13, preco_venda, descricao')
+      .eq('user_id', userId)
+      .limit(100000);
+    if (error) throw error;
+    (data||[]).forEach(r=>{
+      const e = (r.ean13||'').toString().trim();
+      if (!e) return;
+      const p = parseNumberBR(r.preco_venda);
+      if (p!=null) clientPriceMap.set(e, p);
+      if (r.descricao) clientDescMap.set(e, String(r.descricao));
+    });
+    dlog({ produtos_cliente_rows:(data||[]).length, precos:clientPriceMap.size, descricoes:clientDescMap.size });
+  }catch(e){ dlog('ERRO produtos_cliente: '+e.message); }
+}
+
 /* ========= cabeçalhos ========= */
 function buildHeaders(){
-  const base = `<th class="col-fav">★</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
+  const base = `<th class="col-fav">★</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th><th class="col-param">Meu preço</th>`;
   const ths = chosen.map(c=>{
     const lockAttr = locked.has(c.site_id) ? ' data-locked="true"' : ' data-locked="false"';
     return `<th data-siteid="${c.site_id}"${lockAttr}>${c.label}</th>`;
   }).join('');
   generalHeaderRow.innerHTML = base + ths;
 
-  const favBase = `<th class="col-fav">Ação</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
+  const favBase = `<th class="col-fav">Ação</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th><th class="col-param">Meu preço</th>`;
   document.getElementById('favHeaderRow').innerHTML = favBase + ths;
 }
 
@@ -394,17 +425,40 @@ function upsertRowsIntoProdutos(rows){
     const ean = String(r.ean||'');
     if (!produtosMap.has(ean)) produtosMap.set(ean, { sku:ean, desc:r.descricao||'', sites:{} });
     const item = produtosMap.get(ean);
+
+    // descrição da view
     if (!item.desc && r.descricao) item.desc = r.descricao;
+
+    // injeta “Meu preço” se existir em produtos_cliente
+    if (item.paramNum == null && clientPriceMap.has(ean)){
+      item.paramNum = clientPriceMap.get(ean);
+    }
+    // caso a view venha sem descrição, usa a do cliente
+    if (!item.desc && clientDescMap.has(ean)){
+      item.desc = clientDescMap.get(ean);
+    }
 
     const prev = item.sites[label];
     if (!prev || new Date(r.data) > new Date(prev.data)){
       item.sites[label] = { precoRaw:r.preco, precoNum:r.preco_num, data:r.data };
     }
   }
+
+  // garante linhas que existem só no cadastro do cliente
+  for (const [ean, preco] of clientPriceMap.entries()){
+    if (!produtosMap.has(ean)){
+      produtosMap.set(ean, { sku:ean, desc: clientDescMap.get(ean) || '', paramNum:preco, sites:{} });
+    } else {
+      const it = produtosMap.get(ean);
+      if (it.paramNum == null) it.paramNum = preco;
+      if (!it.desc && clientDescMap.has(ean)) it.desc = clientDescMap.get(ean);
+    }
+  }
+
   produtosList = Array.from(produtosMap.values());
 }
 
-/* ========= match de filtros (cliente) ========= */
+/* ========= filtros ========= */
 function matchesFilters(item){
   const qE = (currentEanQ||'').trim();
   const qD = norm(currentDescQ||'');
@@ -450,7 +504,6 @@ function createPriceCell(item, label, isLocked, minLabel, maxLabel){
       const b=document.createElement('button');
       b.className='chart-btn'; b.type='button'; b.title=isLocked?'Disponível no upgrade':'Ver histórico';
       b.innerHTML=chartButtonSVG();
-      /* >>> AQUI: passa site_id para o gráfico <<< */
       const c = chosen.find(x=>x.label===label);
       b.addEventListener('click',(ev)=>{ if(isLocked){location.href='planos.html';return;} openChartFor(ev,item.sku,label,c?.site_id,c?.view_key); });
       td.appendChild(b);
@@ -473,6 +526,19 @@ function createPriceCell(item, label, isLocked, minLabel, maxLabel){
   }
   return td;
 }
+function createParamCell(item){
+  const td=document.createElement('td');
+  if (item.paramNum!=null && Number.isFinite(item.paramNum)){
+    const span=document.createElement('span');
+    span.className='price param';
+    span.title='Meu preço (produtos_cliente.preco_venda)';
+    span.textContent = formatBRL(item.paramNum);
+    td.appendChild(span);
+  } else {
+    td.innerHTML = '<span class="muted">—</span>';
+  }
+  return td;
+}
 function renderRowInto(tr,item){
   const tdFav=document.createElement('td'); tdFav.className='col-fav';
   const chk=document.createElement('input'); chk.type='checkbox'; chk.checked=isFav(item.sku);
@@ -482,11 +548,14 @@ function renderRowInto(tr,item){
   const tdSku=document.createElement('td'); tdSku.className='col-sku'; tdSku.textContent=item.sku; tr.appendChild(tdSku);
   const tdDesc=document.createElement('td'); tdDesc.className='col-desc'; tdDesc.innerHTML=(item.desc||'').replace(/</g,'&lt;'); tr.appendChild(tdDesc);
 
+  /* NOVO: célula do "Meu preço" */
+  tr.appendChild(createParamCell(item));
+
   const {min,max}=computeMinMaxForRow(item);
   for (const c of chosen){ tr.appendChild(createPriceCell(item, c.label, locked.has(c.site_id), min, max)); }
 }
 
-/* ========= view da aba Geral (cliente) ========= */
+/* ========= view da aba Geral ========= */
 function recomputeGeneralView(){
   if (shouldFilterGeneral()){
     generalView = produtosList.filter(matchesFilters);
@@ -535,6 +604,9 @@ function renderFavs(){
 
     const tdSku=document.createElement('td'); tdSku.className='col-sku'; tdSku.textContent=item.sku; tr.appendChild(tdSku);
     const tdDesc=document.createElement('td'); tdDesc.className='col-desc'; tdDesc.innerHTML=(item.desc||'').replace(/</g,'&lt;'); tr.appendChild(tdDesc);
+
+    /* NOVO: célula do “Meu preço” */
+    tr.appendChild(createParamCell(item));
 
     const {min,max}=computeMinMaxForRow(item);
     for (const c of chosen){ tr.appendChild(createPriceCell(item, c.label, locked.has(c.site_id), min, max)); }
@@ -614,6 +686,7 @@ btnReload.addEventListener('click', async ()=>{
       }
     }catch{}
     await loadUserSelection(s.user.id, planKey);
+    await loadClientProducts(s.user.id); // <<< carrega produtos do cliente
   }
   resetAndQuery();
 });
@@ -666,7 +739,6 @@ const sparkCtx = spark.getContext('2d');
 popClose.addEventListener('click', ()=> pop.style.display='none');
 addEventListener('click', (ev)=>{ if(pop.style.display!=='none' && !pop.contains(ev.target) && !ev.target.closest('.chart-btn')) pop.style.display='none'; });
 
-/* Desenha grade e também a linha */
 function drawSparkFull(points){
   const ctx=sparkCtx, W=spark.width, H=spark.height; ctx.clearRect(0,0,W,H);
   if(!points || points.length<3){ popMsg.style.display='block'; popMsg.textContent='Histórico insuficiente (≥3 pontos).'; return; }
@@ -693,7 +765,7 @@ function drawSparkFull(points){
   ctx.fillText(new Date(xMax).toLocaleDateString('pt-BR'), W-m.r-64, H-8);
 }
 
-/* Busca histórico: 1) precos (ean+site_id) 2) fallback view (ean+view_key) */
+/* histórico: precos (ean+site_id) -> fallback view (ean+view_key) */
 async function fetchHistory(ean, siteId, viewKey){
   let pts=[];
   try{
@@ -706,7 +778,6 @@ async function fetchHistory(ean, siteId, viewKey){
   }catch(e){}
   if (pts.length>=3) return pts;
 
-  // fallback: esquema antigo por view_key no campo "site" da view
   try{
     const { data, error } = await sb.from(VIEW)
       .select('data, preco_num')
@@ -718,15 +789,11 @@ async function fetchHistory(ean, siteId, viewKey){
       pts = pts.concat(extra);
     }
   }catch(e){}
-  // ordenar e deduplicar por timestamp
-  const byTs = new Map(pts.map(p=>[p.x.getTime(), p]));
+  const byTs = new Map((pts||[]).map(p=>[p.x.getTime(), p]));
   return Array.from(byTs.values()).sort((a,b)=>a.x-b.x);
 }
-
-/* >>>>>>>>>>>>>>>> NOVO: função do botão do gráfico <<<<<<<<<<<<<<<< */
 async function openChartFor(ev, ean, label, siteId, viewKey){
   try{
-    // posiciona popover
     const x = ev.clientX || (ev.touches && ev.touches[0]?.clientX) || 120;
     const y = ev.clientY || (ev.touches && ev.touches[0]?.clientY) || 80;
     pop.style.left = Math.max(12, x - 260) + 'px';
@@ -734,7 +801,6 @@ async function openChartFor(ev, ean, label, siteId, viewKey){
     popTitle.textContent = `Histórico — ${label} • EAN ${ean}`;
     pop.style.display = 'block';
     popMsg.style.display='none';
-    // carrega dados
     const points = await fetchHistory(String(ean), Number(siteId), String(viewKey||''));
     drawSparkFull(points);
   }catch(err){
@@ -811,7 +877,6 @@ function printFavReport(){
   win.document.write(buildPrintHTMLFromFav());
   win.document.close();
 }
-btnPrintFav && btnPrintFav.addEventListener('click', printFavReport);
 
 /* ========= init ========= */
 (async function init(){
@@ -833,6 +898,7 @@ btnPrintFav && btnPrintFav.addEventListener('click', printFavReport);
   }catch(e){ document.getElementById('planChip').textContent='Plano: —'; }
 
   await loadUserSelection(session.user.id, planKey);
+  await loadClientProducts(session.user.id);  // <<< NOVO: carrega “Meu preço” do cliente
 
   // escopo UI
   initScopeRadios();
