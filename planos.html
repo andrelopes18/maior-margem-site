@@ -1,10 +1,11 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Planos</title>
 
+<!-- libs -->
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="https://unpkg.com/imask"></script>
 <script src="/config.js?v=1"></script>
@@ -17,8 +18,11 @@
   header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
   h1{margin:0;color:#00b140}
 
-  .vigencia-bar{margin:6px auto 18px;background:#0f0f0f;border:1px solid #2a2a2a;border-radius:12px;
-    padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+  /* Barra de Vigência */
+  .vigencia-bar{
+    margin:6px auto 18px;background:#0f0f0f;border:1px solid #2a2a2a;border-radius:12px;
+    padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px
+  }
   .vigencia-bar .left{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
   .vigencia-title{font-weight:700}
   .vigencia-info{color:#cfe8ff}
@@ -26,8 +30,8 @@
   .vigencia-mute{color:#9aa0a6}
 
   .grid{display:grid;gap:16px;grid-template-columns:repeat(4,1fr)}
-  @media(max-width:980px){.grid{grid-template-columns:repeat(2,1fr)}}
-  @media(max-width:560px){.grid{grid-template-columns:1fr}}
+  @media (max-width:980px){.grid{grid-template-columns:repeat(2,1fr)}}
+  @media (max-width:560px){.grid{grid-template-columns:1fr}}
   .card{background:#0f0f0f;border:1px solid #2a2a2a;border-radius:14px;padding:16px}
   .muted{color:#9aa0a6;font-size:13px}
   .price{font-size:26px;font-weight:700}
@@ -44,7 +48,7 @@
   .row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
   label{display:block;margin:4px 0 8px;color:#9aa0a6}
   input,select{width:100%;padding:12px 14px;border-radius:10px;border:1px solid #2a2a2a;background:#1a1a1a;color:#fff}
-  input[disabled], select[disabled]{background:#171717;border-color:#2a2a2a;color:#b5b5b5}
+  input[disabled],select[disabled]{background:#171717;border-color:#2a2a2a;color:#b5b5b5}
   .stack{display:flex;gap:8px;flex-wrap:wrap}
   .badge{font-size:12px;border:1px solid #2a3350;background:#0e1322;padding:4px 8px;border-radius:999px}
   .ok{color:#6ef06e}
@@ -73,6 +77,7 @@
   </div>
 </header>
 
+<!-- Barra de Vigência -->
 <div class="container vigencia-bar" id="vigenciaBar" style="display:none">
   <div class="left">
     <span class="vigencia-title">Vigência:</span>
@@ -94,7 +99,6 @@
         <div><b>Plano:</b> <span id="planoNome">—</span> • <b>Valor:</b> R$ <span id="planoValor">—</span></div>
         <div><b>Conta:</b> <span id="contaEmail">—</span></div>
         <div class="muted" id="vigenciaInfo" style="margin-top:6px;display:none"></div>
-        <div class="muted" id="prorataInfo" style="margin-top:6px;display:none"></div>
       </div>
       <div class="stack" id="badges"></div>
     </div>
@@ -151,6 +155,10 @@
     <div class="stack" style="justify-content:space-between;align-items:center">
       <div class="stack">
         <button id="btnUnlock" class="btn">Desbloquear campos</button>
+        <button id="btnHealthSubs" class="btn ghost diag-only">/health da assinatura</button>
+        <button id="btnInspectToken" class="btn ghost diag-only">Inspecionar token</button>
+        <button id="btnTestCors" class="btn ghost diag-only">Testar CORS/URL</button>
+        <button id="btnTestPost" class="btn ghost diag-only">Testar POST assíncrono</button>
       </div>
       <button id="btnPagar" class="btn" disabled>Pagar</button>
     </div>
@@ -158,6 +166,11 @@
     <div class="diag-only">
       <div class="sep"></div><h3>Logs</h3><div id="logs" class="log"></div>
       <div class="sep"></div><h3>Resposta</h3><div id="resp" class="log"></div>
+      <div style="margin-top:6px">
+        <small class="mono">EDGE_FUNCTION_NAME: <span id="fnName">—</span></small> ·
+        <small class="mono">FUNCTIONS_URL: <span id="fnUrl">—</span></small> ·
+        <small class="mono">MP_PUBLIC_KEY is TEST?: <span id="pkIsTest">—</span></small>
+      </div>
     </div>
   </section>
 </main>
@@ -165,33 +178,74 @@
 <button id="btnDiag" title="Modo diagnóstico (mostrar/ocultar)">⚙︎</button>
 
 <script>
-const CFG = window.CONFIG||{};
+/* ====== CONFIG ====== */
+const CFG = window.CONFIG || {};
 let FUNCTIONS_URL = CFG.FUNCTIONS_URL;
-if (!FUNCTIONS_URL) { try { const ref = new URL(CFG.SUPABASE_URL).host.split(".")[0]; FUNCTIONS_URL = `https://${ref}.functions.supabase.co`; } catch {} }
-const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+if (!FUNCTIONS_URL) {
+  try {
+    const ref = new URL(CFG.SUPABASE_URL).host.split(".")[0];
+    FUNCTIONS_URL = `https://${ref}.functions.supabase.co`;
+  } catch {}
+}
+const sb = supabase.createClient(
+  CFG.SUPABASE_URL,
+  CFG.SUPABASE_ANON_KEY,
+  { auth:{ persistSession:true, autoRefreshToken:true, detectSessionInUrl:true } }
+);
 
-const $ = s=>document.querySelector(s);
-const planChip=$('#planChip'), timeChip=$('#timeChip'), pendingChip=$('#pendingChip');
-const cardsEl=$('#cards'); const checkoutEl=$('#checkout'), banner=$('#banner'), logs=$('#logs'), resp=$('#resp');
-const vigenciaBar=$('#vigenciaBar'), vigenciaTexto=$('#vigenciaTexto'), vigenciaObs=$('#vigenciaObs');
-const vigenciaInfo=$('#vigenciaInfo'), prorataInfo=$('#prorataInfo');
+/* ====== helpers ====== */
+const $ = (s)=>document.querySelector(s);
+const planChip = $('#planChip'), timeChip = $('#timeChip'), pendingChip = $('#pendingChip');
+const cardsEl = $('#cards');
+const checkoutEl = $('#checkout'), banner = $('#banner'), logs = $('#logs'), resp = $('#resp');
+const vigenciaInfo = $('#vigenciaInfo');
+const vigenciaBar = $('#vigenciaBar'), vigenciaTexto = $('#vigenciaTexto'), vigenciaObs = $('#vigenciaObs');
 
-function moneyBRL(cents){return (Number(cents||0)/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
+function money(c){return (Number(c||0)/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
 function label(k){return (CFG.PLAN_LABELS||{})[k]||k.charAt(0).toUpperCase()+k.slice(1)}
-function showBanner(text,type='ok',ms=4200){ banner.textContent=text; banner.className='banner '+(type==='warn'?'warn':type==='err'?'err':'ok'); banner.style.display='block'; if(ms>0) setTimeout(()=>banner.style.display='none',ms); }
+function addBadge(text, ok=false){ const b=document.createElement('span'); b.className='badge '+(ok?'ok':''); b.textContent=text; $('#badges')?.appendChild(b); }
+function showBanner(text,type='ok',autohideMs=4200){
+  banner.textContent=text;
+  banner.className='banner '+(type==='warn'?'warn':type==='err'?'err':'ok');
+  banner.style.display='block';
+  if(autohideMs>0) setTimeout(()=>{ banner.style.display='none'; }, autohideMs);
+}
+function log(...args){ if(!logs) return; const t=args.map(a=>{try{return typeof a==='string'?a:JSON.stringify(a,null,2)}catch{return String(a)}}).join(' '); logs.textContent+=(logs.textContent?'\n':'')+t; logs.scrollTop=logs.scrollHeight; }
+function showResp(o){ if(!resp) return; try{resp.textContent=JSON.stringify(o,null,2)}catch{resp.textContent=String(o)} }
+function digitsOnly(s){return (s||'').replace(/\D+/g,'')}
+function detectBrand(num){const n=digitsOnly(num); if(n.startsWith('4'))return'visa'; if(n.startsWith('5'))return'master'; if(n.startsWith('34')||n.startsWith('37'))return'amex';}
 function fmtDate(d){try{const dt=new Date(d);return dt.toLocaleDateString('pt-BR')}catch{return'—'}}
-function daysLeft(expiresAt){ if(!expiresAt) return 0; const now=new Date(); const end=new Date(expiresAt); const diff=Math.ceil((end-now)/86400000); return diff>0?diff:0; }
+function daysLeft(expiresAt){ if(!expiresAt) return 0; const now=new Date(); const end=new Date(expiresAt); const diff=Math.ceil((end-now)/(1000*60*60*24)); return diff>0?diff:0; }
 
-IMask($('#cardExp'), { mask:'00/0000' }); IMask($('#cardNumber'), { mask:'0000 0000 0000 0000' }); IMask($('#cardCVV'), { mask:'000[0]' });
+/* máscaras */
+IMask($('#cardExp'), { mask:'00/0000' });
+IMask($('#cardNumber'), { mask:'0000 0000 0000 0000' });
+IMask($('#cardCVV'), { mask:'000[0]' });
 
+/* estado */
 let user=null, currentPlanKey='trial', plans=[];
+let CURRENT_PLAN=null, LAST_CARD_TOKEN=null, LAST_TOKEN_TS=0;
 let PLAN_EXPIRES_AT=null, PENDING_PLAN=null;
-let CURRENT_PLAN=null, QUOTE=null;
 
-document.getElementById('btnSair').onclick=async()=>{ await sb.auth.signOut(); location.href=CFG.SITE_URL||'index.html'; };
-document.getElementById('btnDiag').onclick=()=>{ document.body.classList.toggle('show-diag'); };
-document.getElementById('btnUnlock').onclick=()=>{ for(const id of ["cardholder","payerEmail","payerCPF","installments","cardNumber","cardExp","cardCVV"]) document.getElementById(id).disabled=false; showBanner('Campos desbloqueados.','ok'); };
+/* preapproval (se usar fluxo de assinatura com checkout preapproval) */
+const PREAPPROVAL_BY_PLAN = {
+  premium:       "65aa0a173adc4eb49ce3927a0211dd9c",
+  intermediario: "e5065c5f5f5447fa94d99bf9ffbfdad2",
+  basico:        "6a0f98fb23ec4fa7a9caeb72d5dd1e07",
+};
+function subscriptionCheckoutUrl(planKey){
+  const id = PREAPPROVAL_BY_PLAN[planKey?.toLowerCase?.()]||"";
+  return id ? `https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=${id}` : "#";
+}
 
+/* eventos básicos */
+document.getElementById('btnSair').onclick = async()=>{ await sb.auth.signOut(); location.href = CFG.SITE_URL||'index.html'; };
+document.getElementById('btnDiag').onclick = ()=>{ document.body.classList.toggle('show-diag'); };
+
+/* aplicar downgrade pendente se venceu (silencioso) */
+async function applyPendingIfDue(){ try{ await sb.rpc('apply_pending_plan'); }catch(e){ log('apply_pending_plan:', e.message||e); } }
+
+/* UI vigência */
 function updateVigenciaUI(){
   planChip.textContent = `Plano: ${label(currentPlanKey)}`;
   const dleft=daysLeft(PLAN_EXPIRES_AT);
@@ -202,9 +256,9 @@ function updateVigenciaUI(){
 
   if(PLAN_EXPIRES_AT){
     vigenciaBar.style.display='flex';
-    vigenciaTexto.textContent=`até ${fmtDate(PLAN_EXPIRES_AT)} • faltam ${dleft} dia${dleft>1?'s':''}`;
-    vigenciaObs.textContent=PENDING_PLAN?`Downgrade agendado para ${label(PENDING_PLAN)}.`:'';
-    vigenciaObs.className=PENDING_PLAN?'vigencia-warn':'vigencia-mute';
+    vigenciaTexto.textContent = `até ${fmtDate(PLAN_EXPIRES_AT)} • faltam ${dleft} dia${dleft>1?'s':''}`;
+    vigenciaObs.textContent = PENDING_PLAN ? `Downgrade agendado para ${label(PENDING_PLAN)}.` : '';
+    vigenciaObs.className = PENDING_PLAN ? 'vigencia-warn' : 'vigencia-mute';
   }else{
     vigenciaBar.style.display='flex';
     vigenciaTexto.textContent='sem vigência ativa';
@@ -213,110 +267,196 @@ function updateVigenciaUI(){
   }
 }
 
+/* recarregar perfil */
 async function reloadProfile(){
-  const prof=await sb.from('profiles').select('plan, plan_expires_at, pending_plan').maybeSingle();
-  if(prof.error) { console.warn(prof.error); return; }
-  currentPlanKey=prof.data?.plan||'trial';
-  PLAN_EXPIRES_AT=prof.data?.plan_expires_at||null;
-  PENDING_PLAN=prof.data?.pending_plan||null;
+  const r = await sb.from('profiles').select('plan, plan_expires_at, pending_plan').eq('id', user.id).maybeSingle();
+  if(r.error){ log('reloadProfile:', r.error); return; }
+  currentPlanKey = r.data?.plan||'trial';
+  PLAN_EXPIRES_AT = r.data?.plan_expires_at||null;
+  PENDING_PLAN = r.data?.pending_plan||null;
   updateVigenciaUI();
 }
 
+/* init */
 (async function init(){
-  const {data:{session}}=await sb.auth.getSession(); if(!session){ location.href=CFG.SITE_URL||'index.html'; return; }
+  await applyPendingIfDue();
+  const { data:{ session } } = await sb.auth.getSession(); if(!session){ location.href=CFG.SITE_URL||'index.html'; return; }
   user=session.user;
+
   await reloadProfile();
 
-  const bp=await sb.from('billing_plans').select('id,name,plan_key,price_cents,interval_unit,interval_length,active,sort_order').eq('active',true).order('sort_order',{ascending:true});
-  plans=bp.data||[];
+  const bp = await sb.from('billing_plans')
+    .select('id,name,plan_key,price_cents,interval_unit,interval_length,active,sort_order')
+    .eq('active', true).order('sort_order', { ascending:true });
+  if(bp.error){ showBanner('Erro ao ler billing_plans','err',8000); log('billing_plans:', bp.error); }
+  plans = bp.data||[];
   renderCards();
 
-  $('#contaEmail').textContent=user.email||'—';
-  $('#payerEmail').value=user.email||'';
+  $('#fnName').textContent = CFG.EDGE_FUNCTION_NAME || '—';
+  $('#fnUrl').textContent  = FUNCTIONS_URL || '(não deduzida)';
+  $('#contaEmail').textContent = user.email || '—';
+  $('#payerEmail').value = user.email || '';
+  addBadge('Sessão: ON', true);
+  addBadge('MP_PUBLIC_KEY: ' + (CFG.MP_PUBLIC_KEY?.slice(0,5)||'—'));
+  document.getElementById('pkIsTest').textContent = CFG.MP_PUBLIC_KEY?.startsWith('TEST-') ? 'SIM' : 'NÃO';
 })();
 
+/* cards */
 function renderCards(){
   cardsEl.innerHTML='';
   const order=['trial','basico','intermediario','premium'];
+  const dleft = daysLeft(PLAN_EXPIRES_AT);
+
   for(const key of order){
-    const p=plans.find(x=>String(x.plan_key).toLowerCase()===key); if(!p) continue;
+    const p = plans.find(x=>String(x.plan_key).toLowerCase()===key); if(!p) continue;
     const el=document.createElement('div'); el.className='card';
-    el.innerHTML=`<h3>${p.name||label(key)}</h3>
-      <div class="price">${moneyBRL(p.price_cents||0)}</div>
+    el.innerHTML = `
+      <h3>${p.name||label(key)}</h3>
+      <div class="price">${money(p.price_cents||0)}</div>
       <div class="muted">Cobrança: ${p.interval_length||1}× / ${p.interval_unit||'month'}</div>
-      <div class="muted">${key==='trial'?'Plano gratuito para conhecer a plataforma.':'Acesso aos recursos do plano selecionado.'}</div>`;
-    const isCurrent=(key===String(currentPlanKey).toLowerCase());
+      <div class="muted">${key==='trial'?'Plano gratuito para conhecer a plataforma.':'Acesso aos recursos do plano selecionado.'}</div>
+    `;
+    const isCurrent = (key===String(currentPlanKey).toLowerCase());
     const btn=document.createElement('button');
-    btn.className=isCurrent?'btn ghost':'btn';
-    btn.textContent=isCurrent?'Plano atual':'Escolher';
-    btn.disabled=isCurrent;
-    btn.onclick=()=>openCheckout(p);
-    el.appendChild(btn);
-    cardsEl.appendChild(el);
+
+    if(key==='trial' && !isCurrent){
+      if(dleft>0){ btn.className='btn'; btn.textContent='Agendar downgrade p/ Trial'; btn.onclick=()=>scheduleTrialDowngrade(); }
+      else{ btn.className='btn'; btn.textContent='Mudar para Trial agora'; btn.onclick=()=>switchToTrialImmediately(); }
+    }else{
+      btn.className = isCurrent ? 'btn ghost' : 'btn';
+      btn.textContent = isCurrent ? 'Plano atual' : 'Escolher';
+      btn.disabled = isCurrent;
+      btn.onclick = ()=>openCheckout(p);
+    }
+
+    el.appendChild(btn); cardsEl.appendChild(el);
   }
 }
 
-async function openCheckout(plan){
-  CURRENT_PLAN=plan;
-  QUOTE=null;
-  $('#planoNome').textContent=plan?.name||plan?.plan_key||'—';
-  $('#planoValor').textContent=(Number(plan?.price_cents||0)/100).toFixed(2);
+/* Trial */
+async function scheduleTrialDowngrade(){
+  try{
+    let row=null, ok=false;
+    try{
+      const { data, error } = await sb.rpc('schedule_downgrade_to_trial');
+      if(!error && data){ ok=true; row=data; }
+      else if(error) log('schedule_downgrade_to_trial:', error);
+    }catch(e){ log('rpc schedule_downgrade_to_trial threw:', e.message||e); }
 
-  // Quote pró-rata
-  const q = await sb.rpc('quote_plan_change', { p_user_id: user.id, p_new_plan: plan.plan_key });
-  if(q.error){ showBanner('Erro ao calcular pró-rata.','err',6000); console.error(q.error); return; }
-  QUOTE = q.data;
+    if(!ok){
+      const up = await sb.from('profiles')
+        .update({ pending_plan:'trial', pending_at:new Date().toISOString(), updated_at:new Date().toISOString() })
+        .eq('id', user.id)
+        .select('plan_expires_at, pending_plan')
+        .maybeSingle();
+      if(up.error) throw up.error;
+      row = up.data;
+    }
+
+    PENDING_PLAN='trial';
+    PLAN_EXPIRES_AT = row?.plan_expires_at || PLAN_EXPIRES_AT;
+
+    const dleft = daysLeft(PLAN_EXPIRES_AT);
+    showBanner(`Downgrade para Trial agendado. Você manterá o plano atual por ${dleft} dia${dleft>1?'s':''} (até ${fmtDate(PLAN_EXPIRES_AT)}).`, 'ok', 6000);
+    updateVigenciaUI(); renderCards();
+  }catch(e){
+    showBanner('Não foi possível agendar o downgrade para Trial.','err');
+    log('scheduleTrialDowngrade fail:', e.message||e);
+  }
+}
+
+async function switchToTrialImmediately(){
+  try{
+    const dleft=daysLeft(PLAN_EXPIRES_AT);
+    if(dleft>0){ showBanner('Você ainda tem período pago ativo. Agende o downgrade.', 'warn'); return; }
+    const { data, error } = await sb.rpc('switch_to_trial_if_expired');
+    if(error){ showBanner('Não foi possível mudar agora (vigência ativa).','warn'); log('switch_to_trial_if_expired:', error); return; }
+    currentPlanKey = data?.plan || 'trial';
+    PLAN_EXPIRES_AT = data?.plan_expires_at || null;
+    PENDING_PLAN = data?.pending_plan || null;
+    updateVigenciaUI(); renderCards();
+    showBanner('Plano alterado para Trial.','ok');
+  }catch(e){
+    showBanner('Falha ao mudar para Trial.','err');
+    log('switchToTrialImmediately fail:', e.message||e);
+  }
+}
+
+/* checkout */
+function openCheckout(plan){
+  CURRENT_PLAN=plan;
+  $('#planoNome').textContent = plan?.name||plan?.plan_key||'—';
+  $('#planoValor').textContent = (Number(plan?.price_cents||0)/100).toFixed(2);
 
   const dleft=daysLeft(PLAN_EXPIRES_AT);
   if(dleft>0){
     vigenciaInfo.style.display='block';
-    vigenciaInfo.textContent=`Vigência atual: faltam ${dleft} dia${dleft>1?'s':''} • até ${fmtDate(PLAN_EXPIRES_AT)}.`;
+    vigenciaInfo.textContent=`Sua vigência atual termina em ${dleft} dia${dleft>1?'s':''} (até ${fmtDate(PLAN_EXPIRES_AT)}). A nova vigência será somada ao maior entre hoje e o fim atual.`;
   }else{
     vigenciaInfo.style.display='none';
   }
 
-  // Mostrar pró-rata
-  prorataInfo.style.display='block';
-  if(QUOTE.action==='upgrade_now'){
-    const cred = moneyBRL(QUOTE.credit_cents||0);
-    const price = moneyBRL(QUOTE.new_price_cents||0);
-    const due = moneyBRL(QUOTE.amount_due_cents||0);
-    prorataInfo.textContent = `Upgrade imediato: preço do novo plano ${price} − crédito pró-rata ${cred} = total a pagar ${due}. Nova vigência: ${fmtDate(QUOTE.effective_from)} até ${fmtDate(QUOTE.new_expires_at)}.`;
-    document.getElementById('btnPagar').disabled = (Number(QUOTE.amount_due_cents||0)===0);
-    if(Number(QUOTE.amount_due_cents||0)===0){
-      showBanner('Sem cobrança: aplicando troca agora…','ok',2500);
-      // aplica direto sem pagar
-      const ap = await sb.rpc('apply_plan_change_after_payment', { p_user_id: user.id, p_new_plan: plan.plan_key });
-      if(ap.error){ showBanner('Falha ao aplicar troca.','err'); return; }
-      await reloadProfile();
-      showBanner('Plano alterado com sucesso.','ok');
-      renderCards();
-      return;
-    }
-  }else if(QUOTE.action==='schedule_downgrade'){
-    prorataInfo.textContent = `Downgrade agendado para ${fmtDate(QUOTE.effective_from)}. Você manterá o plano atual até o fim da vigência. A partir dessa data, inicia 1 ciclo do novo plano.`;
-    document.getElementById('btnPagar').disabled = true;
-    // aplica o agendamento agora (sem pagamento)
-    const ap = await sb.rpc('apply_plan_change_after_payment', { p_user_id: user.id, p_new_plan: plan.plan_key });
-    if(ap.error){ showBanner('Falha ao agendar downgrade.','err'); return; }
-    await reloadProfile(); renderCards();
-    showBanner('Downgrade agendado com sucesso.','ok');
-  }else{
-    prorataInfo.textContent = `Nenhuma alteração necessária.`;
-    document.getElementById('btnPagar').disabled = true;
-  }
-
   checkoutEl.style.display='block';
-  checkoutEl.scrollIntoView({behavior:'smooth',block:'start'});
+  document.getElementById('btnPagar').disabled=false;
+  checkoutEl.scrollIntoView({behavior:'smooth', block:'start'});
 }
 
-// ====== Pagamento (apenas quando upgrade_now com amount_due_cents > 0) ======
-function digitsOnly(s){return (s||'').replace(/\D+/g,"");}
-function detectBrand(num){const n=digitsOnly(num); if(n.startsWith('4'))return'visa'; if(n.startsWith('5'))return'master'; if(n.startsWith('34')||n.startsWith('37'))return'amex';}
+/* headers */
+function buildHeaders(sessionAccessToken){
+  const h={ "Content-Type":"application/json", "apikey":CFG.SUPABASE_ANON_KEY, "x-supabase-url":CFG.SUPABASE_URL, "x-supabase-anon-key":CFG.SUPABASE_ANON_KEY };
+  if(sessionAccessToken) h["Authorization"]=`Bearer ${sessionAccessToken}`;
+  return h;
+}
+
+/* desbloquear campos teste */
+document.getElementById('btnUnlock').onclick=()=>{
+  for(const id of ["cardholder","payerEmail","payerCPF","installments","cardNumber","cardExp","cardCVV"])
+    document.getElementById(id).disabled=false;
+  showBanner('Campos desbloqueados.','ok');
+};
+
+/* diagnóstico opcional */
+async function inspectToken(tokenId){
+  const { data:{ session } } = await sb.auth.getSession();
+  const r = await fetch(`${FUNCTIONS_URL}/mercado-pago-subscription/token/inspect`,{
+    method:"POST",headers:buildHeaders(session?.access_token),
+    body:JSON.stringify({ card_token:tokenId })
+  });
+  const txt = await r.text(); let j=null; try{ j=JSON.parse(txt) }catch{ j={raw:txt} }
+  return { status:r.status, data:j };
+}
+document.getElementById('btnHealthSubs')?.addEventListener('click', async()=>{
+  if(logs) logs.textContent=""; if(resp) resp.textContent="";
+  try{ const r=await fetch(`${FUNCTIONS_URL}/mercado-pago-subscription/health`,{method:"GET"});
+    const t=await r.text(); let j=null; try{ j=JSON.parse(t)}catch{ j={raw:t} } showResp({health_subscription:j});
+  }catch(e){ showResp({error_health:String(e)}); }
+});
+document.getElementById('btnTestCors')?.addEventListener('click', async()=>{
+  if(logs) logs.textContent=""; if(resp) resp.textContent="";
+  const base=`${FUNCTIONS_URL}/mercado-pago-subscription/subscription/create`;
+  try{
+    const r1=await fetch(`${FUNCTIONS_URL}/mercado-pago-subscription/health`,{method:"GET"}); log("GET /health:", r1.status);
+    const r2=await fetch(base,{method:"OPTIONS"}); log("OPTIONS:", r2.status, "ACAO:", r2.headers.get("access-control-allow-origin"));
+  }catch(e){ showResp({test_cors_error:String(e)}); showBanner("Falha no teste CORS/URL.","err"); }
+});
+document.getElementById('btnTestPost')?.addEventListener('click', async()=>{
+  if(logs) logs.textContent=""; if(resp) resp.textContent="";
+  const { data:{ session } } = await sb.auth.getSession(); if(!session){ showBanner("Sem sessão.","warn"); return; }
+  try{
+    const r=await fetch(`${FUNCTIONS_URL}/mercado-pago-subscription/subscription/create`,{
+      method:"POST", headers:buildHeaders(session.access_token),
+      body:JSON.stringify({ payer_email:"x@y.com", preapproval_plan_id:"PLN_FAKE", card_token:"FAKE", external_reference:`${session.user.id}|premium` })
+    });
+    const t=await r.text(); let j=null; try{ j=JSON.parse(t)}catch{ j={raw:t} } showResp({status:r.status, data:j});
+  }catch(e){ showResp({post_error:String(e)}); showBanner("Falha de rede no POST.","err"); }
+});
+
+/* pagamento (1x + assinatura) */
 document.getElementById('btnPagar').onclick = async ()=>{
-  if(!CURRENT_PLAN||!QUOTE||QUOTE.action!=='upgrade_now'){ showBanner('Nada a pagar.','warn'); return; }
-  const amountCents = Number(QUOTE.amount_due_cents||0);
-  if(amountCents<=0){ showBanner('Nada a pagar.','warn'); return; }
+  if(logs) logs.textContent=""; if(resp) resp.textContent="";
+  if(!CURRENT_PLAN){ showBanner('Escolha um plano antes de pagar.','warn'); return; }
+  const cents = Number(CURRENT_PLAN.price_cents||0);
+  if(!cents || cents<=0){ showBanner('Este plano não requer pagamento. Use o botão de Trial.','warn'); return; }
 
   try{
     const [mm,yyyy]=($('#cardExp').value||"").split("/");
@@ -330,37 +470,83 @@ document.getElementById('btnPagar').onclick = async ()=>{
     const tokRes=await fetch("https://api.mercadopago.com/v1/card_tokens?public_key="+encodeURIComponent(CFG.MP_PUBLIC_KEY),{
       method:"POST",headers:{ "Content-Type":"application/json" },body:JSON.stringify(payloadToken)
     });
-    const tok=await tokRes.json();
-    if(!tokRes.ok || !tok?.id){ showBanner('Falha ao tokenizar cartão.','err'); return; }
+    const tokTxt=await tokRes.text(); let token=null; try{ token=tokTxt?JSON.parse(tokTxt):null }catch{ token={raw:tokTxt} }
+    if(!tokRes.ok || !token?.id){ showResp({status:tokRes.status, data:token}); showBanner("Falha ao tokenizar cartão.","err"); return; }
+    LAST_CARD_TOKEN=token.id; LAST_TOKEN_TS=Date.now();
 
-    const { data:{ session } } = await sb.auth.getSession();
-    const body={
-      mode:"card",
-      plan_key:CURRENT_PLAN.plan_key,
-      amount_cents:amountCents,  // <<< cobrando apenas a DIFERENÇA
-      card_token:tok.id,
-      payer:{ name:$('#cardholder').value.trim(), email:$('#payerEmail').value.trim(), cpf:$('#payerCPF').value.trim() },
-      installments:Number($('#installments').value||1),
-      payment_method_id:detectBrand($('#cardNumber').value)
+    const { data:{ session } } = await sb.auth.getSession(); if(!session){ showBanner("Faça login antes de pagar.","warn"); return; }
+    const isRecurring = document.getElementById('recorrente').checked;
+
+    const trySubscription = async (cardToken)=>{
+      const planKey=String(CURRENT_PLAN.plan_key||"").toLowerCase();
+      const preapproval_plan_id = PREAPPROVAL_BY_PLAN[planKey];
+      if(!preapproval_plan_id){ return { ok:false, status:400, data:{ error:"missing_preapproval_plan_id", note:`Cadastre o ID para o plano ${planKey}.` } }; }
+      const bodyBase={ preapproval_plan_id, external_reference:`${session.user.id}|${planKey}`, card_token:cardToken, payer_email:$('#payerEmail').value.trim() };
+      const r=await fetch(`${FUNCTIONS_URL}/mercado-pago-subscription/subscription/create`,{
+        method:"POST", headers:buildHeaders(session.access_token), body:JSON.stringify(bodyBase)
+      });
+      const t=await r.text(); let j=null; try{ j=JSON.parse(t)}catch{ j={raw:t} };
+      return { ok:r.ok, status:r.status, data:j, sent:bodyBase };
     };
-    const r=await fetch(`${FUNCTIONS_URL}/${CFG.EDGE_FUNCTION_NAME}`,{
-      method:"POST", headers:{
-        "Content-Type":"application/json",
-        "Authorization":"Bearer "+session.access_token,
-        "apikey":CFG.SUPABASE_ANON_KEY
-      }, body:JSON.stringify(body)
-    });
-    const j=await r.json();
-    if(!(r.ok && (j?.data?.ok||j?.ok))){ showBanner('Pagamento não aprovado.','err'); return; }
 
-    // aplica a troca agora (upgrade_now)
-    const ap = await sb.rpc('apply_plan_change_after_payment', { p_user_id: user.id, p_new_plan: CURRENT_PLAN.plan_key });
-    if(ap.error){ showBanner('Falha ao aplicar troca após pagamento.','err'); return; }
-    await reloadProfile(); renderCards();
-    showBanner('Plano alterado com sucesso!','ok',4000);
+    if(isRecurring){
+      const age=(Date.now()-LAST_TOKEN_TS)/1000;
+      if(age>60){
+        showBanner("Token antigo, gerando novamente…","warn");
+        const rTok=await fetch("https://api.mercadopago.com/v1/card_tokens?public_key="+encodeURIComponent(CFG.MP_PUBLIC_KEY),{method:"POST",headers:{ "Content-Type":"application/json" },body:JSON.stringify(payloadToken)});
+        const tTok=await rTok.text(); let jTok=null; try{ jTok=tTok?JSON.parse(tTok):null }catch{ jTok={raw:tTok} }
+        if(!rTok.ok || !jTok?.id){ showResp({status:rTok.status, data:jTok}); showBanner("Falha ao tokenizar novamente.","err"); return; }
+        LAST_CARD_TOKEN=jTok.id; LAST_TOKEN_TS=Date.now();
+      }
+
+      const diag = await inspectToken(LAST_CARD_TOKEN);
+      if(!(diag?.status===200 && diag?.data?.ok)){
+        const rTok2=await fetch("https://api.mercadopago.com/v1/card_tokens?public_key="+encodeURIComponent(CFG.MP_PUBLIC_KEY),{method:"POST",headers:{ "Content-Type":"application/json" },body:JSON.stringify(payloadToken)});
+        const tTok2=await rTok2.text(); let jTok2=null; try{ jTok2=tTok2?JSON.parse(tTok2):null }catch{ jTok2={raw:tTok2} }
+        if(!rTok2.ok || !jTok2?.id){ showResp({status:rTok2.status, data:jTok2}); showBanner("Falha ao atualizar token.","err"); return; }
+        LAST_CARD_TOKEN=jTok2.id; LAST_TOKEN_TS=Date.now();
+      }
+
+      const r1=await trySubscription(LAST_CARD_TOKEN);
+      showResp({ sub_try_1:r1 });
+      if(r1.ok && (r1.data?.ok)){
+        /* >>> ATIVA A VIGÊNCIA AGORA <<< */
+        await sb.rpc('activate_plan_for_user', { p_user_id:user.id, p_plan: CURRENT_PLAN.plan_key });
+        await reloadProfile();
+        showBanner("Assinatura criada e vigência ativada! Redirecionando…","ok",0);
+        setTimeout(()=>{ window.location.href="dashboard.html"; }, 1000);
+      }else{
+        showBanner("Não foi possível criar a assinatura.","err");
+      }
+    }else{
+      /* pagamento 1x: chame sua edge function que captura o pagamento */
+      const body={
+        mode:"card",
+        plan_key:CURRENT_PLAN.plan_key,
+        amount_cents:cents,
+        card_token:LAST_CARD_TOKEN,
+        payer:{ name:$('#cardholder').value.trim(), email:$('#payerEmail').value.trim(), cpf:$('#payerCPF').value.trim() },
+        installments:Number($('#installments').value||1),
+        payment_method_id:detectBrand($('#cardNumber').value)
+      };
+      const r=await fetch(`${FUNCTIONS_URL}/${CFG.EDGE_FUNCTION_NAME}`,{
+        method:"POST",headers:buildHeaders((await sb.auth.getSession()).data.session.access_token),
+        body:JSON.stringify(body)
+      });
+      const t=await r.text(); let j=null; try{ j=JSON.parse(t)}catch{ j={raw:t} }; showResp({status:r.status, data:j});
+      if(r.ok && (j?.data?.ok || j?.ok)){
+        /* >>> ATIVA A VIGÊNCIA AGORA <<< */
+        await sb.rpc('activate_plan_for_user', { p_user_id:user.id, p_plan: CURRENT_PLAN.plan_key });
+        await reloadProfile();
+        showBanner("Pagamento concluído e vigência ativada! Redirecionando…","ok",0);
+        setTimeout(()=>{ window.location.href="dashboard.html"; }, 1000);
+      }else{
+        showBanner("Não foi possível concluir o pagamento.","err");
+      }
+    }
   }catch(e){
-    console.error(e);
-    showBanner('Erro inesperado no pagamento.','err');
+    showResp({ name:e.name, message:e.message, stack:e.stack });
+    showBanner("Erro inesperado no pagamento.","err");
   }
 };
 </script>
