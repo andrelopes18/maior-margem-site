@@ -708,23 +708,23 @@ function initExcelImport(){
       const requiredOk = !!(mapping.ean13 && mapping.descricao && mapping.preco_venda);
       if (!requiredOk){ showBanner('Mapeie EAN13, Descrição e Preço de Venda para prosseguir.','warn'); return; }
 
-      // Normaliza linhas conforme mapeamento atual
+      // Normaliza conforme mapeamento atual
       parsedRows = normalizeRows();
       if (!parsedRows.length){
         showBanner('Nenhuma linha válida após normalização (verifique EAN13/Descrição/Preço de Venda).','warn', 6000);
         return;
       }
 
-      // Garante que temos um usuário logado antes de gravar
+      // Garante sessão válida
       if (!sessionUser || !sessionUser.id){
         showBanner('Sessão inválida. Faça login novamente.', 'err', 7000);
         return;
       }
 
-      // DEDUP por EAN13 — a última ocorrência na planilha vence
-      const mapByEAN = new Map();
-      for (const r of parsedRows){ mapByEAN.set(r.ean13, r); }
-      const rows = Array.from(mapByEAN.values());
+      // DEDUP por EAN13 — última ocorrência vence
+      const byEan = new Map();
+      for (const r of parsedRows){ byEan.set(r.ean13, r); }
+      const rows = Array.from(byEan.values());
 
       btnInserir.disabled = true; btnPrever.disabled = true; btnLimparImport.disabled = true;
       showBanner('Processando ' + rows.length + ' registro(s)...', 'ok', 3000);
@@ -734,10 +734,10 @@ function initExcelImport(){
       for (const r of rows){
         idx++;
 
-        // Payload com regra de negócio:
+        // Payload conforme regra do negócio:
         // - Atualiza colunas disponíveis;
-        // - Zera (null) as demais conhecidas;
-        // - Define user_id do usuário logado.
+        // - Zera (null) o restante conhecido;
+        // - SEMPRE grava a coluna do usuário como 'user_id'.
         const payload = {
           user_id: sessionUser.id,
           ean13: r.ean13,
@@ -749,26 +749,27 @@ function initExcelImport(){
         };
 
         try{
-          // Busca por EAN13 (qualquer user). Preferimos linha do próprio user, se existir
+          // Verifica existência por EAN13 (qualquer usuário)
           const sel = await sb.from('produtos_cliente')
-            .select('id,user_id')
+            .select('ean13') // não dependemos de coluna 'id'
             .eq('ean13', r.ean13)
-            .limit(50);
+            .limit(1);
 
           if (sel.error) throw sel.error;
 
-          let targetId = null;
           if (sel.data && sel.data.length){
-            const mine = sel.data.find(function(x){ return x.user_id === sessionUser.id; });
-            targetId = mine ? mine.id : sel.data[0].id;
-          }
-
-          if (targetId){
-            const upd = await sb.from('produtos_cliente').update(payload).eq('id', targetId);
+            // UPDATE por EAN13
+            const upd = await sb
+              .from('produtos_cliente')
+              .update(payload)
+              .eq('ean13', r.ean13);
             if (upd.error) throw upd.error;
             ok++;
           } else {
-            const ins = await sb.from('produtos_cliente').insert([payload]);
+            // INSERT novo
+            const ins = await sb
+              .from('produtos_cliente')
+              .insert([payload]);
             if (ins.error) throw ins.error;
             ok++;
           }
