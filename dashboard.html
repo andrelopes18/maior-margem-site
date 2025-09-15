@@ -31,7 +31,7 @@
   .filters { display:grid; grid-template-columns: 1fr 1fr auto; gap:12px; margin:16px 0; align-items:center; }
   .filters input { padding:10px 12px; border-radius:6px; border:1px solid #333; background:#1e1e1e; color:#fff; }
 
-  /* NOVO: escopo da pesquisa */
+  /* Escopo da pesquisa */
   .scope { grid-column: 1 / -1; display:flex; gap:18px; align-items:center; color:#cfd8dc; font-size:13px; flex-wrap:wrap; }
   .scope label { display:flex; align-items:center; gap:6px; cursor:pointer; }
   .scope input[type="radio"] { accent-color:#00b140; }
@@ -67,29 +67,25 @@
   th[data-locked="true"] { position: relative; color: #aaa; }
   th[data-locked="true"]::after { content:"🔒"; margin-left:6px; opacity:.8; font-size:14px; }
 
-  /* ---- BLOQUEIO (overlay sem layout shift) ---- */
+  /* BLOQUEIO (overlay sem layout shift) */
   td.locked-cell { position: relative; }
   td.locked-cell .price { filter: blur(3px); }
-  /* Mantém o histórico disponível (ícone) ao lado do preço como antes */
   td.locked-cell .unlock {
     position:absolute;
-    left:50%;
-    top:50%;
-    transform: translate(-50%, -50%);
-    padding:6px 10px;
-    border-radius:8px;
-    border:1px solid #2e2e2e;
-    background:#141414;
-    color:#ddd;
-    font-size:12px;
-    cursor:pointer;
-    opacity:0;
-    pointer-events:none;
-    transition: opacity .15s ease-in-out;
+    left:50%; top:50%; transform: translate(-50%, -50%);
+    padding:6px 10px; border-radius:8px; border:1px solid #2e2e2e;
+    background:#141414; color:#ddd; font-size:12px;
+    cursor:pointer; opacity:0; pointer-events:none; transition: opacity .15s;
     white-space:nowrap;
   }
   td.locked-cell:hover .unlock { opacity:1; pointer-events:auto; }
   td.locked-cell .unlock:hover { background:#1b1b1b; }
+
+  /* Botão do gráfico: visível e clicável */
+  .chart-btn { margin-left:6px; background:transparent; border:0; padding:0; vertical-align:middle; cursor:pointer; }
+  .chart-btn svg { width:18px; height:18px; display:block; }
+  .chart-btn:hover svg rect { fill:#373737; }
+  .chart-btn:active svg path { opacity:.9; }
 
   /* Debug escondido (Ctrl+Alt+D para alternar) */
   #dbgWrap { display:none; position:fixed; right:16px; bottom:16px; width:420px; max-height:50vh; z-index:9999;
@@ -128,7 +124,6 @@
     <input id="descFilter" placeholder="Filtrar por descrição…" />
     <button id="btnReload" class="btn">Recarregar</button>
 
-    <!-- NOVO: escolha de escopo dos filtros -->
     <div class="scope" id="scopeGroup" role="radiogroup" aria-label="Escopo da pesquisa">
       <span>Filtrar em:</span>
       <label><input type="radio" name="scope" value="both" checked> Ambas</label>
@@ -245,7 +240,7 @@ const countFavs   = document.getElementById('countFavs');
 const scopeGroup = document.getElementById('scopeGroup');
 
 /* ========= estado ========= */
-/* Fallback atualizado: intermediário permite 6 sites */
+/* Fallback: intermediário = 6 (mantém dinâmica via billing_plans quando disponível) */
 const DEFAULT_PLAN_SITE_LIMIT = { trial:2, basico:4, intermediario:6, premium:8 };
 const VIEW = 'vw_precos_com_desc';
 const PAGE_SIZE = 200;
@@ -455,7 +450,9 @@ function createPriceCell(item, label, isLocked, minLabel, maxLabel){
       const b=document.createElement('button');
       b.className='chart-btn'; b.type='button'; b.title=isLocked?'Disponível no upgrade':'Ver histórico';
       b.innerHTML=chartButtonSVG();
-      b.addEventListener('click',(ev)=>{ if(isLocked){location.href='planos.html';return;} openChartFor(ev,item.sku,label); });
+      /* >>> AQUI: passa site_id para o gráfico <<< */
+      const c = chosen.find(x=>x.label===label);
+      b.addEventListener('click',(ev)=>{ if(isLocked){location.href='planos.html';return;} openChartFor(ev,item.sku,label,c?.site_id,c?.view_key); });
       td.appendChild(b);
 
       if (isLocked){
@@ -521,8 +518,8 @@ generalWrap.addEventListener('scroll', onGeneralScroll);
 
 /* ========= favoritos ========= */
 function itemMatchesFavScope(item){
-  if (!shouldFilterFavs()) return true;      // escopo não é favoritos -> não filtra favoritos
-  return matchesFilters(item);               // escopo inclui favoritos -> aplica filtro
+  if (!shouldFilterFavs()) return true;
+  return matchesFilters(item);
 }
 function renderFavs(){
   favBody.innerHTML='';
@@ -571,7 +568,6 @@ async function fetchNextPage(){
       if (itemsRendered >= generalView.length) document.getElementById('endMarker').textContent = 'Fim da lista';
     }else{
       upsertRowsIntoProdutos(data);
-      // Atualiza as views de acordo com o escopo/filtros atuais
       recomputeGeneralView();
       renderFavs();
       if (!favFirstAutoRenderDone){ updateFavHeight(); favFirstAutoRenderDone=true; }
@@ -597,8 +593,8 @@ btnSair.addEventListener('click', async ()=>{ try{ await sb.auth.signOut(); } fi
 const onFilterInput = debounce(()=>{
   currentEanQ=(eanFilter.value||'').trim();
   currentDescQ=(descFilter.value||'').trim();
-  recomputeGeneralView();   // aplica nos dados da aba Geral se o escopo pedir
-  renderFavs();             // re-render de favoritos (só filtra se escopo incluir favoritos)
+  recomputeGeneralView();
+  renderFavs();
   updateFavHeight();
   updateCounts();
 }, 400);
@@ -624,19 +620,15 @@ btnReload.addEventListener('click', async ()=>{
 
 /* ========= escopo dos filtros ========= */
 function initScopeRadios(){
-  // força "Ambas" pré-selecionado ao abrir
   localStorage.setItem('mm_scope', 'both');
   searchScope = 'both';
-
   const radios = scopeGroup.querySelectorAll('input[name="scope"]');
   radios.forEach(r=>{ r.checked = (r.value===searchScope); });
-
   radios.forEach(r=>{
     r.addEventListener('change', ()=>{
       if (!r.checked) return;
       searchScope = r.value;
       localStorage.setItem('mm_scope', searchScope);
-      // Ao mudar escopo, só precisamos recalcular as views
       recomputeGeneralView();
       renderFavs();
       updateFavHeight();
@@ -674,7 +666,8 @@ const sparkCtx = spark.getContext('2d');
 popClose.addEventListener('click', ()=> pop.style.display='none');
 addEventListener('click', (ev)=>{ if(pop.style.display!=='none' && !pop.contains(ev.target) && !ev.target.closest('.chart-btn')) pop.style.display='none'; });
 
-function drawSpark(points){
+/* Desenha grade e também a linha */
+function drawSparkFull(points){
   const ctx=sparkCtx, W=spark.width, H=spark.height; ctx.clearRect(0,0,W,H);
   if(!points || points.length<3){ popMsg.style.display='block'; popMsg.textContent='Histórico insuficiente (≥3 pontos).'; return; }
   popMsg.style.display='none';
@@ -684,10 +677,71 @@ function drawSpark(points){
   const xS=v=>m.l+((v-xMin)/(xMax-xMin||1))*(W-m.l-m.r);
   const yR=v=>H-m.b-((v-yMin)/(yMax-yMin||1))*(H-m.t-m.b);
   const yS=v=>Math.max(m.t+6, Math.min(H-m.b-6, yR(v)));
+  // grade
   ctx.strokeStyle='#232323'; ctx.lineWidth=1; ctx.beginPath();
   for(let i=0;i<=3;i++){ const yy=m.t+i*(H-m.t-m.b)/3; ctx.moveTo(m.l,yy); ctx.lineTo(W-m.r,yy); } ctx.stroke();
+  // linha
   ctx.beginPath(); ctx.lineWidth=3; ctx.strokeStyle='#00d084';
-  // (restante do desenho da linha é feito em openChartFor)
+  points.forEach((p,i)=>{ const X=xS(p.x.getTime()), Y=yS(p.y); if(i===0) ctx.moveTo(X,Y); else ctx.lineTo(X,Y); });
+  ctx.stroke();
+  // pontos
+  ctx.fillStyle='#00d084';
+  points.forEach(p=>{ const X=xS(p.x.getTime()), Y=yS(p.y); ctx.beginPath(); ctx.arc(X,Y,2.5,0,Math.PI*2); ctx.fill(); });
+  // eixos simples
+  ctx.fillStyle='#9aa0a6'; ctx.font='10px Arial';
+  ctx.fillText(new Date(xMin).toLocaleDateString('pt-BR'), m.l, H-8);
+  ctx.fillText(new Date(xMax).toLocaleDateString('pt-BR'), W-m.r-64, H-8);
+}
+
+/* Busca histórico: 1) precos (ean+site_id) 2) fallback view (ean+view_key) */
+async function fetchHistory(ean, siteId, viewKey){
+  let pts=[];
+  try{
+    const { data, error } = await sb.from('precos')
+      .select('data, preco_num')
+      .eq('ean', ean)
+      .eq('site_id', siteId)
+      .order('data', { ascending:true });
+    if (!error && data && data.length){ pts = data.map(r=>({ x:new Date(r.data), y:Number(r.preco_num) })).filter(p=>Number.isFinite(p.y)); }
+  }catch(e){}
+  if (pts.length>=3) return pts;
+
+  // fallback: esquema antigo por view_key no campo "site" da view
+  try{
+    const { data, error } = await sb.from(VIEW)
+      .select('data, preco_num')
+      .eq('ean', ean)
+      .eq('site', viewKey||null)
+      .order('data', { ascending:true });
+    if (!error && data && data.length){
+      const extra = data.map(r=>({ x:new Date(r.data), y:Number(r.preco_num) })).filter(p=>Number.isFinite(p.y));
+      pts = pts.concat(extra);
+    }
+  }catch(e){}
+  // ordenar e deduplicar por timestamp
+  const byTs = new Map(pts.map(p=>[p.x.getTime(), p]));
+  return Array.from(byTs.values()).sort((a,b)=>a.x-b.x);
+}
+
+/* >>>>>>>>>>>>>>>> NOVO: função do botão do gráfico <<<<<<<<<<<<<<<< */
+async function openChartFor(ev, ean, label, siteId, viewKey){
+  try{
+    // posiciona popover
+    const x = ev.clientX || (ev.touches && ev.touches[0]?.clientX) || 120;
+    const y = ev.clientY || (ev.touches && ev.touches[0]?.clientY) || 80;
+    pop.style.left = Math.max(12, x - 260) + 'px';
+    pop.style.top  = Math.max(12, y - 200) + 'px';
+    popTitle.textContent = `Histórico — ${label} • EAN ${ean}`;
+    pop.style.display = 'block';
+    popMsg.style.display='none';
+    // carrega dados
+    const points = await fetchHistory(String(ean), Number(siteId), String(viewKey||''));
+    drawSparkFull(points);
+  }catch(err){
+    popMsg.style.display='block';
+    popMsg.textContent = 'Não foi possível carregar o histórico.';
+    console.error(err);
+  }
 }
 
 /* ========= Minimizar/Maximizar ========= */
@@ -761,7 +815,6 @@ btnPrintFav && btnPrintFav.addEventListener('click', printFavReport);
 
 /* ========= init ========= */
 (async function init(){
-  // força "Ambas" como pré-selecionado
   localStorage.setItem('mm_scope','both');
   searchScope = 'both';
 
