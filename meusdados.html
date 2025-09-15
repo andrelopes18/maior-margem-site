@@ -708,24 +708,29 @@ function initExcelImport(){
       const requiredOk = !!(mapping.ean13 && mapping.descricao && mapping.preco_venda);
       if (!requiredOk){ showBanner('Mapeie EAN13, Descrição e Preço de Venda para prosseguir.','warn'); return; }
 
+      // Normaliza as linhas conforme o mapeamento
       parsedRows = normalizeRows();
       if (!parsedRows.length){
         showBanner('Nenhuma linha válida após normalização (verifique EAN13/Descrição/Preço de Venda).','warn', 6000);
         return;
       }
 
+      // DEDUP: mantém apenas a ÚLTIMA ocorrência por EAN13
+      const mapByEAN = new Map();
+      for (const r of parsedRows){ mapByEAN.set(r.ean13, r); }
+      const rows = Array.from(mapByEAN.values());
+
       btnInserir.disabled = true; btnPrever.disabled = true; btnLimparImport.disabled = true;
-      showBanner(`Processando ${parsedRows.length} registro(s) um a um (regra de negócio).`, 'ok', 3500);
+      showBanner(`Processando ${rows.length} registro(s) individualmente...`, 'ok', 3000);
 
       let ok = 0, fail = 0, idx = 0, lastErr = null;
 
-      // Para "zerar as demais colunas" conhecidas quando não vierem na planilha, vamos forçar null
-      // nas colunas opcionais: preco_custo, id_produto, qtde_vendida.
-      // Obs.: outras colunas desconhecidas não podem ser zeradas aqui pois não sabemos seus nomes.
-      for (const r of parsedRows){
+      for (const r of rows){
         idx++;
-        const payloadUpdate = {
-          user_id: sessionUser.id,      // "incluindo o ID de usuário": sempre define para o usuário logado
+
+        // Payload que também "zera" campos opcionais quando não informados
+        const payload = {
+          user_id: sessionUser.id,            // vincula ao usuário logado
           ean13: r.ean13,
           descricao: r.descricao ?? null,
           preco_venda: r.preco_venda ?? null,
@@ -735,44 +740,43 @@ function initExcelImport(){
         };
 
         try{
-          // 1) Busca por EAN13 (independente do user). Preferimos a linha do próprio user, se existir.
+          // Busca qualquer registro com este EAN13 (independente do usuário)
           const { data: found, error: selErr } = await sb
             .from('produtos_cliente')
             .select('id,user_id')
             .eq('ean13', r.ean13)
-            .limit(20); // limite de segurança
+            .limit(50);
           if (selErr) throw selErr;
 
           let targetId = null;
           if (found && found.length){
             const mine = found.find(x => x.user_id === sessionUser.id);
-            if (mine) targetId = mine.id;
-            else targetId = found[0].id; // atualiza primeiro registro encontrado (reassocia ao user logado)
+            targetId = mine ? mine.id : found[0].id;
           }
 
           if (targetId){
-            // 2) UPDATE: aplica a regra de negócio e zera (null) campos opcionais ausentes
+            // UPDATE: aplica regra e "zera" campos opcionais ausentes
             const { error: updErr } = await sb
               .from('produtos_cliente')
-              .update(payloadUpdate)
+              .update(payload)
               .eq('id', targetId);
             if (updErr) throw updErr;
             ok++;
           } else {
-            // 3) INSERT: cria novo registro para este EAN13 com o usuário logado
+            // INSERT novo
             const { error: insErr } = await sb
               .from('produtos_cliente')
-              .insert([payloadUpdate]);
+              .insert([payload]);
             if (insErr) throw insErr;
             ok++;
           }
         }catch(err){
           console.error('Falha no registro', r.ean13, err);
-          lastErr = err
+          lastErr = err;
           fail++;
         }
 
-        importStats.innerHTML = `Progresso: ${idx} / ${parsedRows.length} • Sucesso: <span class="ok">${ok}</span> • Erros: <span class="err">${fail}</span>`;
+        importStats.innerHTML = `Progresso: ${idx} / ${rows.length} • Sucesso: <span class="ok">${ok}</span> • Erros: <span class="err">${fail}</span>`;
       }
 
       if (fail===0){
