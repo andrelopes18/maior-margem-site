@@ -7,6 +7,7 @@
 
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="https://unpkg.com/imask"></script>
+<!-- mantém sua config -->
 <script src="/config.js?v=1"></script>
 
 <style>
@@ -165,14 +166,45 @@
 <button id="btnDiag" title="Modo diagnóstico (mostrar/ocultar)">⚙︎</button>
 
 <script>
+/* ===== Helpers de diagnóstico ===== */
+const $ = s=>document.querySelector(s);
+const logsEl = $('#logs');
+const respEl = $('#resp');
+function toJSONSafe(x){ try{ return JSON.stringify(x, null, 2) }catch{ return String(x) } }
+function now(){ return new Date().toLocaleString('pt-BR') }
+function appendLog(msg, extra){
+  if(!logsEl) return;
+  const line = `[${now()}] ${msg}` + (extra ? `\n${toJSONSafe(extra)}` : "");
+  logsEl.textContent += (logsEl.textContent ? "\n" : "") + line + "\n";
+}
+function setResp(obj){ if(!respEl) return; respEl.textContent = toJSONSafe(obj); }
+
+/* Persistência do modo diagnóstico (toggle com ⚙︎) */
+const DIAG_KEY = "mm_planos_diag";
+if(localStorage.getItem(DIAG_KEY)==="1"){ document.body.classList.add('show-diag'); }
+document.getElementById('btnDiag').onclick=()=>{
+  document.body.classList.toggle('show-diag');
+  localStorage.setItem(DIAG_KEY, document.body.classList.contains('show-diag') ? "1" : "0");
+};
+
+/* Captura erros globais para não “sumir” log */
+window.addEventListener('error', (e)=>appendLog('window.error', { message:e.message, filename:e.filename, lineno:e.lineno, colno:e.colno }));
+window.addEventListener('unhandledrejection', (e)=>appendLog('unhandledrejection', { reason: (e.reason && e.reason.message) ? e.reason.message : e.reason }));
+
+/* ===== Config/Supabase ===== */
 const CFG = window.CONFIG||{};
 let FUNCTIONS_URL = CFG.FUNCTIONS_URL;
-if (!FUNCTIONS_URL) { try { const ref = new URL(CFG.SUPABASE_URL).host.split(".")[0]; FUNCTIONS_URL = `https://${ref}.functions.supabase.co`; } catch {} }
+if (!FUNCTIONS_URL) {
+  try {
+    const ref = new URL(CFG.SUPABASE_URL).host.split(".")[0];
+    FUNCTIONS_URL = `https://${ref}.functions.supabase.co`;
+  } catch {}
+}
 const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 
-const $ = s=>document.querySelector(s);
+/* UI elements existentes */
 const planChip=$('#planChip'), timeChip=$('#timeChip'), pendingChip=$('#pendingChip');
-const cardsEl=$('#cards'); const checkoutEl=$('#checkout'), banner=$('#banner'), logs=$('#logs'), resp=$('#resp');
+const cardsEl=$('#cards'); const checkoutEl=$('#checkout'), banner=$('#banner');
 const vigenciaBar=$('#vigenciaBar'), vigenciaTexto=$('#vigenciaTexto'), vigenciaObs=$('#vigenciaObs');
 const vigenciaInfo=$('#vigenciaInfo'), prorataInfo=$('#prorataInfo');
 
@@ -189,7 +221,6 @@ let PLAN_EXPIRES_AT=null, PENDING_PLAN=null;
 let CURRENT_PLAN=null, QUOTE=null;
 
 document.getElementById('btnSair').onclick=async()=>{ await sb.auth.signOut(); location.href=CFG.SITE_URL||'index.html'; };
-document.getElementById('btnDiag').onclick=()=>{ document.body.classList.toggle('show-diag'); };
 document.getElementById('btnUnlock').onclick=()=>{ for(const id of ["cardholder","payerEmail","payerCPF","installments","cardNumber","cardExp","cardCVV"]) document.getElementById(id).disabled=false; showBanner('Campos desbloqueados.','ok'); };
 
 function updateVigenciaUI(){
@@ -215,7 +246,7 @@ function updateVigenciaUI(){
 
 async function reloadProfile(){
   const prof=await sb.from('profiles').select('plan, plan_expires_at, pending_plan').maybeSingle();
-  if(prof.error) { console.warn(prof.error); return; }
+  if(prof.error) { appendLog('profiles.load.error', prof.error); return; }
   currentPlanKey=prof.data?.plan||'trial';
   PLAN_EXPIRES_AT=prof.data?.plan_expires_at||null;
   PENDING_PLAN=prof.data?.pending_plan||null;
@@ -223,16 +254,39 @@ async function reloadProfile(){
 }
 
 (async function init(){
-  const {data:{session}}=await sb.auth.getSession(); if(!session){ location.href=CFG.SITE_URL||'index.html'; return; }
+  appendLog('init.start');
+  // Valida config mínima para evitar 400 “inesperado”
+  if(!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY){
+    showBanner('Config Supabase ausente. Verifique /config.js.','err',0);
+    appendLog('config.error', { SUPABASE_URL: !!CFG.SUPABASE_URL, ANON: !!CFG.SUPABASE_ANON_KEY });
+    return;
+  }
+  const {data:{session}}=await sb.auth.getSession();
+  if(!session){
+    appendLog('auth.no_session');
+    location.href=CFG.SITE_URL||'index.html'; 
+    return;
+  }
   user=session.user;
+  appendLog('auth.session', { user: user?.id, email: user?.email });
+
   await reloadProfile();
 
   const bp=await sb.from('billing_plans').select('id,name,plan_key,price_cents,interval_unit,interval_length,active,sort_order').eq('active',true).order('sort_order',{ascending:true});
+  if(bp.error){ appendLog('billing_plans.error', bp.error); showBanner('Falha ao carregar planos.','err',6000); return; }
   plans=bp.data||[];
+  appendLog('billing_plans.ok', { count: plans.length });
   renderCards();
 
   $('#contaEmail').textContent=user.email||'—';
   $('#payerEmail').value=user.email||'';
+
+  // Diagnóstico básico de Edge Function
+  appendLog('edge.config', { 
+    FUNCTIONS_URL, 
+    EDGE_FUNCTION_NAME: CFG.EDGE_FUNCTION_NAME,
+    MP_PUBLIC_KEY: !!CFG.MP_PUBLIC_KEY,
+  });
 })();
 
 function renderCards(){
@@ -262,10 +316,11 @@ async function openCheckout(plan){
   $('#planoNome').textContent=plan?.name||plan?.plan_key||'—';
   $('#planoValor').textContent=(Number(plan?.price_cents||0)/100).toFixed(2);
 
-  // Quote pró-rata
+  appendLog('quote.request', { new_plan: plan.plan_key });
   const q = await sb.rpc('quote_plan_change', { p_user_id: user.id, p_new_plan: plan.plan_key });
-  if(q.error){ showBanner('Erro ao calcular pró-rata.','err',6000); console.error(q.error); return; }
+  if(q.error){ showBanner('Erro ao calcular pró-rata.','err',6000); appendLog('quote.error', q.error); return; }
   QUOTE = q.data;
+  setResp({ QUOTE });
 
   const dleft=daysLeft(PLAN_EXPIRES_AT);
   if(dleft>0){
@@ -275,7 +330,6 @@ async function openCheckout(plan){
     vigenciaInfo.style.display='none';
   }
 
-  // Mostrar pró-rata
   prorataInfo.style.display='block';
   if(QUOTE.action==='upgrade_now'){
     const cred = moneyBRL(QUOTE.credit_cents||0);
@@ -285,9 +339,8 @@ async function openCheckout(plan){
     document.getElementById('btnPagar').disabled = (Number(QUOTE.amount_due_cents||0)===0);
     if(Number(QUOTE.amount_due_cents||0)===0){
       showBanner('Sem cobrança: aplicando troca agora…','ok',2500);
-      // aplica direto sem pagar
       const ap = await sb.rpc('apply_plan_change_after_payment', { p_user_id: user.id, p_new_plan: plan.plan_key });
-      if(ap.error){ showBanner('Falha ao aplicar troca.','err'); return; }
+      if(ap.error){ showBanner('Falha ao aplicar troca.','err'); appendLog('apply_plan_change.error', ap.error); return; }
       await reloadProfile();
       showBanner('Plano alterado com sucesso.','ok');
       renderCards();
@@ -296,9 +349,8 @@ async function openCheckout(plan){
   }else if(QUOTE.action==='schedule_downgrade'){
     prorataInfo.textContent = `Downgrade agendado para ${fmtDate(QUOTE.effective_from)}. Você manterá o plano atual até o fim da vigência. A partir dessa data, inicia 1 ciclo do novo plano.`;
     document.getElementById('btnPagar').disabled = true;
-    // aplica o agendamento agora (sem pagamento)
     const ap = await sb.rpc('apply_plan_change_after_payment', { p_user_id: user.id, p_new_plan: plan.plan_key });
-    if(ap.error){ showBanner('Falha ao agendar downgrade.','err'); return; }
+    if(ap.error){ showBanner('Falha ao agendar downgrade.','err'); appendLog('schedule_downgrade.error', ap.error); return; }
     await reloadProfile(); renderCards();
     showBanner('Downgrade agendado com sucesso.','ok');
   }else{
@@ -310,13 +362,18 @@ async function openCheckout(plan){
   checkoutEl.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
-// ====== Pagamento (apenas quando upgrade_now com amount_due_cents > 0) ======
+/* ====== Pagamento (apenas quando upgrade_now com amount_due_cents > 0) ====== */
 function digitsOnly(s){return (s||'').replace(/\D+/g,"");}
-function detectBrand(num){const n=digitsOnly(num); if(n.startsWith('4'))return'visa'; if(n.startsWith('5'))return'master'; if(n.startsWith('34')||n.startsWith('37'))return'amex';}
+function detectBrand(num){const n=digitsOnly(num); if(n.startsWith('4'))return'visa'; if(n.startsWith('5'))return'master'; if(n.startsWith('34')||n.startsWith('37'))return'amex'; return undefined; }
+
 document.getElementById('btnPagar').onclick = async ()=>{
   if(!CURRENT_PLAN||!QUOTE||QUOTE.action!=='upgrade_now'){ showBanner('Nada a pagar.','warn'); return; }
   const amountCents = Number(QUOTE.amount_due_cents||0);
   if(amountCents<=0){ showBanner('Nada a pagar.','warn'); return; }
+
+  // Checagem de configuração ANTES de chamar rede (evita 400 confusos)
+  if(!CFG.MP_PUBLIC_KEY){ showBanner('Chave pública do Mercado Pago ausente (MP_PUBLIC_KEY).','err',0); appendLog('config.missing', { MP_PUBLIC_KEY:false }); return; }
+  if(!FUNCTIONS_URL || !CFG.EDGE_FUNCTION_NAME){ showBanner('Config da Edge Function ausente (FUNCTIONS_URL/EDGE_FUNCTION_NAME).','err',0); appendLog('config.missing', { FUNCTIONS_URL, EDGE_FUNCTION_NAME: CFG.EDGE_FUNCTION_NAME }); return; }
 
   try{
     const [mm,yyyy]=($('#cardExp').value||"").split("/");
@@ -327,40 +384,63 @@ document.getElementById('btnPagar').onclick = async ()=>{
       security_code:$('#cardCVV').value.trim(),
       cardholder:{ name:$('#cardholder').value.trim(), identification:{ type:"CPF", number:digitsOnly($('#payerCPF').value) } }
     };
+    appendLog('mp.token.request', payloadToken);
+
     const tokRes=await fetch("https://api.mercadopago.com/v1/card_tokens?public_key="+encodeURIComponent(CFG.MP_PUBLIC_KEY),{
       method:"POST",headers:{ "Content-Type":"application/json" },body:JSON.stringify(payloadToken)
     });
-    const tok=await tokRes.json();
-    if(!tokRes.ok || !tok?.id){ showBanner('Falha ao tokenizar cartão.','err'); return; }
+
+    let tokBodyText = await tokRes.text();
+    let tokBody;
+    try{ tokBody = JSON.parse(tokBodyText) }catch{ tokBody = tokBodyText }
+    appendLog('mp.token.response', { status: tokRes.status, ok: tokRes.ok, body: tokBody });
+
+    if(!tokRes.ok || !(tokBody && tokBody.id)){
+      showBanner(`Falha ao tokenizar cartão (HTTP ${tokRes.status}). Veja logs.`, 'err', 0);
+      setResp({ etapa:'token', status: tokRes.status, body: tokBody });
+      return;
+    }
 
     const { data:{ session } } = await sb.auth.getSession();
     const body={
       mode:"card",
       plan_key:CURRENT_PLAN.plan_key,
-      amount_cents:amountCents,  // <<< cobrando apenas a DIFERENÇA
-      card_token:tok.id,
+      amount_cents:amountCents,  // cobrando apenas a DIFERENÇA
+      card_token:tokBody.id,
       payer:{ name:$('#cardholder').value.trim(), email:$('#payerEmail').value.trim(), cpf:$('#payerCPF').value.trim() },
       installments:Number($('#installments').value||1),
       payment_method_id:detectBrand($('#cardNumber').value)
     };
-    const r=await fetch(`${FUNCTIONS_URL}/${CFG.EDGE_FUNCTION_NAME}`,{
+    const url = `${FUNCTIONS_URL}/${CFG.EDGE_FUNCTION_NAME}`;
+    appendLog('edge.request', { url, headers:['Authorization: Bearer <session>', 'apikey: <anon>'], body });
+
+    const r=await fetch(url,{
       method:"POST", headers:{
         "Content-Type":"application/json",
         "Authorization":"Bearer "+session.access_token,
         "apikey":CFG.SUPABASE_ANON_KEY
       }, body:JSON.stringify(body)
     });
-    const j=await r.json();
-    if(!(r.ok && (j?.data?.ok||j?.ok))){ showBanner('Pagamento não aprovado.','err'); return; }
+
+    const rawText = await r.text();
+    let j; try{ j = JSON.parse(rawText) }catch{ j = rawText }
+    appendLog('edge.response', { status:r.status, ok:r.ok, body:j });
+    setResp({ etapa:'edge', status:r.status, ok:r.ok, body:j });
+
+    if(!(r.ok && (j?.data?.ok||j?.ok))){
+      // Mostra claramente se o 400 veio DAQUI
+      showBanner(`Pagamento não aprovado (HTTP ${r.status}). Veja logs para detalhes.`, 'err', 0);
+      return;
+    }
 
     // aplica a troca agora (upgrade_now)
     const ap = await sb.rpc('apply_plan_change_after_payment', { p_user_id: user.id, p_new_plan: CURRENT_PLAN.plan_key });
-    if(ap.error){ showBanner('Falha ao aplicar troca após pagamento.','err'); return; }
+    if(ap.error){ showBanner('Falha ao aplicar troca após pagamento.','err'); appendLog('apply_plan_change_after_payment.error', ap.error); return; }
     await reloadProfile(); renderCards();
     showBanner('Plano alterado com sucesso!','ok',4000);
   }catch(e){
-    console.error(e);
-    showBanner('Erro inesperado no pagamento.','err');
+    appendLog('payment.catch', { message:e?.message || e, stack: e?.stack });
+    showBanner('Erro inesperado no pagamento. Veja logs.','err',0);
   }
 };
 </script>
