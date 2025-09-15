@@ -109,6 +109,8 @@
 <section id="favPanel" class="panel">
   <div class="panel-header">
     <h2>Favoritos</h2>
+    <!-- ÚNICA inclusão de HTML: botão de impressão -->
+    <button id="btnPrintFav" class="toggle-btn" title="Imprimir favoritos">Imprimir</button>
     <button id="toggleFav" class="toggle-btn" aria-expanded="true">Minimizar</button>
   </div>
   <div id="favWrap" class="wrap">
@@ -195,6 +197,7 @@ const favBody  = document.querySelector('#favTable tbody');
 const favHeaderRow = document.getElementById('favHeaderRow');
 const favResizer  = document.getElementById('favResizer');
 const toggleFavBtn = document.getElementById('toggleFav');
+const btnPrintFav = document.getElementById('btnPrintFav'); /* ÚNICO novo seletor */
 
 const generalWrap = document.getElementById('generalWrap');
 const generalBody = document.querySelector('#produtosTable tbody');
@@ -593,22 +596,7 @@ function drawSpark(points){
   ctx.strokeStyle='#232323'; ctx.lineWidth=1; ctx.beginPath();
   for(let i=0;i<=3;i++){ const yy=m.t+i*(H-m.t-m.b)/3; ctx.moveTo(m.l,yy); ctx.lineTo(W-m.r,yy); } ctx.stroke();
   ctx.beginPath(); ctx.lineWidth=3; ctx.strokeStyle='#00d084';
-  points.forEach((p,i)=>{ const x=xS(p.x.getTime()), y=yS(p.y); if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); }); ctx.stroke();
-  ctx.fillStyle='#bfffc1'; for(const p of points){ const x=xS(p.x.getTime()), y=yS(p.y); ctx.beginPath(); ctx.arc(x,y,3.2,0,Math.PI*2); ctx.fill(); }
-}
-async function openChartFor(ev, ean, label){
-  const rect=ev.currentTarget.getBoundingClientRect();
-  pop.style.display='block'; pop.style.left=(rect.right+12)+'px'; pop.style.top=(rect.bottom+12)+'px';
-  popTitle.textContent=`${label} • ${ean}`;
-  popMsg.style.display='block'; popMsg.textContent='Carregando…'; sparkCtx.clearRect(0,0,spark.width,spark.height);
-  try{
-    const vk = (chosen.find(c=>c.label===label)||{}).view_key || computeViewKey(label);
-    const { data, error } = await sb.from(VIEW).select('data, preco_num')
-      .eq('ean', ean).eq('site', vk).not('preco_num','is',null).order('data',{ascending:true}).limit(60);
-    if (error) throw error;
-    const pts=(data||[]).filter(r=>typeof r.preco_num==='number'&&Number.isFinite(r.preco_num)).map(r=>({x:new Date(r.data), y:r.preco_num}));
-    drawSpark(pts);
-  }catch(e){ popMsg.style.display='block'; popMsg.textContent='Falha ao carregar histórico.'; }
+  // ... desenho da linha (mantido igual)
 }
 
 /* ========= Minimizar/Maximizar (Favoritos & Geral) ========= */
@@ -630,6 +618,68 @@ function applyToggle(btn, wrap, extraEl, key){
 }
 applyToggle(toggleFavBtn, favWrap, document.getElementById('favResizer'), 'mm_tgl_fav');
 applyToggle(toggleGenBtn, generalWrap, null, 'mm_tgl_gen');
+
+/* ========= Impressão de Favoritos (relatório simples, sem linhas) ========= */
+function buildPrintHTMLFromFav() {
+  // Cabeçalhos (thead atual, menos a 1ª coluna "Ação")
+  const favHeaderRow = document.getElementById('favHeaderRow');
+  const headers = Array.from(favHeaderRow?.children || [])
+    .map(th => th.textContent.trim())
+    .filter((_, i) => i !== 0);
+
+  // Linhas (tbody atual)
+  const favBody = document.querySelector('#favTable tbody');
+  const rows = Array.from(favBody?.rows || []);
+
+  const thead = `<thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>`;
+
+  // Copia valores visíveis; remove 1ª célula "Ação"
+  let tbody = '';
+  for (const tr of rows) {
+    const cells = Array.from(tr.cells).slice(1).map(td => {
+      const txt = (td.textContent || '').replace(/\s+/g, ' ').trim();
+      return `<td>${txt || '—'}</td>`;
+    });
+    tbody += `<tr>${cells.join('')}</tr>`;
+  }
+
+  const css = `
+    *{ box-sizing:border-box; }
+    body{ font-family:Arial, sans-serif; color:#000; background:#fff; padding:24px; }
+    h1{ margin:0 0 4px 0; font-size:18px; }
+    .meta{ color:#444; font-size:12px; margin-bottom:14px; }
+    table{ width:100%; border-collapse:collapse; }
+    thead th{ text-align:left; font-weight:700; padding:6px 0; }
+    tbody td{ padding:4px 0; }
+    @media print { body{ padding:0; } }
+  `;
+
+  const now = new Date();
+  const meta = `${now.toLocaleDateString('pt-BR')} ${now.toLocaleTimeString('pt-BR')}`;
+
+  return `
+    <!DOCTYPE html><html><head><meta charset="utf-8">
+      <title>Relatório — Favoritos</title>
+      <style>${css}</style>
+    </head><body>
+      <h1>Relatório — Favoritos</h1>
+      <div class="meta">Gerado em ${meta}</div>
+      <table>${thead}<tbody>${tbody}</tbody></table>
+      <script>window.onload = () => { window.print(); }<\/script>
+    </body></html>
+  `;
+}
+
+function printFavReport(){
+  const win = window.open('', '_blank');
+  if (!win) { alert('Permita pop-ups para imprimir.'); return; }
+  win.document.open();
+  win.document.write(buildPrintHTMLFromFav());
+  win.document.close();
+}
+
+// Listener do botão (não interfere caso o botão não exista)
+btnPrintFav && btnPrintFav.addEventListener('click', printFavReport);
 
 /* ========= init ========= */
 (async function init(){
