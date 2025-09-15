@@ -31,7 +31,7 @@
   .filters { display:grid; grid-template-columns: 1fr 1fr auto; gap:12px; margin:16px 0; align-items:center; }
   .filters input { padding:10px 12px; border-radius:6px; border:1px solid #333; background:#1e1e1e; color:#fff; }
 
-  /* controle de escopo da pesquisa */
+  /* NOVO: escopo da pesquisa */
   .scope { grid-column: 1 / -1; display:flex; gap:18px; align-items:center; color:#cfd8dc; font-size:13px; flex-wrap:wrap; }
   .scope label { display:flex; align-items:center; gap:6px; cursor:pointer; }
   .scope input[type="radio"] { accent-color:#00b140; }
@@ -123,7 +123,6 @@
 <section id="favPanel" class="panel">
   <div class="panel-header">
     <h2>Favoritos</h2>
-    <!-- Botão já existente e funcionando -->
     <button id="btnPrintFav" class="toggle-btn" title="Imprimir favoritos">Imprimir</button>
     <button id="toggleFav" class="toggle-btn" aria-expanded="true">Minimizar</button>
   </div>
@@ -175,7 +174,7 @@
 /* ========= util debug ========= */
 const dbgWrap = document.getElementById('dbgWrap');
 const dbg = document.getElementById('dbg');
-function dlog(o){ dbg.textContent += (typeof o==='string' ? o : JSON.stringify(o,null,2)) + "\\n"; }
+function dlog(o){ dbg.textContent += (typeof o==='string' ? o : JSON.stringify(o,null,2)) + "\n"; }
 document.addEventListener('keydown', (e)=>{
   if (e.ctrlKey && e.altKey && (e.key==='d' || e.key==='D')){
     dbgWrap.style.display = (dbgWrap.style.display==='none' || !dbgWrap.style.display) ? 'block' : 'none';
@@ -211,7 +210,7 @@ const favBody  = document.querySelector('#favTable tbody');
 const favHeaderRow = document.getElementById('favHeaderRow');
 const favResizer  = document.getElementById('favResizer');
 const toggleFavBtn = document.getElementById('toggleFav');
-const btnPrintFav = document.getElementById('btnPrintFav');
+const btnPrintFav  = document.getElementById('btnPrintFav');
 
 const generalWrap = document.getElementById('generalWrap');
 const generalBody = document.querySelector('#produtosTable tbody');
@@ -235,25 +234,29 @@ let chosen = [];            // [{site_id,label,view_key}]
 let unlocked = new Set();   // sites liberados
 let locked   = new Set();   // excedentes do plano
 
-let favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
+// Master (para ambas abas)
 let produtosMap = new Map();  // Map<ean, {sku, desc, sites:{[label]:{precoRaw,precoNum,data}}}>
-let produtosList = [];
-let itemsRendered = 0;
-
+let produtosList = [];        // lista mestre (alimenta Favoritos e Geral)
 let serverOffset = 0;
 let serverExhausted = false;
 let fetching = false;
 
-let currentEanQ = '';
-let currentDescQ = '';
+// View da aba Geral (filtrada no cliente)
+let generalView = [];         // subconjunto filtrado de produtosList
+let itemsRendered = 0;        // progresso de render da view
 
+let favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
 let loadingMore = false;
 const generalChkMap = new Map();
 
 let favHeightUser = Number(localStorage.getItem('mm_fav_height')) || null;
 let favFirstAutoRenderDone = false;
 
-let searchScope = (localStorage.getItem('mm_scope') || 'both'); // 'both' | 'favorites' | 'general'
+let currentEanQ = '';
+let currentDescQ = '';
+
+// escopo: força padrão "both" ao iniciar (pré-selecionado)
+let searchScope = 'both';
 
 /* ========= helpers ========= */
 function setStatus(t){ statusEl.textContent = t||''; }
@@ -263,7 +266,6 @@ function favSave(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet]))
 function isFav(sku){ return favSet.has(String(sku)); }
 function formatBRL(n){ try{ return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) }catch{ return String(n) } }
 function norm(s){ return (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]/g,'').toLowerCase(); }
-
 function shouldFilterGeneral(){ return searchScope==='both' || searchScope==='general'; }
 function shouldFilterFavs(){ return searchScope==='both' || searchScope==='favorites'; }
 
@@ -287,7 +289,7 @@ function buildHeaders(){
   generalHeaderRow.innerHTML = base + ths;
 
   const favBase = `<th class="col-fav">Ação</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th>`;
-  favHeaderRow.innerHTML = favBase + ths;
+  document.getElementById('favHeaderRow').innerHTML = favBase + ths;
 }
 
 /* ========= plano ========= */
@@ -318,7 +320,7 @@ async function loadUserSelection(userId, planKey){
   }catch(e){ dlog('ERRO user_sites: '+e.message); rows = []; }
   dlog({ meus_user_sites: rows.length });
 
-  // ordenar por position -> created_at -> id
+  // ordenar
   rows.sort((a,b)=>{
     const pa=a.position??null, pb=b.position??null;
     if(pa!=null && pb!=null && pa!==pb) return pa-pb;
@@ -384,6 +386,15 @@ function upsertRowsIntoProdutos(rows){
     }
   }
   produtosList = Array.from(produtosMap.values());
+}
+
+/* ========= match de filtros (cliente) ========= */
+function matchesFilters(item){
+  const qE = (currentEanQ||'').trim();
+  const qD = norm(currentDescQ||'');
+  if (qE && !String(item.sku||'').includes(qE)) return false;
+  if (qD && !norm(item.desc||'').includes(qD)) return false;
+  return true;
 }
 
 /* ========= render ========= */
@@ -456,38 +467,45 @@ function renderRowInto(tr,item){
   const {min,max}=computeMinMaxForRow(item);
   for (const c of chosen){ tr.appendChild(createPriceCell(item, c.label, locked.has(c.site_id), min, max)); }
 }
+
+/* ========= view da aba Geral (cliente) ========= */
+function recomputeGeneralView(){
+  if (shouldFilterGeneral()){
+    generalView = produtosList.filter(matchesFilters);
+  } else {
+    generalView = produtosList.slice();
+  }
+  resetGeneralDom();
+  renderGeneralChunk();
+}
 function renderGeneralChunk(){
-  const end=Math.min(itemsRendered+RENDER_CHUNK, produtosList.length);
+  const end=Math.min(itemsRendered+RENDER_CHUNK, generalView.length);
   const frag=document.createDocumentFragment();
-  for(let i=itemsRendered;i<end;i++){ const it=produtosList[i]; const tr=document.createElement('tr'); renderRowInto(tr,it); frag.appendChild(tr); }
+  for(let i=itemsRendered;i<end;i++){ const it=generalView[i]; const tr=document.createElement('tr'); renderRowInto(tr,it); frag.appendChild(tr); }
   generalBody.appendChild(frag);
   itemsRendered=end;
-  endMarker.textContent=(serverExhausted && itemsRendered>=produtosList.length)?'Fim da lista':'';
+  document.getElementById('endMarker').textContent=(serverExhausted && itemsRendered>=generalView.length)?'Fim da lista':'';
   updateCounts();
 }
-function resetGeneralDom(){ generalBody.innerHTML=''; generalChkMap.clear(); itemsRendered=0; endMarker.textContent=''; }
+function resetGeneralDom(){ generalBody.innerHTML=''; generalChkMap.clear(); itemsRendered=0; document.getElementById('endMarker').textContent=''; }
 
 /* ========= scroll / paginação ========= */
 function onGeneralScroll(){
   if (loadingMore) return;
   const nearBottom = generalWrap.scrollTop + generalWrap.clientHeight >= generalWrap.scrollHeight - 100;
-  if (nearBottom && itemsRendered < produtosList.length){ loadingMore=true; setTimeout(()=>{ renderGeneralChunk(); loadingMore=false; },30); return; }
+  if (nearBottom && itemsRendered < generalView.length){ loadingMore=true; setTimeout(()=>{ renderGeneralChunk(); loadingMore=false; },30); return; }
   if (nearBottom && !serverExhausted && !fetching){ fetchNextPage(); }
 }
 generalWrap.addEventListener('scroll', onGeneralScroll);
 
 /* ========= favoritos ========= */
-function itemMatchesFilters(item){
-  if (!shouldFilterFavs()) return true;
-  const qE = norm(currentEanQ);
-  const qD = norm(currentDescQ);
-  if (qE && !String(item.sku||'').includes(currentEanQ)) return false;
-  if (qD && !norm(item.desc||'').includes(qD)) return false;
-  return true;
+function itemMatchesFavScope(item){
+  if (!shouldFilterFavs()) return true;      // escopo não é favoritos -> não filtra favoritos
+  return matchesFilters(item);               // escopo inclui favoritos -> aplica filtro
 }
 function renderFavs(){
   favBody.innerHTML='';
-  const favList = produtosList.filter(p=>isFav(p.sku)).filter(itemMatchesFilters);
+  const favList = produtosList.filter(p=>isFav(p.sku)).filter(itemMatchesFavScope);
   const frag=document.createDocumentFragment();
   for (const item of favList){
     const tr=document.createElement('tr');
@@ -510,19 +528,14 @@ function renderFavs(){
 
 /* ========= contadores ========= */
 function updateCounts(){
-  countShown.textContent = `Exibindo ${itemsRendered} de ${produtosList.length} no Geral (carregados)`;
-  countTotal.textContent = serverExhausted ? `Total de SKUs carregados: ${produtosList.length}` : `Carregando… (${produtosList.length}+ )`;
+  countShown.textContent = `Exibindo ${itemsRendered} de ${generalView.length} no Geral`;
+  countTotal.textContent = serverExhausted ? `Total carregado: ${produtosList.length}` : `Carregando… (${produtosList.length}+ )`;
   countFavs.textContent  = `Favoritos: ${favSet.size}`;
 }
 
-/* ========= query ========= */
+/* ========= query (SEM filtro no servidor) ========= */
 function buildQuery(){
-  let q = sb.from(VIEW).select('ean, site, preco, data, descricao, preco_num', { count:'estimated' }).order('data', { ascending:false });
-  if (shouldFilterGeneral()){
-    if (currentEanQ)  q = q.ilike('ean', `%${currentEanQ}%`);
-    if (currentDescQ) q = q.ilike('descricao', `%${currentDescQ}%`);
-  }
-  return q;
+  return sb.from(VIEW).select('ean, site, preco, data, descricao, preco_num', { count:'estimated' }).order('data', { ascending:false });
 }
 async function fetchNextPage(){
   if (fetching || serverExhausted) return;
@@ -534,23 +547,24 @@ async function fetchNextPage(){
 
     if (!data || data.length===0){
       serverExhausted = true; setStatus('Todos os dados carregados.');
-      if (itemsRendered >= produtosList.length) endMarker.textContent = 'Fim da lista';
+      if (itemsRendered >= generalView.length) document.getElementById('endMarker').textContent = 'Fim da lista';
     }else{
       upsertRowsIntoProdutos(data);
-      if (itemsRendered < produtosList.length) renderGeneralChunk();
+      // Atualiza as views de acordo com o escopo/filtros atuais
+      recomputeGeneralView();
       renderFavs();
       if (!favFirstAutoRenderDone){ updateFavHeight(); favFirstAutoRenderDone=true; }
       serverOffset += PAGE_SIZE;
-      setStatus(`Carregados: ${produtosList.length} SKUs (parcial)`);
+      setStatus(`Carregados (parcial): ${produtosList.length} SKUs`);
     }
   }catch(e){ console.error(e); errEl.style.display='block'; errEl.textContent='Falha ao carregar: '+(e?.message||e); setStatus('Erro ao carregar.'); }
   finally{ fetching=false; updateCounts(); }
 }
 
-/* ========= reset ========= */
+/* ========= reset geral ========= */
 function resetAndQuery(){
   produtosMap.clear(); produtosList=[]; serverOffset=0; serverExhausted=false; favFirstAutoRenderDone=false;
-  resetGeneralDom(); renderFavs(); updateFavHeight(); updateCounts(); fetchNextPage();
+  generalView=[]; resetGeneralDom(); renderFavs(); updateFavHeight(); updateCounts(); fetchNextPage();
 }
 
 /* ========= UI extra ========= */
@@ -558,18 +572,15 @@ ddMeusDados.addEventListener('click', ()=> location.href='meusdados.html');
 ddPlanos.addEventListener('click', ()=> location.href='planos.html');
 btnSair.addEventListener('click', async ()=>{ try{ await sb.auth.signOut(); } finally{ localStorage.removeItem('mm_login_date'); location.href = CFG.SITE_URL || 'index.html'; }});
 
+/* filtros (cliente) */
 const onFilterInput = debounce(()=>{
   currentEanQ=(eanFilter.value||'').trim();
   currentDescQ=(descFilter.value||'').trim();
-  // aplica conforme o escopo
-  if (shouldFilterGeneral()){
-    resetAndQuery(); // refaz a consulta para a tabela Geral
-  }
-  // Favoritos sempre re-renderiza (aplicando ou não o filtro internamente)
-  renderFavs();
+  recomputeGeneralView();   // aplica nos dados da aba Geral se o escopo pedir
+  renderFavs();             // re-render de favoritos (só filtra se escopo incluir favoritos)
   updateFavHeight();
   updateCounts();
-}, 500);
+}, 400);
 eanFilter.addEventListener('input', onFilterInput);
 descFilter.addEventListener('input', onFilterInput);
 
@@ -592,8 +603,11 @@ btnReload.addEventListener('click', async ()=>{
 
 /* ========= escopo dos filtros ========= */
 function initScopeRadios(){
+  // força "Ambas" pré-selecionado ao abrir
+  localStorage.setItem('mm_scope', 'both');
+  searchScope = 'both';
+
   const radios = scopeGroup.querySelectorAll('input[name="scope"]');
-  // restaurar estado
   radios.forEach(r=>{ r.checked = (r.value===searchScope); });
 
   radios.forEach(r=>{
@@ -601,20 +615,14 @@ function initScopeRadios(){
       if (!r.checked) return;
       searchScope = r.value;
       localStorage.setItem('mm_scope', searchScope);
-
-      if (shouldFilterGeneral()){
-        // precisamos reconsultar o banco com (ou sem) filtros conforme escopo
-        resetAndQuery();
-      } else {
-        // escopo só em Favoritos: mantém Geral como está e só re-renderiza favs
-        renderFavs();
-        updateFavHeight();
-        updateCounts();
-      }
+      // Ao mudar escopo, só precisamos recalcular as views
+      recomputeGeneralView();
+      renderFavs();
+      updateFavHeight();
+      updateCounts();
     });
   });
 }
-initScopeRadios();
 
 /* ========= favoritos height / resizer ========= */
 function measureRowHeight(){ const row=document.querySelector('#favTable tbody tr'); if(!row) return 44; const h=Math.round(row.getBoundingClientRect().height); return Math.max(36, h||44); }
@@ -658,7 +666,7 @@ function drawSpark(points){
   ctx.strokeStyle='#232323'; ctx.lineWidth=1; ctx.beginPath();
   for(let i=0;i<=3;i++){ const yy=m.t+i*(H-m.t-m.b)/3; ctx.moveTo(m.l,yy); ctx.lineTo(W-m.r,yy); } ctx.stroke();
   ctx.beginPath(); ctx.lineWidth=3; ctx.strokeStyle='#00d084';
-  // pontos/linha desenhados em openChartFor (mantido)
+  // (restante do desenho da linha é feito em openChartFor)
 }
 
 /* ========= Minimizar/Maximizar ========= */
@@ -732,28 +740,32 @@ btnPrintFav && btnPrintFav.addEventListener('click', printFavReport);
 
 /* ========= init ========= */
 (async function init(){
+  // força "Ambas" como pré-selecionado
+  localStorage.setItem('mm_scope','both');
+  searchScope = 'both';
+
   const { data:{ session } } = await sb.auth.getSession();
   if (!session){ location.href = CFG.SITE_URL || 'index.html'; return; }
 
-  userChip.textContent = session.user?.email || 'Logado';
+  document.getElementById('userChip').textContent = session.user?.email || 'Logado';
   let planKey='basico';
   try{
     const { data, error } = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
     if (!error){
       const raw=(data?.plan||'basico').toString();
       planKey = raw.toLowerCase();
-      planChip.textContent = `Plano: ${raw.charAt(0).toUpperCase()+raw.slice(1)}`;
+      document.getElementById('planChip').textContent = `Plano: ${raw.charAt(0).toUpperCase()+raw.slice(1)}`;
     }
-  }catch(e){ planChip.textContent='Plano: —'; }
+  }catch(e){ document.getElementById('planChip').textContent='Plano: —'; }
 
   await loadUserSelection(session.user.id, planKey);
 
-  // restaura escopo na UI
+  // escopo UI
   initScopeRadios();
 
   currentEanQ=''; currentDescQ='';
   resetAndQuery();
-  generalWrap.dispatchEvent(new Event('scroll'));
+  document.getElementById('generalWrap').dispatchEvent(new Event('scroll'));
 })();
 </script>
 </body>
