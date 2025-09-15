@@ -715,30 +715,68 @@ function initExcelImport(){
       }
 
       btnInserir.disabled = true; btnPrever.disabled = true; btnLimparImport.disabled = true;
-      showBanner(`Inserindo ${parsedRows.length} registro(s) em lotes...`, 'ok', 3000);
+      showBanner(`Processando ${parsedRows.length} registro(s) um a um (regra de negócio).`, 'ok', 3500);
 
-      const BATCH = 500;
-      let ok = 0, fail = 0, pos = 0, lastErr = null;
+      let ok = 0, fail = 0, idx = 0, lastErr = null;
 
-      while (pos < parsedRows.length){
-        const batch = parsedRows.slice(pos, pos+BATCH);
+      // Para "zerar as demais colunas" conhecidas quando não vierem na planilha, vamos forçar null
+      // nas colunas opcionais: preco_custo, id_produto, qtde_vendida.
+      // Obs.: outras colunas desconhecidas não podem ser zeradas aqui pois não sabemos seus nomes.
+      for (const r of parsedRows){
+        idx++;
+        const payloadUpdate = {
+          user_id: sessionUser.id,      // "incluindo o ID de usuário": sempre define para o usuário logado
+          ean13: r.ean13,
+          descricao: r.descricao ?? null,
+          preco_venda: r.preco_venda ?? null,
+          preco_custo: (r.preco_custo !== undefined) ? r.preco_custo : null,
+          id_produto: (r.id_produto !== undefined) ? r.id_produto : null,
+          qtde_vendida: (r.qtde_vendida !== undefined) ? r.qtde_vendida : null
+        };
+
         try{
-          const { error } = await sb
+          // 1) Busca por EAN13 (independente do user). Preferimos a linha do próprio user, se existir.
+          const { data: found, error: selErr } = await sb
             .from('produtos_cliente')
-            .upsert(batch, { onConflict: 'user_id,ean13', returning: 'minimal' });
-          if (error) throw error;
-          ok += batch.length;
+            .select('id,user_id')
+            .eq('ean13', r.ean13)
+            .limit(20); // limite de segurança
+          if (selErr) throw selErr;
+
+          let targetId = null;
+          if (found && found.length){
+            const mine = found.find(x => x.user_id === sessionUser.id);
+            if (mine) targetId = mine.id;
+            else targetId = found[0].id; // atualiza primeiro registro encontrado (reassocia ao user logado)
+          }
+
+          if (targetId){
+            // 2) UPDATE: aplica a regra de negócio e zera (null) campos opcionais ausentes
+            const { error: updErr } = await sb
+              .from('produtos_cliente')
+              .update(payloadUpdate)
+              .eq('id', targetId);
+            if (updErr) throw updErr;
+            ok++;
+          } else {
+            // 3) INSERT: cria novo registro para este EAN13 com o usuário logado
+            const { error: insErr } = await sb
+              .from('produtos_cliente')
+              .insert([payloadUpdate]);
+            if (insErr) throw insErr;
+            ok++;
+          }
         }catch(err){
-          console.error('Erro no lote:', err);
-          lastErr = err;
-          fail += batch.length;
+          console.error('Falha no registro', r.ean13, err);
+          lastErr = err
+          fail++;
         }
-        pos += BATCH;
-        importStats.innerHTML = `Progresso: ${Math.min(pos, parsedRows.length)} / ${parsedRows.length} • Sucesso: <span class="ok">${ok}</span> • Erros: <span class="err">${fail}</span>`;
+
+        importStats.innerHTML = `Progresso: ${idx} / ${parsedRows.length} • Sucesso: <span class="ok">${ok}</span> • Erros: <span class="err">${fail}</span>`;
       }
 
       if (fail===0){
-        showBanner(`Importação concluída: ${ok} registro(s) inserido(s)/atualizado(s).`, 'ok', 7000);
+        showBanner(`Importação concluída: ${ok} registro(s) atualizados/inseridos.`, 'ok', 7000);
       } else {
         const msg = lastErr?.message || 'Erro não informado';
         showBanner(`Importação com falhas: ${ok} OK, ${fail} erro(s). Detalhe: ${msg}`, 'err', 9000);
@@ -750,6 +788,7 @@ function initExcelImport(){
       btnInserir.disabled = false; btnPrever.disabled = false; btnLimparImport.disabled = false;
     }
   }
+  btnInserir.addEventListener('click', insertBatches);}
   btnInserir.addEventListener('click', insertBatches);
 }
 
