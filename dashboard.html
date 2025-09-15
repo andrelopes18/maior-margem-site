@@ -28,8 +28,14 @@
   .toggle-btn { background:none; border:1px solid #2a2a2a; color:#ddd; padding:6px 10px; border-radius:8px; cursor:pointer; }
   .toggle-btn:hover { background:#1b1b1b; }
 
-  .filters { display:grid; grid-template-columns: 1fr 1fr auto; gap:12px; margin:16px 0; }
+  .filters { display:grid; grid-template-columns: 1fr 1fr auto; gap:12px; margin:16px 0; align-items:center; }
   .filters input { padding:10px 12px; border-radius:6px; border:1px solid #333; background:#1e1e1e; color:#fff; }
+
+  /* controle de escopo da pesquisa */
+  .scope { grid-column: 1 / -1; display:flex; gap:18px; align-items:center; color:#cfd8dc; font-size:13px; flex-wrap:wrap; }
+  .scope label { display:flex; align-items:center; gap:6px; cursor:pointer; }
+  .scope input[type="radio"] { accent-color:#00b140; }
+
   .status { margin:10px 0; color:#aaa; font-size:12px; }
   .err { display:none; color:#ff5d5d; margin:8px 0; font-size:13px; }
 
@@ -101,6 +107,14 @@
     <input id="eanFilter" placeholder="Filtrar por EAN/GTIN…" />
     <input id="descFilter" placeholder="Filtrar por descrição…" />
     <button id="btnReload" class="btn">Recarregar</button>
+
+    <!-- NOVO: escolha de escopo dos filtros -->
+    <div class="scope" id="scopeGroup" role="radiogroup" aria-label="Escopo da pesquisa">
+      <span>Filtrar em:</span>
+      <label><input type="radio" name="scope" value="both" checked> Ambas</label>
+      <label><input type="radio" name="scope" value="favorites"> Favoritos</label>
+      <label><input type="radio" name="scope" value="general"> Geral</label>
+    </div>
   </div>
   <div class="status"><span id="status"></span></div>
   <div id="err" class="err"></div>
@@ -109,7 +123,7 @@
 <section id="favPanel" class="panel">
   <div class="panel-header">
     <h2>Favoritos</h2>
-    <!-- ÚNICA inclusão de HTML: botão de impressão -->
+    <!-- Botão já existente e funcionando -->
     <button id="btnPrintFav" class="toggle-btn" title="Imprimir favoritos">Imprimir</button>
     <button id="toggleFav" class="toggle-btn" aria-expanded="true">Minimizar</button>
   </div>
@@ -158,17 +172,17 @@
 </div>
 
 <script>
-/* ========= util debug (oculto; Ctrl+Alt+D para alternar) ========= */
+/* ========= util debug ========= */
 const dbgWrap = document.getElementById('dbgWrap');
 const dbg = document.getElementById('dbg');
-function dlog(o){ dbg.textContent += (typeof o==='string' ? o : JSON.stringify(o,null,2)) + "\n"; }
+function dlog(o){ dbg.textContent += (typeof o==='string' ? o : JSON.stringify(o,null,2)) + "\\n"; }
 document.addEventListener('keydown', (e)=>{
   if (e.ctrlKey && e.altKey && (e.key==='d' || e.key==='D')){
     dbgWrap.style.display = (dbgWrap.style.display==='none' || !dbgWrap.style.display) ? 'block' : 'none';
   }
 });
 
-/* ========= erros visíveis ========= */
+/* ========= erros ========= */
 const errEl = document.getElementById('err');
 addEventListener('error', e => { errEl.style.display='block'; errEl.textContent='Erro JS: '+e.message; });
 addEventListener('unhandledrejection', e => { errEl.style.display='block'; errEl.textContent='Erro assíncrono: '+(e.reason?.message||e.reason); });
@@ -197,7 +211,7 @@ const favBody  = document.querySelector('#favTable tbody');
 const favHeaderRow = document.getElementById('favHeaderRow');
 const favResizer  = document.getElementById('favResizer');
 const toggleFavBtn = document.getElementById('toggleFav');
-const btnPrintFav = document.getElementById('btnPrintFav'); /* ÚNICO novo seletor */
+const btnPrintFav = document.getElementById('btnPrintFav');
 
 const generalWrap = document.getElementById('generalWrap');
 const generalBody = document.querySelector('#produtosTable tbody');
@@ -208,6 +222,8 @@ const toggleGenBtn = document.getElementById('toggleGen');
 const countShown  = document.getElementById('countShown');
 const countTotal  = document.getElementById('countTotal');
 const countFavs   = document.getElementById('countFavs');
+
+const scopeGroup = document.getElementById('scopeGroup');
 
 /* ========= estado ========= */
 const DEFAULT_PLAN_SITE_LIMIT = { trial:2, basico:4, intermediario:5, premium:8 };
@@ -237,6 +253,8 @@ const generalChkMap = new Map();
 let favHeightUser = Number(localStorage.getItem('mm_fav_height')) || null;
 let favFirstAutoRenderDone = false;
 
+let searchScope = (localStorage.getItem('mm_scope') || 'both'); // 'both' | 'favorites' | 'general'
+
 /* ========= helpers ========= */
 function setStatus(t){ statusEl.textContent = t||''; }
 function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
@@ -246,16 +264,13 @@ function isFav(sku){ return favSet.has(String(sku)); }
 function formatBRL(n){ try{ return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) }catch{ return String(n) } }
 function norm(s){ return (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]/g,'').toLowerCase(); }
 
+function shouldFilterGeneral(){ return searchScope==='both' || searchScope==='general'; }
+function shouldFilterFavs(){ return searchScope==='both' || searchScope==='favorites'; }
+
 /* nomes -> chave da view */
 const NAME_TO_VIEW = {
-  redemac:       'PrecoRedeMac',
-  leroymerlin:   'PrecoLeroyMerlin',
-  tumelero:      'PrecoTumelero',
-  cassol:        'PrecoCassol',
-  queroquero:    'PrecoQueroQuero',
-  supremeinox:   'PrecoSupremeinox',
-  mestretinho:   'PrecoMestreTinho',
-  ghaus:         'PrecoGhaus'
+  redemac:'PrecoRedeMac', leroymerlin:'PrecoLeroyMerlin', tumelero:'PrecoTumelero', cassol:'PrecoCassol',
+  queroquero:'PrecoQueroQuero', supremeinox:'PrecoSupremeinox', mestretinho:'PrecoMestreTinho', ghaus:'PrecoGhaus'
 };
 function computeViewKey(label){
   const key = norm(label);
@@ -350,13 +365,13 @@ async function loadUserSelection(userId, planKey){
   setStatus(`Sites: ${chosen.map(c=>c.label).join(' · ')}`);
 }
 
-/* ========= agrega linhas da view ========= */
+/* ========= agrega linhas ========= */
 function upsertRowsIntoProdutos(rows){
-  const allowed = new Map(chosen.map(c=>[c.view_key, c.label])); // vk -> label
+  const allowed = new Map(chosen.map(c=>[c.view_key, c.label]));
   for (const r of rows){
     const vk = String(r.site||'');
     const label = allowed.get(vk);
-    if (!label) continue; // ignora sites não selecionados
+    if (!label) continue;
 
     const ean = String(r.ean||'');
     if (!produtosMap.has(ean)) produtosMap.set(ean, { sku:ean, desc:r.descricao||'', sites:{} });
@@ -462,9 +477,17 @@ function onGeneralScroll(){
 generalWrap.addEventListener('scroll', onGeneralScroll);
 
 /* ========= favoritos ========= */
+function itemMatchesFilters(item){
+  if (!shouldFilterFavs()) return true;
+  const qE = norm(currentEanQ);
+  const qD = norm(currentDescQ);
+  if (qE && !String(item.sku||'').includes(currentEanQ)) return false;
+  if (qD && !norm(item.desc||'').includes(qD)) return false;
+  return true;
+}
 function renderFavs(){
   favBody.innerHTML='';
-  const favList = produtosList.filter(p=>isFav(p.sku));
+  const favList = produtosList.filter(p=>isFav(p.sku)).filter(itemMatchesFilters);
   const frag=document.createDocumentFragment();
   for (const item of favList){
     const tr=document.createElement('tr');
@@ -495,8 +518,10 @@ function updateCounts(){
 /* ========= query ========= */
 function buildQuery(){
   let q = sb.from(VIEW).select('ean, site, preco, data, descricao, preco_num', { count:'estimated' }).order('data', { ascending:false });
-  if (currentEanQ)  q = q.ilike('ean', `%${currentEanQ}%`);
-  if (currentDescQ) q = q.ilike('descricao', `%${currentDescQ}%`);
+  if (shouldFilterGeneral()){
+    if (currentEanQ)  q = q.ilike('ean', `%${currentEanQ}%`);
+    if (currentDescQ) q = q.ilike('descricao', `%${currentDescQ}%`);
+  }
   return q;
 }
 async function fetchNextPage(){
@@ -533,7 +558,18 @@ ddMeusDados.addEventListener('click', ()=> location.href='meusdados.html');
 ddPlanos.addEventListener('click', ()=> location.href='planos.html');
 btnSair.addEventListener('click', async ()=>{ try{ await sb.auth.signOut(); } finally{ localStorage.removeItem('mm_login_date'); location.href = CFG.SITE_URL || 'index.html'; }});
 
-const onFilterInput = debounce(()=>{ currentEanQ=(eanFilter.value||'').trim(); currentDescQ=(descFilter.value||'').trim(); resetAndQuery(); }, 500);
+const onFilterInput = debounce(()=>{
+  currentEanQ=(eanFilter.value||'').trim();
+  currentDescQ=(descFilter.value||'').trim();
+  // aplica conforme o escopo
+  if (shouldFilterGeneral()){
+    resetAndQuery(); // refaz a consulta para a tabela Geral
+  }
+  // Favoritos sempre re-renderiza (aplicando ou não o filtro internamente)
+  renderFavs();
+  updateFavHeight();
+  updateCounts();
+}, 500);
 eanFilter.addEventListener('input', onFilterInput);
 descFilter.addEventListener('input', onFilterInput);
 
@@ -553,6 +589,32 @@ btnReload.addEventListener('click', async ()=>{
   }
   resetAndQuery();
 });
+
+/* ========= escopo dos filtros ========= */
+function initScopeRadios(){
+  const radios = scopeGroup.querySelectorAll('input[name="scope"]');
+  // restaurar estado
+  radios.forEach(r=>{ r.checked = (r.value===searchScope); });
+
+  radios.forEach(r=>{
+    r.addEventListener('change', ()=>{
+      if (!r.checked) return;
+      searchScope = r.value;
+      localStorage.setItem('mm_scope', searchScope);
+
+      if (shouldFilterGeneral()){
+        // precisamos reconsultar o banco com (ou sem) filtros conforme escopo
+        resetAndQuery();
+      } else {
+        // escopo só em Favoritos: mantém Geral como está e só re-renderiza favs
+        renderFavs();
+        updateFavHeight();
+        updateCounts();
+      }
+    });
+  });
+}
+initScopeRadios();
 
 /* ========= favoritos height / resizer ========= */
 function measureRowHeight(){ const row=document.querySelector('#favTable tbody tr'); if(!row) return 44; const h=Math.round(row.getBoundingClientRect().height); return Math.max(36, h||44); }
@@ -596,10 +658,10 @@ function drawSpark(points){
   ctx.strokeStyle='#232323'; ctx.lineWidth=1; ctx.beginPath();
   for(let i=0;i<=3;i++){ const yy=m.t+i*(H-m.t-m.b)/3; ctx.moveTo(m.l,yy); ctx.lineTo(W-m.r,yy); } ctx.stroke();
   ctx.beginPath(); ctx.lineWidth=3; ctx.strokeStyle='#00d084';
-  // ... desenho da linha (mantido igual)
+  // pontos/linha desenhados em openChartFor (mantido)
 }
 
-/* ========= Minimizar/Maximizar (Favoritos & Geral) ========= */
+/* ========= Minimizar/Maximizar ========= */
 function applyToggle(btn, wrap, extraEl, key){
   const collapsed = localStorage.getItem(key) === '1';
   function setState(isCollapsed){
@@ -611,7 +673,7 @@ function applyToggle(btn, wrap, extraEl, key){
   setState(collapsed);
   btn.addEventListener('click', ()=>{
     const curr = btn.getAttribute('aria-expanded') === 'true';
-    const nextCollapsed = curr; // se está expandido (true), ao clicar colapsa
+    const nextCollapsed = curr;
     localStorage.setItem(key, nextCollapsed ? '1' : '0');
     setState(nextCollapsed);
   });
@@ -619,21 +681,15 @@ function applyToggle(btn, wrap, extraEl, key){
 applyToggle(toggleFavBtn, favWrap, document.getElementById('favResizer'), 'mm_tgl_fav');
 applyToggle(toggleGenBtn, generalWrap, null, 'mm_tgl_gen');
 
-/* ========= Impressão de Favoritos (relatório simples, sem linhas) ========= */
+/* ========= Impressão de Favoritos ========= */
 function buildPrintHTMLFromFav() {
-  // Cabeçalhos (thead atual, menos a 1ª coluna "Ação")
   const favHeaderRow = document.getElementById('favHeaderRow');
   const headers = Array.from(favHeaderRow?.children || [])
     .map(th => th.textContent.trim())
     .filter((_, i) => i !== 0);
-
-  // Linhas (tbody atual)
   const favBody = document.querySelector('#favTable tbody');
   const rows = Array.from(favBody?.rows || []);
-
   const thead = `<thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>`;
-
-  // Copia valores visíveis; remove 1ª célula "Ação"
   let tbody = '';
   for (const tr of rows) {
     const cells = Array.from(tr.cells).slice(1).map(td => {
@@ -642,7 +698,6 @@ function buildPrintHTMLFromFav() {
     });
     tbody += `<tr>${cells.join('')}</tr>`;
   }
-
   const css = `
     *{ box-sizing:border-box; }
     body{ font-family:Arial, sans-serif; color:#000; background:#fff; padding:24px; }
@@ -653,15 +708,12 @@ function buildPrintHTMLFromFav() {
     tbody td{ padding:4px 0; }
     @media print { body{ padding:0; } }
   `;
-
   const now = new Date();
   const meta = `${now.toLocaleDateString('pt-BR')} ${now.toLocaleTimeString('pt-BR')}`;
-
   return `
-    <!DOCTYPE html><html><head><meta charset="utf-8">
-      <title>Relatório — Favoritos</title>
-      <style>${css}</style>
-    </head><body>
+    <!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório — Favoritos</title>
+      <style>${css}</style></head>
+    <body>
       <h1>Relatório — Favoritos</h1>
       <div class="meta">Gerado em ${meta}</div>
       <table>${thead}<tbody>${tbody}</tbody></table>
@@ -669,7 +721,6 @@ function buildPrintHTMLFromFav() {
     </body></html>
   `;
 }
-
 function printFavReport(){
   const win = window.open('', '_blank');
   if (!win) { alert('Permita pop-ups para imprimir.'); return; }
@@ -677,8 +728,6 @@ function printFavReport(){
   win.document.write(buildPrintHTMLFromFav());
   win.document.close();
 }
-
-// Listener do botão (não interfere caso o botão não exista)
 btnPrintFav && btnPrintFav.addEventListener('click', printFavReport);
 
 /* ========= init ========= */
@@ -698,6 +747,9 @@ btnPrintFav && btnPrintFav.addEventListener('click', printFavReport);
   }catch(e){ planChip.textContent='Plano: —'; }
 
   await loadUserSelection(session.user.id, planKey);
+
+  // restaura escopo na UI
+  initScopeRadios();
 
   currentEanQ=''; currentDescQ='';
   resetAndQuery();
