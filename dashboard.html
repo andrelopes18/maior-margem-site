@@ -76,11 +76,6 @@
   #chartPopover header { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
   #chartPopover .close { background:transparent; border:1px solid #333; color:#ddd; padding:2px 8px; border-radius:6px; cursor:pointer; }
   #chartPopover .msg { font-size:12px; color:#9aa0a6; margin-top:6px; }
-
-  /* ===== FIX: botão/ícone do gráfico visível ===== */
-  .chart-btn { margin-left:8px; background:transparent; border:1px solid #333; padding:4px; border-radius:6px; cursor:pointer; vertical-align:middle; }
-  .chart-btn:hover { background:#1b1b1b; }
-  .chart-icon { width:18px; height:18px; display:block; }
 </style>
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="./config.js"></script>
@@ -114,11 +109,7 @@
 <section id="favPanel" class="panel">
   <div class="panel-header">
     <h2>Favoritos</h2>
-    <div>
-      <!-- NOVO: botão de impressão (somente este item foi adicionado) -->
-      <button id="btnPrintFav" class="toggle-btn" title="Imprimir favoritos">Imprimir</button>
-      <button id="toggleFav" class="toggle-btn" aria-expanded="true">Minimizar</button>
-    </div>
+    <button id="toggleFav" class="toggle-btn" aria-expanded="true">Minimizar</button>
   </div>
   <div id="favWrap" class="wrap">
     <table id="favTable">
@@ -204,7 +195,6 @@ const favBody  = document.querySelector('#favTable tbody');
 const favHeaderRow = document.getElementById('favHeaderRow');
 const favResizer  = document.getElementById('favResizer');
 const toggleFavBtn = document.getElementById('toggleFav');
-const btnPrintFav = document.getElementById('btnPrintFav'); // NOVO
 
 const generalWrap = document.getElementById('generalWrap');
 const generalBody = document.querySelector('#produtosTable tbody');
@@ -640,84 +630,6 @@ function applyToggle(btn, wrap, extraEl, key){
 }
 applyToggle(toggleFavBtn, favWrap, document.getElementById('favResizer'), 'mm_tgl_fav');
 applyToggle(toggleGenBtn, generalWrap, null, 'mm_tgl_gen');
-
-/* ========= Impressão de Favoritos (relatório sem linhas) ========= */
-function getFavRows(){
-  return produtosList.filter(p=>isFav(p.sku));
-}
-function getHeaderLabelsFromFav(){
-  // THs atuais (exceto "Ação")
-  const ths = Array.from(favHeaderRow.children).map(th=>th.textContent.trim());
-  return ths.filter((t,i)=> i!==0);
-}
-function getCellForPrint(item, c){
-  const isLocked = locked.has(c.site_id);
-  const d = item.sites[c.label];
-  if (!d) return '—';
-  if (isLocked) return '•••';
-  if (Number.isFinite(d.precoNum)) return formatBRL(d.precoNum);
-  return (d.precoRaw ?? '').toString();
-}
-function buildPrintHTML(){
-  const rows = getFavRows();
-  const hasRows = rows.length>0;
-  const headers = getHeaderLabelsFromFav(); // ["EAN","Descrição", ...sites]
-  const siteColumns = chosen.map(c=>c.label);
-
-  const now = new Date();
-  const meta = `${now.toLocaleDateString('pt-BR')} ${now.toLocaleTimeString('pt-BR')}`;
-
-  let thead = '';
-  if (hasRows){
-    thead = `<thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead>`;
-  }
-
-  let tbody = '';
-  if (hasRows){
-    for (const item of rows){
-      const cells = [
-        `<td>${item.sku}</td>`,
-        `<td>${(item.desc||'').toString().replace(/</g,'&lt;')}</td>`,
-        ...siteColumns.map(lbl=>{
-          const c = chosen.find(x=>x.label===lbl);
-          return `<td>${getCellForPrint(item, c)}</td>`;
-        })
-      ];
-      tbody += `<tr>${cells.join('')}</tr>`;
-    }
-  }
-
-  const css = `
-    *{ box-sizing:border-box; }
-    body{ font-family:Arial, sans-serif; color:#000; background:#fff; padding:24px; }
-    h1{ margin:0 0 4px 0; font-size:18px; }
-    .meta{ color:#444; font-size:12px; margin-bottom:14px; }
-    table{ width:100%; border-collapse:collapse; }
-    thead th{ text-align:left; font-weight:700; padding:6px 0; }
-    tbody td{ padding:4px 0; }
-    @media print { body{ padding:0; } }
-  `;
-
-  return `
-    <!DOCTYPE html><html><head><meta charset="utf-8">
-    <title>Relatório — Favoritos</title>
-    <style>${css}</style></head>
-    <body>
-      <h1>Relatório — Favoritos</h1>
-      <div class="meta">Gerado em ${meta}</div>
-      ${hasRows ? `<table>${thead}<tbody>${tbody}</tbody></table>` : `<div class="meta">Nenhum favorito para imprimir.</div>`}
-      <script>window.onload = () => { window.print(); }</script>
-    </body></html>
-  `;
-}
-function printFavReport(){
-  const win = window.open('', '_blank');
-  if (!win){ alert('Permita pop-ups para imprimir.'); return; }
-  win.document.open();
-  win.document.write(buildPrintHTML());
-  win.document.close();
-}
-btnPrintFav.addEventListener('click', printFavReport);
 
 /* ========= init ========= */
 (async function init(){
