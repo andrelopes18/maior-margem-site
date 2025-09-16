@@ -197,11 +197,11 @@
           <select id="sel_id_produto"></select>
         </div>
         <div class="row">
-          <label class="help">EAN13 (obrigatório)</label>
+          <label class="help req">EAN13</label>
           <select id="sel_ean13"></select>
         </div>
         <div class="row">
-          <label class="help">Descrição (obrigatório)</label>
+          <label class="help req">Descrição</label>
           <select id="sel_descricao"></select>
         </div>
         <div class="row">
@@ -209,7 +209,7 @@
           <select id="sel_preco_custo"></select>
         </div>
         <div class="row">
-          <label class="help">Preço Venda (obrigatório)</label>
+          <label class="help req">Preço Venda</label>
           <select id="sel_preco_venda"></select>
         </div>
         <div class="row">
@@ -708,20 +708,20 @@ function initExcelImport(){
       const requiredOk = !!(mapping.ean13 && mapping.descricao && mapping.preco_venda);
       if (!requiredOk){ showBanner('Mapeie EAN13, Descrição e Preço de Venda para prosseguir.','warn'); return; }
 
-      // Normaliza conforme mapeamento atual
+      // Normaliza linhas
       parsedRows = normalizeRows();
       if (!parsedRows.length){
         showBanner('Nenhuma linha válida após normalização (verifique EAN13/Descrição/Preço de Venda).','warn', 6000);
         return;
       }
 
-      // Garante sessão válida
+      // Sessão
       if (!sessionUser || !sessionUser.id){
         showBanner('Sessão inválida. Faça login novamente.', 'err', 7000);
         return;
       }
 
-      // DEDUP por EAN13 — última ocorrência vence
+      // DEDUP por EAN13 — última ocorrência prevalece
       const byEan = new Map();
       for (const r of parsedRows){ byEan.set(r.ean13, r); }
       const rows = Array.from(byEan.values());
@@ -734,12 +734,8 @@ function initExcelImport(){
       for (const r of rows){
         idx++;
 
-        // Payload conforme regra do negócio:
-        // - Atualiza colunas disponíveis;
-        // - Zera (null) o restante conhecido;
-        // - SEMPRE grava a coluna do usuário como 'user_id'.
         const payload = {
-          user_id: sessionUser.id,
+          user_id: sessionUser.id,      // grava sempre no campo correto
           ean13: r.ean13,
           descricao: (typeof r.descricao !== 'undefined') ? r.descricao : null,
           preco_venda: (typeof r.preco_venda !== 'undefined') ? r.preco_venda : null,
@@ -749,34 +745,32 @@ function initExcelImport(){
         };
 
         try{
-          // Verifica existência por EAN13 (qualquer usuário)
+          // Verifica existência SOMENTE para o próprio usuário
           const sel = await sb.from('produtos_cliente')
-            .select('ean13') // não dependemos de coluna 'id'
+            .select('ean13')
             .eq('ean13', r.ean13)
+            .eq('user_id', sessionUser.id)
             .limit(1);
 
           if (sel.error) throw sel.error;
 
           if (sel.data && sel.data.length){
-            // UPDATE por EAN13
-            const upd = await sb
-              .from('produtos_cliente')
+            // UPDATE restrito ao próprio user
+            const upd = await sb.from('produtos_cliente')
               .update(payload)
-              .eq('ean13', r.ean13);
+              .eq('ean13', r.ean13)
+              .eq('user_id', sessionUser.id);
             if (upd.error) throw upd.error;
             ok++;
           } else {
-            // INSERT novo
-            const ins = await sb
-              .from('produtos_cliente')
-              .insert([payload]);
+            // INSERT novo para este user
+            const ins = await sb.from('produtos_cliente').insert([payload]);
             if (ins.error) throw ins.error;
             ok++;
           }
         }catch(err){
           console.error('Falha no registro', r.ean13, err);
-          lastErr = err;
-          fail++;
+          lastErr = err; fail++;
         }
 
         importStats.innerHTML = 'Progresso: ' + idx + ' / ' + rows.length +
