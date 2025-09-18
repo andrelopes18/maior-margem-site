@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -70,7 +71,7 @@
   .chart-btn svg { width:18px; height:18px; display:block; }
   .chart-btn:hover svg rect { fill:#373737; }
   .chart-btn:active svg path { opacity:.9; }
-  #dbgWrap { display:none; position:fixed; right:16px; bottom:16px; width:460px; max-height:60vh; z-index:9999;
+  #dbgWrap { display:none; position:fixed; right:16px; bottom:16px; width:520px; max-height:60vh; z-index:9999;
              background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px; padding:10px; box-shadow:0 10px 30px rgba(0,0,0,.6); }
   #dbgWrap h3 { margin:0 0 8px 0; font-size:14px; color:#bfe3ff; }
   #dbg { white-space:pre-wrap; font-family: ui-monospace,Consolas,monospace; font-size:12px; color:#bfe3ff; max-height:48vh; overflow:auto; }
@@ -256,29 +257,40 @@ async function getSitesLimitForPlan(planKey){
   return DEFAULT_PLAN_SITE_LIMIT[k] ?? 2;
 }
 
-/* ========= user_sites -> chosen ========= */
+/* ========= user_sites -> chosen (SEM FALLBACK) ========= */
 async function loadUserSelection(userId, planKey){
   dlog({step:'loadUserSelection.start', userId, planKey});
-  let rows=[];
-  try{
-    const { data, error } = await sb.from('user_sites').select('site_id, created_at, position, id, user_id').eq('user_id', userId);
-    if (error) throw error;
-    rows = data||[];
-  }catch(e){ rows = []; showErr('Falha ao ler user_sites'); dlog({error:'user_sites', detail:String(e)}); }
-
+  // 1) user_sites
+  const rs = await sb.from('user_sites').select('site_id, created_at, position, id').eq('user_id', userId);
+  if (rs.error){
+    const { message, details, hint, code } = rs.error;
+    dlog({ error_stage:'user_sites', message, details, hint, code });
+    showErr('Falha ao ler user_sites: '+message+' (code: '+code+')');
+    throw new Error('user_sites read failed');
+  }
+  const rows = rs.data || [];
   rows.sort((a,b)=>{
     const pa=a.position??null, pb=b.position??null; if(pa!=null && pb!=null && pa!==pb) return pa-pb;
     const ca=a.created_at?new Date(a.created_at).getTime():0; const cb=b.created_at?new Date(b.created_at).getTime():0;
     if(ca!==cb) return ca-cb; return (a.id||0)-(b.id||0);
   });
+  const siteIds = rows.map(r=>r.site_id).filter(x=>x!=null);
+  if (!siteIds.length){
+    chosen=[]; unlocked=new Set(); locked=new Set(); buildHeaders();
+    setStatus('Nenhum site selecionado em Meus Dados.');
+    dlog({step:'loadUserSelection.none'});
+    return;
+  }
 
-  const siteIds=rows.map(r=>r.site_id).filter(x=>x!=null);
-  if (!siteIds.length){ chosen=[]; unlocked=new Set(); locked=new Set(); buildHeaders(); setStatus('Nenhum site selecionado em Meus Dados.'); dlog({step:'loadUserSelection.none'}); return; }
-
-  let sites=[];
-  try{ const { data, error } = await sb.from('sites').select('id, nome').in('id', siteIds); if (error) throw error; sites=data||[]; }
-  catch(e){ showErr('Falha ao ler sites'); dlog({error:'sites', detail:String(e)}); }
-
+  // 2) sites (obrigatório, SEM fallback)
+  const rsSites = await sb.from('sites').select('id, nome').in('id', siteIds);
+  if (rsSites.error){
+    const { message, details, hint, code } = rsSites.error;
+    dlog({ error_stage:'sites', message, details, hint, code });
+    showErr('Falha ao ler sites: '+message+' (code: '+code+')');
+    throw new Error('sites read failed');
+  }
+  const sites = rsSites.data || [];
   const byId=new Map(sites.map(s=>[s.id,s])); const ordered=[]; for (const id of siteIds){ const s=byId.get(id); if(s && !ordered.includes(s)) ordered.push(s); }
   chosen = ordered.map(s=>({ site_id:s.id, label:(s.nome||('Site '+s.id)).toString().trim() }));
 
@@ -303,7 +315,7 @@ function upsertRowsIntoProdutos(rows){
     if (!item.desc) item.desc = r.descricao_cliente || r.descricao || '';
     if (item.meu_preco == null && r.meu_preco != null){ const n=Number(r.meu_preco); if (Number.isFinite(n)) item.meu_preco=n; }
 
-    const label = allowedById.get(r.site_id);      // exibe exatamente sites.nome
+    const label = allowedById.get(r.site_id);
     const prev=item.sites[label];
     if (!prev || new Date(r.data) > new Date(prev.data)){
       item.sites[label] = { precoRaw:r.preco, precoNum:r.preco_num, data:r.data, site_id:r.site_id, site_nome:r.site_nome };
@@ -438,8 +450,12 @@ async function fetchNextPage(){
       if (!favFirstAutoRenderDone){ updateFavHeight(); favFirstAutoRenderDone=true; }
       serverOffset += PAGE_SIZE; setStatus('Carregados (parcial): ' + produtosList.length + ' SKUs');
     }
-  }catch(e){ console.error(e); showErr('Falha ao carregar: '+(e?.message||e)); setStatus('Erro ao carregar.'); }
-  finally{ fetching=false; updateCounts(); }
+  }catch(e){
+    const m = (e && (e.message || e.error_description || e.error)) ? (e.message || e.error_description || e.error) : String(e);
+    showErr('Falha ao carregar view: '+m);
+    dlog({error_stage:'view', message:m, raw:e});
+    serverExhausted = true;
+  } finally { fetching=false; updateCounts(); }
 }
 
 /* ========= Reset ========= */
@@ -470,7 +486,14 @@ btnReload.addEventListener('click', async ()=>{
         planChip.textContent = 'Plano: ' + (raw.charAt(0).toUpperCase()+raw.slice(1));
       }
     }catch(e){ dlog({warn:'get plan failed', detail:String(e)}); }
-    await loadUserSelection(s.user.id, planKey);
+
+    try{
+      await loadUserSelection(s.user.id, planKey);
+    }catch(e){
+      dlog({fatal:'reload user_sites/sites failed', raw:String(e)});
+      // não segue adiante se falhou carregar user_sites/sites
+      return;
+    }
   }
   resetAndQuery();
   dlog({step:'manualReload.end'});
@@ -527,11 +550,9 @@ function drawSparkFull(points){
 async function fetchHistory(ean, siteId){
   let pts=[];
   try{
-    // histórico direto da view, filtrando por site_id
     const { data, error } = await sb.from(VIEW).select('data, preco_num').eq('ean', ean).eq('site_id', siteId).not('preco_num','is',null).order('data',{ascending:true}).limit(180);
     if (!error && data && data.length){ pts = data.map(r=>({ x:new Date(r.data), y:Number(r.preco_num) })).filter(p=>Number.isFinite(p.y)); }
   }catch(e){ dlog({error:'fetchHistory.view', detail:String(e)}); }
-  // dedup & sort
   const byTs = new Map(pts.map(p=>[p.x.getTime(), p])); return Array.from(byTs.values()).sort((a,b)=>a.x-b.x);
 }
 async function openChartFor(ev, ean, label, siteId){
@@ -575,14 +596,24 @@ btnPrintFav && btnPrintFav.addEventListener('click', printFavReport);
 
     let planKey='basico';
     try{
-      const { data, error } = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
-      if (!error){
-        const raw=(data?.plan||'basico').toString(); planKey=raw.toLowerCase();
+      const rs = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
+      if (!rs.error){
+        const raw=(rs.data?.plan||'basico').toString(); planKey=raw.toLowerCase();
         planChip.textContent='Plano: '+(raw.charAt(0).toUpperCase()+raw.slice(1));
+      }else{
+        const { message, details, hint, code } = rs.error;
+        dlog({warn_stage:'profiles', message, details, hint, code});
+        planChip.textContent='Plano: (erro)';
       }
     }catch(e){ dlog({warn:'get plan failed', detail:String(e)}); }
 
-    await loadUserSelection(session.user.id, planKey);
+    try{
+      await loadUserSelection(session.user.id, planKey); // << SEM FALLBACK: falhou aqui, aborta
+    }catch(e){
+      dlog({fatal:'init user_sites/sites failed', raw:String(e)});
+      return; // NÃO segue para query da view
+    }
+
     initScopeRadios();
 
     currentEanQ=''; currentDescQ='';
