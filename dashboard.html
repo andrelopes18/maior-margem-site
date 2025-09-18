@@ -70,14 +70,14 @@
   .chart-btn svg { width:18px; height:18px; display:block; }
   .chart-btn:hover svg rect { fill:#373737; }
   .chart-btn:active svg path { opacity:.9; }
-  #dbgWrap { display:none; position:fixed; right:16px; bottom:16px; width:420px; max-height:50vh; z-index:9999;
+  #dbgWrap { display:none; position:fixed; right:16px; bottom:16px; width:460px; max-height:60vh; z-index:9999;
              background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px; padding:10px; box-shadow:0 10px 30px rgba(0,0,0,.6); }
   #dbgWrap h3 { margin:0 0 8px 0; font-size:14px; color:#bfe3ff; }
-  #dbg { white-space:pre-wrap; font-family: ui-monospace,Consolas,monospace; font-size:12px; color:#bfe3ff; max-height:38vh; overflow:auto; }
+  #dbg { white-space:pre-wrap; font-family: ui-monospace,Consolas,monospace; font-size:12px; color:#bfe3ff; max-height:48vh; overflow:auto; }
   #chartPopover { position:fixed; z-index:9998; background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px; padding:10px; box-shadow:0 10px 30px rgba(0,0,0,.6); }
   #chartPopover header { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
   #chartPopover .close { background:transparent; border:1px solid #333; color:#ddd; padding:2px 8px; border-radius:6px; cursor:pointer; }
-  #chartPopover .msg { font-size:12px; color:#9aa0a6; margin-top:6px; }
+  #chartPopover .msg { font-size:12px; color:#9aa0a6; }
 </style>
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="./config.js"></script>
@@ -163,23 +163,24 @@
 </div>
 
 <script>
-/* ========= util ========= */
+/* ========= Debug ========= */
 const dbgWrap = document.getElementById('dbgWrap');
 const dbg = document.getElementById('dbg');
-function dlog(o){ dbg.textContent += (typeof o==='string' ? o : JSON.stringify(o,null,2)) + "\\n"; }
+function dlog(o){ try{ dbg.textContent += (typeof o==='string' ? o : JSON.stringify(o,null,2)) + "\\n"; dbg.scrollTop = dbg.scrollHeight; }catch{} }
 addEventListener('keydown', (e)=>{ if (e.ctrlKey && e.altKey && (e.key==='d'||e.key==='D')) dbgWrap.style.display = (dbgWrap.style.display==='none'||!dbgWrap.style.display)?'block':'none'; });
 
-/* ========= erros ========= */
+/* ========= Erros ========= */
 const errEl = document.getElementById('err');
-addEventListener('error', e => { errEl.style.display='block'; errEl.textContent='Erro JS: '+e.message; });
-addEventListener('unhandledrejection', e => { errEl.style.display='block'; errEl.textContent='Erro assíncrono: '+(e.reason?.message||e.reason); });
+function showErr(msg){ errEl.style.display='block'; errEl.textContent=msg; dlog({error:msg}); }
+addEventListener('error', e => showErr('Erro JS: '+e.message));
+addEventListener('unhandledrejection', e => showErr('Erro assíncrono: '+(e.reason?.message||e.reason)));
 
 /* ========= Supabase ========= */
 const CFG = window.CONFIG || {};
-if(!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY){ errEl.style.display='block'; errEl.textContent='CONFIG ausente (config.js)'; throw new Error('CONFIG ausente'); }
+if(!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY){ showErr('CONFIG ausente (config.js)'); throw new Error('CONFIG ausente'); }
 const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth:{ persistSession:true, autoRefreshToken:true, detectSessionInUrl:true }});
 
-/* ========= elementos ========= */
+/* ========= Elementos ========= */
 const statusEl = document.getElementById('status');
 const planChip  = document.getElementById('planChip');
 const userChip  = document.getElementById('userChip');
@@ -205,10 +206,11 @@ const countTotal  = document.getElementById('countTotal');
 const countFavs   = document.getElementById('countFavs');
 const scopeGroup = document.getElementById('scopeGroup');
 
-/* ========= estado ========= */
+/* ========= Estado ========= */
 const DEFAULT_PLAN_SITE_LIMIT = { trial:2, basico:4, intermediario:6, premium:8 };
-const VIEW = 'vw_precos_com_meu_preco'; /* nova view */
+const VIEW = 'vw_precos_dinamica'; /* <<< usa a view nova dinâmica */
 const PAGE_SIZE = 200, RENDER_CHUNK = 60;
+
 let chosen=[], unlocked=new Set(), locked=new Set();
 let produtosMap=new Map(), produtosList=[], serverOffset=0, serverExhausted=false, fetching=false;
 let generalView=[], itemsRendered=0;
@@ -217,7 +219,7 @@ let loadingMore=false; const generalChkMap=new Map();
 let favHeightUser = Number(localStorage.getItem('mm_fav_height')) || null, favFirstAutoRenderDone=false;
 let currentEanQ='', currentDescQ='', searchScope='both';
 
-/* ========= helpers ========= */
+/* ========= Helpers ========= */
 function setStatus(t){ statusEl.textContent = t||''; }
 function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
 function debounce(fn,ms=500){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); } }
@@ -228,20 +230,20 @@ function norm(s){ return (s||'').toString().normalize('NFD').replace(/[\u0300-\u
 function shouldFilterGeneral(){ return searchScope==='both' || searchScope==='general'; }
 function shouldFilterFavs(){ return searchScope==='both' || searchScope==='favorites'; }
 
-const NAME_TO_VIEW={ redemac:'PrecoRedeMac', leroymerlin:'PrecoLeroyMerlin', tumelero:'PrecoTumelero', cassol:'PrecoCassol',
-  queroquero:'PrecoQueroQuero', supremeinox:'PrecoSupremeinox', mestretinho:'PrecoMestreTinho', ghaus:'PrecoGhaus' };
-function computeViewKey(label){ const key=norm(label); return NAME_TO_VIEW[key] || ('Preco'+(label||'').toString().replace(/[^A-Za-z0-9]/g,'')); }
-
-/* ========= cabeçalhos (inclui "Meu preço") ========= */
+/* ========= Cabeçalhos (usa sites.nome e bloqueios por plano) ========= */
 function buildHeaders(){
   const base = '<th class="col-fav">★</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th><th class="col-param">Meu preço</th>';
-  const ths = chosen.map(c=>{ const lockAttr = locked.has(c.site_id) ? ' data-locked="true"' : ' data-locked="false"'; return '<th data-siteid="'+c.site_id+'"' + lockAttr + '>' + c.label + '</th>'; }).join('');
+  const ths = chosen.map(c=>{
+    const lockAttr = locked.has(c.site_id) ? ' data-locked="true"' : ' data-locked="false"';
+    return `<th data-siteid="${c.site_id}"${lockAttr}>${(c.label||('Site '+c.site_id)).replace(/</g,'&lt;')}</th>`;
+  }).join('');
   generalHeaderRow.innerHTML = base + ths;
+
   const favBase = '<th class="col-fav">Ação</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th><th class="col-param">Meu preço</th>';
   favHeaderRow.innerHTML = favBase + ths;
 }
 
-/* ========= plano ========= */
+/* ========= Plano ========= */
 async function getSitesLimitForPlan(planKey){
   const k=(planKey||'').toLowerCase();
   try{
@@ -250,52 +252,67 @@ async function getSitesLimitForPlan(planKey){
       const v = Number(data?.sites_limit ?? data?.max_sites);
       if (Number.isFinite(v) && v>0) return v;
     }
-  }catch(e){}
+  }catch(e){ dlog({warn:'fallback site limit', plan:k}); }
   return DEFAULT_PLAN_SITE_LIMIT[k] ?? 2;
 }
 
 /* ========= user_sites -> chosen ========= */
 async function loadUserSelection(userId, planKey){
+  dlog({step:'loadUserSelection.start', userId, planKey});
   let rows=[];
   try{
-    const { data, error } = await sb.from('user_sites').select('*');
+    const { data, error } = await sb.from('user_sites').select('site_id, created_at, position, id, user_id').eq('user_id', userId);
     if (error) throw error;
-    rows = (data||[]).filter(r => String(r.user_id||r.user_uid||r.user_uuid||r.uid||r.user||'') === String(userId));
-  }catch(e){ rows = []; }
+    rows = data||[];
+  }catch(e){ rows = []; showErr('Falha ao ler user_sites'); dlog({error:'user_sites', detail:String(e)}); }
+
   rows.sort((a,b)=>{
     const pa=a.position??null, pb=b.position??null; if(pa!=null && pb!=null && pa!==pb) return pa-pb;
     const ca=a.created_at?new Date(a.created_at).getTime():0; const cb=b.created_at?new Date(b.created_at).getTime():0;
     if(ca!==cb) return ca-cb; return (a.id||0)-(b.id||0);
   });
+
   const siteIds=rows.map(r=>r.site_id).filter(x=>x!=null);
-  if (!siteIds.length){ chosen=[]; unlocked=new Set(); locked=new Set(); buildHeaders(); setStatus('Nenhum site selecionado em Meus Dados.'); return; }
+  if (!siteIds.length){ chosen=[]; unlocked=new Set(); locked=new Set(); buildHeaders(); setStatus('Nenhum site selecionado em Meus Dados.'); dlog({step:'loadUserSelection.none'}); return; }
+
   let sites=[];
-  try{ const { data, error } = await sb.from('sites').select('*').in('id', siteIds); if (error) throw error; sites=data||[]; }catch(e){}
+  try{ const { data, error } = await sb.from('sites').select('id, nome').in('id', siteIds); if (error) throw error; sites=data||[]; }
+  catch(e){ showErr('Falha ao ler sites'); dlog({error:'sites', detail:String(e)}); }
+
   const byId=new Map(sites.map(s=>[s.id,s])); const ordered=[]; for (const id of siteIds){ const s=byId.get(id); if(s && !ordered.includes(s)) ordered.push(s); }
-  chosen = ordered.map(s=>{ const label=(s.nome||s.site||('Site '+s.id)).toString().trim(); const vk=computeViewKey(label); return { site_id:s.id, label, view_key:vk }; });
-  const lim = await getSitesLimitForPlan(planKey); unlocked=new Set(chosen.slice(0,lim).map(c=>c.site_id)); locked=new Set(chosen.slice(lim).map(c=>c.site_id));
-  buildHeaders(); setStatus('Sites: '+chosen.map(c=>c.label).join(' · '));
+  chosen = ordered.map(s=>({ site_id:s.id, label:(s.nome||('Site '+s.id)).toString().trim() }));
+
+  const lim = await getSitesLimitForPlan(planKey);
+  unlocked=new Set(chosen.slice(0,lim).map(c=>c.site_id));
+  locked=new Set(chosen.slice(lim).map(c=>c.site_id));
+
+  buildHeaders();
+  setStatus('Sites: '+chosen.map(c=>c.label).join(' · '));
+  dlog({step:'loadUserSelection.done', chosen, unlocked:[...unlocked], locked:[...locked]});
 }
 
-/* ========= agrega linhas vindas da VIEW ========= */
+/* ========= Agrega linhas vindas da VIEW ========= */
 function upsertRowsIntoProdutos(rows){
-  const allowed = new Map(chosen.map(c=>[c.view_key, c.label]));
+  const allowedById = new Map(chosen.map(c=>[c.site_id, c.label]));
   for (const r of rows){
-    const label = allowed.get(String(r.site||'')); if (!label) continue;
+    if (!allowedById.has(r.site_id)) continue;
     const ean = String(r.ean||'');
     if (!produtosMap.has(ean)) produtosMap.set(ean, { sku:ean, desc:(r.descricao_cliente||r.descricao||''), meu_preco:null, sites:{} });
     const item = produtosMap.get(ean);
+
     if (!item.desc) item.desc = r.descricao_cliente || r.descricao || '';
     if (item.meu_preco == null && r.meu_preco != null){ const n=Number(r.meu_preco); if (Number.isFinite(n)) item.meu_preco=n; }
+
+    const label = allowedById.get(r.site_id);      // exibe exatamente sites.nome
     const prev=item.sites[label];
     if (!prev || new Date(r.data) > new Date(prev.data)){
-      item.sites[label] = { precoRaw:r.preco, precoNum:r.preco_num, data:r.data };
+      item.sites[label] = { precoRaw:r.preco, precoNum:r.preco_num, data:r.data, site_id:r.site_id, site_nome:r.site_nome };
     }
   }
   produtosList = Array.from(produtosMap.values());
 }
 
-/* ========= filtros ========= */
+/* ========= Filtros ========= */
 function matchesFilters(item){
   const qE=(currentEanQ||'').trim(), qD=norm(currentDescQ||'');
   if (qE && !String(item.sku||'').includes(qE)) return false;
@@ -303,7 +320,7 @@ function matchesFilters(item){
   return true;
 }
 
-/* ========= render ========= */
+/* ========= Render ========= */
 function chartButtonSVG(){ return '<svg class="chart-icon" viewBox="0 0 24 24" aria-hidden="true">'
   +'<rect x="3" y="11" width="3" height="7" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>'
   +'<rect x="9" y="8"  width="3" height="10" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>'
@@ -323,7 +340,7 @@ function createPriceCell(item, label, isLocked, minLabel, maxLabel){
       const span=document.createElement('span'); span.className='price '+(!isLocked&&label===minLabel?'min':(!isLocked&&label===maxLabel?'max':''));
       span.title=isLocked?'Excedeu o limite do plano':(dtStr?('Atualizado em '+dtStr):''); span.textContent=formatBRL(d.precoNum); td.appendChild(span);
       const b=document.createElement('button'); b.className='chart-btn'; b.type='button'; b.title=isLocked?'Disponível no upgrade':'Ver histórico'; b.innerHTML=chartButtonSVG();
-      const c=chosen.find(x=>x.label===label); b.addEventListener('click',(ev)=>{ if(isLocked){location.href='planos.html';return;} openChartFor(ev,item.sku,label,c?.site_id,c?.view_key); }); td.appendChild(b);
+      const c=chosen.find(x=>x.label===label); b.addEventListener('click',(ev)=>{ if(isLocked){location.href='planos.html';return;} openChartFor(ev,item.sku,label,c?.site_id); }); td.appendChild(b);
       if (isLocked){ const up=document.createElement('button'); up.className='unlock'; up.type='button'; up.textContent='Ver planos'; up.addEventListener('click',()=>location.href='planos.html'); td.appendChild(up); }
     } else {
       const span=document.createElement('span'); span.className='price'; span.title=isLocked?'Excedeu o limite do plano':(dtStr?('Atualizado em '+dtStr):''); span.textContent=(d.precoRaw??'').toString(); td.appendChild(span);
@@ -350,7 +367,7 @@ function renderRowInto(tr,item){
   for (const c of chosen){ tr.appendChild(createPriceCell(item, c.label, locked.has(c.site_id), min, max)); }
 }
 
-/* ========= view (Geral) ========= */
+/* ========= View (Geral) ========= */
 function recomputeGeneralView(){ generalView = shouldFilterGeneral() ? produtosList.filter(matchesFilters) : produtosList.slice(); resetGeneralDom(); renderGeneralChunk(); }
 function renderGeneralChunk(){
   const end=Math.min(itemsRendered+RENDER_CHUNK, generalView.length);
@@ -360,7 +377,7 @@ function renderGeneralChunk(){
 }
 function resetGeneralDom(){ generalBody.innerHTML=''; generalChkMap.clear(); itemsRendered=0; endMarker.textContent=''; }
 
-/* ========= scroll / paginação ========= */
+/* ========= Scroll / Paginação ========= */
 function onGeneralScroll(){
   if (loadingMore) return;
   const nearBottom = generalWrap.scrollTop + generalWrap.clientHeight >= generalWrap.scrollHeight - 100;
@@ -369,7 +386,7 @@ function onGeneralScroll(){
 }
 generalWrap.addEventListener('scroll', onGeneralScroll);
 
-/* ========= favoritos ========= */
+/* ========= Favoritos ========= */
 function itemMatchesFavScope(item){ if (!shouldFilterFavs()) return true; return matchesFilters(item); }
 function renderFavs(){
   favBody.innerHTML='';
@@ -391,21 +408,28 @@ function renderFavs(){
   favBody.appendChild(frag);
 }
 
-/* ========= contadores ========= */
+/* ========= Contadores ========= */
 function updateCounts(){
   countShown.textContent = 'Exibindo ' + itemsRendered + ' de ' + generalView.length + ' no Geral';
   countTotal.textContent = serverExhausted ? ('Total carregado: ' + produtosList.length) : ('Carregando… (' + produtosList.length + '+ )');
   countFavs.textContent  = 'Favoritos: ' + favSet.size;
 }
 
-/* ========= query ========= */
-function buildQuery(){ return sb.from(VIEW).select('ean, site, preco, data, descricao, preco_num, meu_preco, descricao_cliente', { count:'estimated' }).order('data', { ascending:false }); }
+/* ========= Query ========= */
+function buildQuery(){
+  // Lê direto da view dinâmica
+  return sb.from(VIEW).select(
+    'ean, site_id, site_nome, preco, data, descricao, preco_num, meu_preco, descricao_cliente',
+    { count:'estimated' }
+  ).order('data', { ascending:false });
+}
 async function fetchNextPage(){
-  if (fetching || serverExhausted) return; fetching = true; hideErr(); setStatus('Carregando… (offset ' + serverOffset + ')');
+  if (fetching || serverExhausted) return; fetching = true; hideErr(); setStatus('Carregando… (offset ' + serverOffset + ')'); dlog({step:'fetch', offset:serverOffset});
   try{
     const from=serverOffset, to=serverOffset+PAGE_SIZE-1;
-    const { data, error } = await buildQuery().range(from,to);
+    const { data, error, count } = await buildQuery().range(from,to);
     if (error) throw error;
+    dlog({fetched: data?.length||0, count});
     if (!data || data.length===0){
       serverExhausted = true; setStatus('Todos os dados carregados.');
       if (itemsRendered >= generalView.length) endMarker.textContent = 'Fim da lista';
@@ -414,12 +438,13 @@ async function fetchNextPage(){
       if (!favFirstAutoRenderDone){ updateFavHeight(); favFirstAutoRenderDone=true; }
       serverOffset += PAGE_SIZE; setStatus('Carregados (parcial): ' + produtosList.length + ' SKUs');
     }
-  }catch(e){ console.error(e); errEl.style.display='block'; errEl.textContent='Falha ao carregar: '+(e?.message||e); setStatus('Erro ao carregar.'); }
+  }catch(e){ console.error(e); showErr('Falha ao carregar: '+(e?.message||e)); setStatus('Erro ao carregar.'); }
   finally{ fetching=false; updateCounts(); }
 }
 
-/* ========= reset ========= */
+/* ========= Reset ========= */
 function resetAndQuery(){
+  dlog({step:'resetAndQuery'});
   produtosMap.clear(); produtosList=[]; serverOffset=0; serverExhausted=false; favFirstAutoRenderDone=false;
   generalView=[]; resetGeneralDom(); renderFavs(); updateFavHeight(); updateCounts(); fetchNextPage();
 }
@@ -428,9 +453,13 @@ function resetAndQuery(){
 ddMeusDados.addEventListener('click', ()=> location.href='meusdados.html');
 ddPlanos.addEventListener('click', ()=> location.href='planos.html');
 btnSair.addEventListener('click', async ()=>{ try{ await sb.auth.signOut(); } finally{ localStorage.removeItem('mm_login_date'); location.href = CFG.SITE_URL || 'index.html'; }});
-const onFilterInput = debounce(()=>{ currentEanQ=(eanFilter.value||'').trim(); currentDescQ=(descFilter.value||'').trim(); recomputeGeneralView(); renderFavs(); updateFavHeight(); updateCounts(); },400);
+
+const onFilterInput = debounce(()=>{ currentEanQ=(eanFilter.value||'').trim(); currentDescQ=(descFilter.value||'').trim();
+  recomputeGeneralView(); renderFavs(); updateFavHeight(); updateCounts(); dlog({step:'filter', ean:currentEanQ, desc:currentDescQ}); },400);
 eanFilter.addEventListener('input', onFilterInput); descFilter.addEventListener('input', onFilterInput);
+
 btnReload.addEventListener('click', async ()=>{
+  dlog({step:'manualReload.start'});
   const s=(await sb.auth.getSession()).data.session;
   if (s?.user?.id){
     let planKey='basico';
@@ -440,16 +469,28 @@ btnReload.addEventListener('click', async ()=>{
         const raw=(data?.plan||'basico').toString(); planKey=raw.toLowerCase();
         planChip.textContent = 'Plano: ' + (raw.charAt(0).toUpperCase()+raw.slice(1));
       }
-    }catch{}
+    }catch(e){ dlog({warn:'get plan failed', detail:String(e)}); }
     await loadUserSelection(s.user.id, planKey);
   }
   resetAndQuery();
+  dlog({step:'manualReload.end'});
 });
+
 function initScopeRadios(){
   localStorage.setItem('mm_scope','both'); searchScope='both';
   const radios=scopeGroup.querySelectorAll('input[name="scope"]');
-  radios.forEach(r=>{ r.checked=(r.value===searchScope); r.addEventListener('change', ()=>{ if(!r.checked) return; searchScope=r.value; localStorage.setItem('mm_scope',searchScope); recomputeGeneralView(); renderFavs(); updateFavHeight(); updateCounts(); }); });
+  radios.forEach(r=>{
+    r.checked=(r.value===searchScope);
+    r.addEventListener('change', ()=>{
+      if(!r.checked) return;
+      searchScope=r.value; localStorage.setItem('mm_scope',searchScope);
+      recomputeGeneralView(); renderFavs(); updateFavHeight(); updateCounts();
+      dlog({step:'scopeChange', scope:searchScope});
+    });
+  });
 }
+
+/* ========= Favoritos: altura/resizer ========= */
 function measureRowHeight(){ const row=document.querySelector('#favTable tbody tr'); if(!row) return 44; const h=Math.round(row.getBoundingClientRect().height); return Math.max(36, h||44); }
 function measureHeadHeight(){ const head=document.querySelector('#favTable thead'); if(!head) return 40; const h=Math.round(head.getBoundingClientRect().height); return Math.max(32, h||40); }
 function applyFavHeight(px){ if(!px||!Number.isFinite(px)) return; const maxPx=Math.round(window.innerHeight*0.85); const clamped=Math.max(120, Math.min(px, maxPx)); favWrap.style.height=clamped+'px'; }
@@ -461,11 +502,12 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
   favResizer.addEventListener('dblclick', ()=>{ favHeightUser=null; localStorage.removeItem('mm_fav_height'); updateFavHeight(); });
 })();
 
-/* ========= gráfico ========= */
+/* ========= Gráfico simples ========= */
 const pop=document.getElementById('chartPopover'), popTitle=document.getElementById('chartTitle'), popClose=document.getElementById('chartClose'), popMsg=document.getElementById('chartMsg');
 const spark=document.getElementById('spark'), sparkCtx=spark.getContext('2d');
 popClose.addEventListener('click', ()=> pop.style.display='none');
 addEventListener('click', (ev)=>{ if(pop.style.display!=='none' && !pop.contains(ev.target) && !ev.target.closest('.chart-btn')) pop.style.display='none'; });
+
 function drawSparkFull(points){
   const ctx=sparkCtx,W=spark.width,H=spark.height; ctx.clearRect(0,0,W,H);
   if(!points || points.length<3){ popMsg.style.display='block'; popMsg.textContent='Histórico insuficiente (≥3 pontos).'; return; }
@@ -482,23 +524,24 @@ function drawSparkFull(points){
   ctx.fillStyle='#00d084'; points.forEach(p=>{ const X=xS(p.x.getTime()), Y=yS(p.y); ctx.beginPath(); ctx.arc(X,Y,2.5,0,Math.PI*2); ctx.fill(); });
   ctx.fillStyle='#9aa0a6'; ctx.font='10px Arial'; ctx.fillText(new Date(xMin).toLocaleDateString('pt-BR'), m.l, H-8); ctx.fillText(new Date(xMax).toLocaleDateString('pt-BR'), W-m.r-64, H-8);
 }
-async function fetchHistory(ean, siteId, viewKey){
+async function fetchHistory(ean, siteId){
   let pts=[];
-  try{ const { data, error } = await sb.from('precos').select('data, preco_num').eq('ean', ean).eq('site_id', siteId).order('data',{ascending:true});
-    if (!error && data && data.length){ pts = data.map(r=>({ x:new Date(r.data), y:Number(r.preco_num) })).filter(p=>Number.isFinite(p.y)); } }catch(e){}
-  if (pts.length>=3) return pts;
-  try{ const { data, error } = await sb.from(VIEW).select('data, preco_num').eq('ean', ean).eq('site', viewKey||null).order('data',{ascending:true});
-    if (!error && data && data.length){ const extra = data.map(r=>({ x:new Date(r.data), y:Number(r.preco_num) })).filter(p=>Number.isFinite(p.y)); pts = pts.concat(extra); } }catch(e){}
+  try{
+    // histórico direto da view, filtrando por site_id
+    const { data, error } = await sb.from(VIEW).select('data, preco_num').eq('ean', ean).eq('site_id', siteId).not('preco_num','is',null).order('data',{ascending:true}).limit(180);
+    if (!error && data && data.length){ pts = data.map(r=>({ x:new Date(r.data), y:Number(r.preco_num) })).filter(p=>Number.isFinite(p.y)); }
+  }catch(e){ dlog({error:'fetchHistory.view', detail:String(e)}); }
+  // dedup & sort
   const byTs = new Map(pts.map(p=>[p.x.getTime(), p])); return Array.from(byTs.values()).sort((a,b)=>a.x-b.x);
 }
-async function openChartFor(ev, ean, label, siteId, viewKey){
+async function openChartFor(ev, ean, label, siteId){
   const x = ev.clientX || (ev.touches && ev.touches[0]?.clientX) || 120, y = ev.clientY || (ev.touches && ev.touches[0]?.clientY) || 80;
   pop.style.left = Math.max(12, x - 260) + 'px'; pop.style.top  = Math.max(12, y - 200) + 'px';
   popTitle.textContent = 'Histórico — ' + label + ' • EAN ' + ean; pop.style.display='block'; popMsg.style.display='none';
-  const points = await fetchHistory(String(ean), Number(siteId), String(viewKey||'')); drawSparkFull(points);
+  const points = await fetchHistory(String(ean), Number(siteId)); drawSparkFull(points);
 }
 
-/* ========= Minimizar/Maximizar ========= */
+/* ========= Minimizar/Maximizar painéis ========= */
 function applyToggle(btn, wrap, extraEl, key){
   const collapsed = localStorage.getItem(key) === '1';
   function setState(isCollapsed){ btn.setAttribute('aria-expanded', String(!isCollapsed)); btn.textContent = isCollapsed ? 'Maximizar' : 'Minimizar'; wrap.style.display = isCollapsed ? 'none' : 'block'; if (extraEl) extraEl.style.display = isCollapsed ? 'none' : ''; }
@@ -522,18 +565,35 @@ function buildPrintHTMLFromFav() {
 function printFavReport(){ const win=window.open('', '_blank'); if(!win){ alert('Permita pop-ups para imprimir.'); return; } win.document.open(); win.document.write(buildPrintHTMLFromFav()); win.document.close(); }
 btnPrintFav && btnPrintFav.addEventListener('click', printFavReport);
 
-/* ========= init ========= */
+/* ========= Init ========= */
 (async function init(){
-  localStorage.setItem('mm_scope','both'); searchScope='both';
-  const { data:{ session } } = await sb.auth.getSession(); if (!session){ location.href = CFG.SITE_URL || 'index.html'; return; }
-  userChip.textContent = session.user?.email || 'Logado';
-  let planKey='basico';
-  try{ const { data, error } = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
-       if (!error){ const raw=(data?.plan||'basico').toString(); planKey=raw.toLowerCase(); planChip.textContent='Plano: '+(raw.charAt(0).toUpperCase()+raw.slice(1)); } }catch(e){ planChip.textContent='Plano: —'; }
-  await loadUserSelection(session.user.id, planKey);
-  initScopeRadios();
-  currentEanQ=''; currentDescQ=''; resetAndQuery(); generalWrap.dispatchEvent(new Event('scroll'));
+  try{
+    const { data:{ session } } = await sb.auth.getSession();
+    if (!session){ location.href = CFG.SITE_URL || 'index.html'; return; }
+    userChip.textContent = session.user?.email || 'Logado';
+    dlog({step:'session', user:session.user?.id, email:session.user?.email});
+
+    let planKey='basico';
+    try{
+      const { data, error } = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
+      if (!error){
+        const raw=(data?.plan||'basico').toString(); planKey=raw.toLowerCase();
+        planChip.textContent='Plano: '+(raw.charAt(0).toUpperCase()+raw.slice(1));
+      }
+    }catch(e){ dlog({warn:'get plan failed', detail:String(e)}); }
+
+    await loadUserSelection(session.user.id, planKey);
+    initScopeRadios();
+
+    currentEanQ=''; currentDescQ='';
+    resetAndQuery();
+    generalWrap.dispatchEvent(new Event('scroll'));
+  }catch(e){ showErr('Falha na inicialização'); dlog({error:'init', detail:String(e)}); }
 })();
+
+/* ========= Status helper ========= */
+function setStatus(t){ statusEl.textContent = t||''; }
+
 </script>
 </body>
 </html>
