@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -79,6 +78,10 @@
   #chartPopover header { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
   #chartPopover .close { background:transparent; border:1px solid #333; color:#ddd; padding:2px 8px; border-radius:6px; cursor:pointer; }
   #chartPopover .msg { font-size:12px; color:#9aa0a6; }
+
+  /* ====== NOVO: Ordenação ====== */
+  th.sortable { cursor:pointer; user-select:none; }
+  th.sortable .sort-ind { margin-left:6px; opacity:.8; font-size:11px; }
 </style>
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="./config.js"></script>
@@ -167,7 +170,7 @@
 /* ========= Debug ========= */
 const dbgWrap = document.getElementById('dbgWrap');
 const dbg = document.getElementById('dbg');
-function dlog(o){ try{ dbg.textContent += (typeof o==='string' ? o : JSON.stringify(o,null,2)) + "\\n"; dbg.scrollTop = dbg.scrollHeight; }catch{} }
+function dlog(o){ try{ dbg.textContent += (typeof o==='string' ? o : JSON.stringify(o,null,2)) + "\n"; dbg.scrollTop = dbg.scrollHeight; }catch{} }
 addEventListener('keydown', (e)=>{ if (e.ctrlKey && e.altKey && (e.key==='d'||e.key==='D')) dbgWrap.style.display = (dbgWrap.style.display==='none'||!dbgWrap.style.display)?'block':'none'; });
 
 /* ========= Erros ========= */
@@ -220,6 +223,10 @@ let loadingMore=false; const generalChkMap=new Map();
 let favHeightUser = Number(localStorage.getItem('mm_fav_height')) || null, favFirstAutoRenderDone=false;
 let currentEanQ='', currentDescQ='', searchScope='both';
 
+/* ===== NOVO: Estado de ordenação ===== */
+let sortStateGeneral = { key:null, dir:'asc' }; // dir: 'asc' | 'desc'
+let sortStateFav     = { key:null, dir:'asc' };
+
 /* ========= Helpers ========= */
 function setStatus(t){ statusEl.textContent = t||''; }
 function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
@@ -242,6 +249,10 @@ function buildHeaders(){
 
   const favBase = '<th class="col-fav">Ação</th><th class="col-sku">EAN</th><th class="col-desc">Descrição</th><th class="col-param">Meu preço</th>';
   favHeaderRow.innerHTML = favBase + ths;
+
+  /* ===== NOVO: habilitar sort nos dois headers ===== */
+  setupSortableHeaders(generalHeaderRow, 'general');
+  setupSortableHeaders(favHeaderRow, 'fav');
 }
 
 /* ========= Plano ========= */
@@ -261,7 +272,6 @@ async function getSitesLimitForPlan(planKey){
 async function loadUserSelection(userId, planKey){
   dlog({step:'loadUserSelection.start', userId, planKey});
 
-  // 1) user_sites (apenas colunas existentes: site_id TEXT, created_at TIMESTAMPTZ)
   const rs = await sb.from('user_sites').select('site_id, created_at').eq('user_id', userId);
   if (rs.error){
     const { message, details, hint, code } = rs.error;
@@ -283,7 +293,6 @@ async function loadUserSelection(userId, planKey){
     return;
   }
 
-  // Enforce: site_id deve ser numérico e referenciar sites.id
   const allNumeric = siteIdsText.every(v => /^[0-9]+$/.test(v));
   if (!allNumeric){
     const offending = siteIdsText.filter(v => !/^[0-9]+$/.test(v)).slice(0,10);
@@ -294,7 +303,6 @@ async function loadUserSelection(userId, planKey){
   }
   const siteIds = siteIdsText.map(v => Number(v));
 
-  // 2) sites (obrigatório)
   const rsSites = await sb.from('sites').select('id, nome').in('id', siteIds);
   if (rsSites.error){
     const { message, details, hint, code } = rsSites.error;
@@ -323,7 +331,7 @@ async function loadUserSelection(userId, planKey){
   dlog({step:'loadUserSelection.done', chosen, unlocked:[...unlocked], locked:[...locked]});
 }
 
-/* ========= Agrega, filtros, render, etc (inalterado) ========= */
+/* ========= Agrega, filtros, render, etc ========= */
 function upsertRowsIntoProdutos(rows){
   const allowedById = new Map(chosen.map(c=>[c.site_id, c.label]));
   for (const r of rows){
@@ -393,8 +401,114 @@ function renderRowInto(tr,item){
   for (const c of chosen){ tr.appendChild(createPriceCell(item, c.label, locked.has(c.site_id), min, max)); }
 }
 
+/* ========= Ordenação (core) ========= */
+function getValueForKey(item, key){
+  if (key==='sku') return item.sku || '';
+  if (key==='desc') return item.desc || '';
+  if (key==='meu_preco') return (typeof item.meu_preco==='number') ? item.meu_preco : null;
+  if (key.startsWith('site:')){
+    const label = key.slice(5);
+    const d = item.sites?.[label];
+    return (d && Number.isFinite(d.precoNum)) ? d.precoNum : null;
+  }
+  return null;
+}
+function makeComparator(key, dir){
+  const mul = (dir==='desc') ? -1 : 1;
+  return (a,b)=>{
+    const va = getValueForKey(a, key);
+    const vb = getValueForKey(b, key);
+
+    // Nulos ficam por último em asc e por primeiro em desc (mas consistente pelo mul)
+    const aNull = (va===null || va===undefined || va==='');
+    const bNull = (vb===null || vb===undefined || vb==='');
+
+    if (aNull && bNull) return 0;
+    if (aNull) return 1 * mul; // empurra nulos pro fim em asc
+    if (bNull) return -1 * mul;
+
+    // Comparação natural: string vs número
+    if (typeof va === 'number' && typeof vb === 'number'){
+      if (va===vb) return 0; return (va<vb ? -1 : 1) * mul;
+    }
+    // Para EAN: compare por comprimento+lex para ficar estável
+    const sa = String(va), sb = String(vb);
+    if (sa===sb) return 0;
+    // Intl.Collator para PT-BR, sensível a números
+    return new Intl.Collator('pt-BR',{numeric:true,sensitivity:'base'}).compare(sa,sb) * mul;
+  };
+}
+function applySortIndicators(rowEl, activeKey, dir){
+  // Limpa indicadores
+  Array.from(rowEl.children).forEach(th=>{
+    const ind = th.querySelector('.sort-ind');
+    if (ind) ind.remove();
+  });
+  // Adiciona no TH com data-sortkey correspondente
+  const th = rowEl.querySelector(`th[data-sortkey="${CSS.escape(activeKey)}"]`);
+  if (!th) return;
+  const span = document.createElement('span');
+  span.className = 'sort-ind';
+  span.textContent = dir==='asc' ? '▲' : '▼';
+  th.appendChild(span);
+}
+function setupSortableHeaders(headerRow, tableKind){
+  // Mapeia colunas fixas
+  const ths = Array.from(headerRow.children);
+  // Índices: 0=fav/ação (não sort), 1=EAN, 2=Descrição, 3=Meu preço, 4.. dinâmicas
+  ths.forEach((th, idx)=>{
+    // Pula a primeira coluna de ação/fav
+    if (idx===0) return;
+
+    let key=null;
+    if (idx===1) key='sku';
+    else if (idx===2) key='desc';
+    else if (idx===3) key='meu_preco';
+    else {
+      // Colunas de site: usamos o texto do TH como label
+      const label = (th.textContent||'').trim();
+      key = 'site:' + label;
+    }
+
+    th.classList.add('sortable');
+    th.setAttribute('data-sortkey', key);
+    th.addEventListener('click', ()=>{
+      if (tableKind==='general'){
+        // Alterna dir se clicar na mesma coluna
+        sortStateGeneral.dir = (sortStateGeneral.key===key && sortStateGeneral.dir==='asc') ? 'desc' : 'asc';
+        sortStateGeneral.key = key;
+        applySortGeneral();
+        applySortIndicators(headerRow, sortStateGeneral.key, sortStateGeneral.dir);
+      } else {
+        sortStateFav.dir = (sortStateFav.key===key && sortStateFav.dir==='asc') ? 'desc' : 'asc';
+        sortStateFav.key = key;
+        renderFavs(); // já aplica sort dentro
+        applySortIndicators(headerRow, sortStateFav.key, sortStateFav.dir);
+      }
+    });
+  });
+
+  // Reaplica indicador se houver estado anterior
+  if (tableKind==='general' && sortStateGeneral.key){
+    applySortIndicators(headerRow, sortStateGeneral.key, sortStateGeneral.dir);
+  }
+  if (tableKind==='fav' && sortStateFav.key){
+    applySortIndicators(headerRow, sortStateFav.key, sortStateFav.dir);
+  }
+}
+
 /* ========= View (Geral) ========= */
-function recomputeGeneralView(){ generalView = shouldFilterGeneral() ? produtosList.filter(matchesFilters) : produtosList.slice(); resetGeneralDom(); renderGeneralChunk(); }
+function recomputeGeneralView(){
+  generalView = shouldFilterGeneral() ? produtosList.filter(matchesFilters) : produtosList.slice();
+
+  // ===== NOVO: respeitar ordenação vigente =====
+  if (sortStateGeneral.key){
+    generalView.sort(makeComparator(sortStateGeneral.key, sortStateGeneral.dir));
+  }
+
+  resetGeneralDom();
+  renderGeneralChunk();
+}
 function renderGeneralChunk(){
   const end=Math.min(itemsRendered+RENDER_CHUNK, generalView.length);
   const frag=document.createDocumentFragment();
@@ -402,6 +516,15 @@ function renderGeneralChunk(){
   generalBody.appendChild(frag); itemsRendered=end; endMarker.textContent=(serverExhausted && itemsRendered>=generalView.length)?'Fim da lista':''; updateCounts();
 }
 function resetGeneralDom(){ generalBody.innerHTML=''; generalChkMap.clear(); itemsRendered=0; endMarker.textContent=''; }
+
+/* ===== NOVO: aplicar sort geral on-demand ===== */
+function applySortGeneral(){
+  if (sortStateGeneral.key){
+    generalView.sort(makeComparator(sortStateGeneral.key, sortStateGeneral.dir));
+  }
+  resetGeneralDom();
+  renderGeneralChunk();
+}
 
 /* ========= Scroll / Paginação ========= */
 function onGeneralScroll(){
@@ -416,7 +539,13 @@ generalWrap.addEventListener('scroll', onGeneralScroll);
 function itemMatchesFavScope(item){ if (!shouldFilterFavs()) return true; return matchesFilters(item); }
 function renderFavs(){
   favBody.innerHTML='';
-  const favList = produtosList.filter(p=>isFav(p.sku)).filter(itemMatchesFavScope);
+  let favList = produtosList.filter(p=>isFav(p.sku)).filter(itemMatchesFavScope);
+
+  // ===== NOVO: aplica ordenação de favoritos se houver
+  if (sortStateFav.key){
+    favList.sort(makeComparator(sortStateFav.key, sortStateFav.dir));
+  }
+
   const frag=document.createDocumentFragment();
   for (const item of favList){
     const tr=document.createElement('tr');
