@@ -318,7 +318,8 @@
         .range(from, to);
 
       if (state.q) {
-        query = query.or(`email.ilike.%${state.q}%,name.ilike.%${state.q}%`);
+        // busca simples por email ou nome
+        query = query.or(`email.ilike.%${state.q}%,first_name.ilike.%${state.q}%`);
       }
 
       const { data, count, error } = await query;
@@ -334,16 +335,18 @@
     function addUserRow(row) {
       const tpl = document.getElementById('userRowTpl');
       const tr = tpl.content.cloneNode(true);
-      tr.querySelector('[data-el="name"]').textContent = row.name || '—';
+      tr.querySelector('[data-el="name"]').textContent = row.first_name || '—';
       tr.querySelector('[data-el="email"]').textContent = row.email || '—';
       tr.querySelector('[data-el="plan"]').textContent = row.plan || '—';
       tr.querySelector('[data-el="price"]').textContent = (row.plan_price_cents != null) ? (row.plan_price_cents / 100).toFixed(2) : '—';
       tr.querySelector('[data-el="created"]').textContent = formatDate(row.created_at);
 
       const actions = tr.querySelector('[data-el="actions"]');
+
+      // seletor de plano + preço (mantido)
       const sel = document.createElement('select');
       sel.className = 'px-2 py-1 rounded border';
-      ['free', 'trial', 'basic', 'pro', 'enterprise', 'admin'].forEach(p => {
+      ['free', 'trial', 'basico', 'intermediario', 'premium', 'admin'].forEach(p => {
         const opt = document.createElement('option');
         opt.value = p; opt.textContent = p; if ((row.plan || '').toLowerCase() === p) opt.selected = true;
         sel.appendChild(opt);
@@ -358,9 +361,20 @@
       btnSave.addEventListener('click', async () => {
         await updateUserPlan(row.id, sel.value, inpPrice.value);
       });
+
+      // === NOVO: botão para zerar produtos do usuário ===
+      const btnWipe = document.createElement('button');
+      btnWipe.textContent = 'Zerar produtos';
+      btnWipe.title = 'Apaga todos os itens enviados pelo usuário na tabela produtos_cliente';
+      btnWipe.className = 'ml-2 px-3 py-1.5 rounded-lg bg-rose-600 text-white text-sm hover:bg-rose-500';
+      btnWipe.addEventListener('click', async () => {
+        await deleteUserProducts(row.id, row.email || row.first_name || row.id);
+      });
+
       actions.appendChild(sel);
       actions.appendChild(inpPrice);
       actions.appendChild(btnSave);
+      actions.appendChild(btnWipe);
 
       usersTbody.appendChild(tr);
     }
@@ -380,11 +394,50 @@
       }
     }
 
+    // ======= NOVO: utilitários para “Zerar produtos” =======
+    async function countUserProducts(userId) {
+      const { count, error } = await window.__supabase
+        .from('produtos_cliente')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId);
+      if (error) { banner('Contar produtos do usuário: ' + error.message, 'amber'); return 0; }
+      return count || 0;
+    }
+
+    async function deleteUserProducts(userId, label) {
+      try {
+        const total = await countUserProducts(userId);
+        const who = label ? ` (${label})` : '';
+        if (!total) {
+          if (!confirm(`Nenhum produto encontrado para${who}. Deseja prosseguir mesmo assim?`)) return;
+        } else {
+          const ok = confirm(`Isto irá APAGAR ${total} registro(s) em produtos_cliente para${who}. Deseja continuar?`);
+          if (!ok) return;
+        }
+
+        const { error } = await window.__supabase
+          .from('produtos_cliente')
+          .delete()
+          .eq('user_id', userId);
+
+        if (error) {
+          banner('Falha ao apagar produtos do usuário: ' + error.message, 'red');
+          return;
+        }
+
+        alert('Produtos apagados com sucesso.');
+        // atualiza métricas/tabela
+        await Promise.all([loadStats(), loadUsersTable()]);
+      } catch (e) {
+        banner('Erro ao apagar produtos: ' + (e?.message || e), 'red');
+      }
+    }
+
     // ================= Utils =================
     function formatNumber(n) { return new Intl.NumberFormat('pt-BR').format(n || 0); }
     function formatCurrencyBRL(n) { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n || 0); }
     function formatDate(iso) { if (!iso) return '—'; const d = new Date(iso); return d.toLocaleDateString('pt-BR', { year: 'numeric', month: '2-digit', day: '2-digit' }); }
-    function escapeHtml(s) { return (s ?? '').toString().replace(/[&<>"]+/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+    function escapeHtml(s) { return (s ?? '').toString().replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
   </script>
 </body>
 </html>
