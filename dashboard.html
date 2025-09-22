@@ -88,6 +88,10 @@
   th.drop-left::before { left:0; }
   th.drop-right::after { right:0; }
   th .sort-ind { margin-left:6px; opacity:.8; font-size:11px; }
+
+  /* ===== NOVO: estilo do link do preço ===== */
+  a.price-link { text-decoration:none; }
+  a.price-link:hover .price { text-decoration: underline; }
 </style>
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="./config.js"></script>
@@ -344,6 +348,7 @@ async function getSitesLimitForPlan(planKey){
 }
 
 /* ========= user_sites -> chosen ========= */
+/* ===== NOVO: também traz url_pesquisa de 'sites' e guarda no chosen ===== */
 async function loadUserSelection(userId, planKey){
   dlog({step:'loadUserSelection.start', userId, planKey});
 
@@ -372,14 +377,16 @@ async function loadUserSelection(userId, planKey){
   if (!allNumeric){ showErr('IDs de site inválidos em user_sites.'); throw new Error('user_sites.site_id not numeric'); }
   const siteIds = siteIdsText.map(v => Number(v));
 
-  const rsSites = await sb.from('sites').select('id, nome').in('id', siteIds);
+  /* ===== ALTERADO: inclui url_pesquisa ===== */
+  const rsSites = await sb.from('sites').select('id, nome, url_pesquisa').in('id', siteIds);
   if (rsSites.error){ const { message, code } = rsSites.error; showErr('Falha ao ler sites: '+message+' (code: '+code+')'); throw new Error('sites read failed'); }
   const sites = rsSites.data || [];
   const byId=new Map(sites.map(s=>[s.id,s]));
   const ordered=[]; for (const id of siteIds){ const s=byId.get(id); if(s && !ordered.includes(s)) ordered.push(s); }
   if (!ordered.length){ showErr('Sites não encontrados para os IDs do usuário.'); throw new Error('sites missing'); }
 
-  chosen = ordered.map(s=>({ site_id:s.id, label:(s.nome||('Site '+s.id)).toString().trim() }));
+  /* ===== ALTERADO: chosen inclui a URL de pesquisa ===== */
+  chosen = ordered.map(s=>({ site_id:s.id, label:(s.nome||('Site '+s.id)).toString().trim(), url:(s.url_pesquisa||'').toString() }));
 
   const lim = await getSitesLimitForPlan(planKey);
   unlocked=new Set(chosen.slice(0,lim).map(c=>c.site_id));
@@ -416,6 +423,16 @@ function matchesFilters(item){
   return true;
 }
 
+/* ========= NOVO: construir URL de produto com {ean} ========= */
+function buildSearchUrlByLabel(label, ean){
+  const c = chosen.find(x => x.label === label);
+  if (!c || !c.url) return null;
+  const tpl = String(c.url);
+  const enc = encodeURIComponent(String(ean||''));
+  // substitui {ean} ou {EAN}, case-insensitive
+  return tpl.replace(/{ean}/gi, enc);
+}
+
 /* ========= Células ========= */
 function chartButtonSVG(){ return '<svg class="chart-icon" viewBox="0 0 24 24" aria-hidden="true">'
   +'<rect x="3" y="11" width="3" height="7" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>'
@@ -434,18 +451,44 @@ function computeMinMaxForRow(item){
   }
   return { min:min.label, max:max.label };
 }
+
+/* ===== ALTERADO: preço agora é link clicável (se liberado) que abre o site ===== */
 function createPriceCell(item, label, isLocked, minLabel, maxLabel){
   const td=document.createElement('td'); if (isLocked) td.classList.add('locked-cell'); const d=item.sites[label];
   if (d){
     const dtStr=d.data?new Date(d.data).toLocaleString('pt-BR'):'';
+    const url = buildSearchUrlByLabel(label, item.sku);
     if (Number.isFinite(d.precoNum)){
       const span=document.createElement('span'); span.className='price '+(!isLocked&&label===minLabel?'min':(!isLocked&&label===maxLabel?'max':''));
-      span.title=isLocked?'Excedeu o limite do plano':(dtStr?('Atualizado em '+dtStr):''); span.textContent=formatBRL(d.precoNum); td.appendChild(span);
+      span.title=isLocked?'Excedeu o limite do plano':(dtStr?('Atualizado em '+dtStr):'');
+      span.textContent=formatBRL(d.precoNum);
+
+      // Se não estiver bloqueado e existe url_pesquisa, transforma em link
+      if (!isLocked && url){
+        const a=document.createElement('a');
+        a.href=url; a.target="_blank"; a.rel="noopener noreferrer"; a.className='price-link';
+        a.title='Abrir no site';
+        a.appendChild(span);
+        td.appendChild(a);
+      } else {
+        td.appendChild(span);
+      }
+
       const b=document.createElement('button'); b.className='chart-btn'; b.type='button'; b.title=isLocked?'Disponível no upgrade':'Ver histórico'; b.innerHTML=chartButtonSVG();
       const c=chosen.find(x=>x.label===label); b.addEventListener('click',(ev)=>{ if(isLocked){location.href='planos.html';return;} openChartFor(ev,item.sku,label,c?.site_id); }); td.appendChild(b);
       if (isLocked){ const up=document.createElement('button'); up.className='unlock'; up.type='button'; up.textContent='Ver planos'; up.addEventListener('click',()=>location.href='planos.html'); td.appendChild(up); }
     } else {
-      const span=document.createElement('span'); span.className='price'; span.title=isLocked?'Excedeu o limite do plano':(dtStr?('Atualizado em '+dtStr):''); span.textContent=(d.precoRaw??'').toString(); td.appendChild(span);
+      const span=document.createElement('span'); span.className='price'; span.title=isLocked?'Excedeu o limite do plano':(dtStr?('Atualizado em '+dtStr):''); span.textContent=(d.precoRaw??'').toString();
+
+      if (!isLocked && url){
+        const a=document.createElement('a');
+        a.href=url; a.target="_blank"; a.rel="noopener noreferrer"; a.className='price-link';
+        a.title='Abrir no site';
+        a.appendChild(span);
+        td.appendChild(a);
+      } else {
+        td.appendChild(span);
+      }
     }
   } else { td.innerHTML='<span class="muted">—</span>'; }
   return td;
