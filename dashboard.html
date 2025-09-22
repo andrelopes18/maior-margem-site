@@ -42,11 +42,14 @@
   .col-sku { width:160px; font-family: ui-monospace,Consolas,monospace; }
   .col-desc { min-width:260px; }
   .col-param { width:140px; }
-  .price { font-weight:700; display:inline-block; font-size:16px; vertical-align:middle; }
+
+  /* ===== PREÇOS ===== */
+  .price { font-weight:700; display:inline-block; font-size:16px; vertical-align:middle; color:#fff; } /* branco por padrão */
   @media (min-width:1200px){ .price{ font-size:18px; } }
-  .price.min { color:#ff4d4f; }
-  .price.max { color:#00d084; }
-  .price.param { color:#ffd54f; } /* amarelo */
+  .price.min { color:#ff4d4f; }   /* menor = vermelho */
+  .price.max { color:#00d084; }   /* maior = verde */
+  .price.param { color:#ffd54f; } /* meu preço = amarelo */
+
   .muted { display:none; }
   .end-marker { text-align:center; padding:10px; color:#9aa0a6; }
   .counts { margin-top:10px; font-size:12px; color:#9aa0a6; display:flex; gap:12px; flex-wrap:wrap; }
@@ -89,9 +92,10 @@
   th.drop-right::after { right:0; }
   th .sort-ind { margin-left:6px; opacity:.8; font-size:11px; }
 
-  /* ===== NOVO: estilo do link do preço ===== */
+  /* ===== Link do preço ===== */
   a.price-link { text-decoration:none; }
   a.price-link:hover .price { text-decoration: underline; }
+
 </style>
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="./config.js"></script>
@@ -225,6 +229,9 @@ const DEFAULT_PLAN_SITE_LIMIT = { trial:2, basico:4, intermediario:6, premium:8 
 const VIEW = 'vw_precos_dinamica';
 const PAGE_SIZE = 200, RENDER_CHUNK = 60;
 
+/* tolerância de outlier: ±50% da média */
+const OUTLIER_TOL = 0.50;
+
 let chosen=[], unlocked=new Set(), locked=new Set();
 let produtosMap=new Map(), produtosList=[], serverOffset=0, serverExhausted=false, fetching=false;
 let generalView=[], itemsRendered=0;
@@ -238,7 +245,7 @@ let sortStateGeneral = { key:'desc', dir:'asc' };
 let sortStateFav     = { key:'desc', dir:'asc' };
 
 /* ===== Reordenação de colunas (persistida) ===== */
-let columnOrder = []; // exemplo: ['sku','desc','meu_preco','site:Magazine Luiza', 'site:Mercado Livre', ...]
+let columnOrder = []; // ex: ['sku','desc','meu_preco','site:Loja A', 'site:Loja B', ...]
 const COL_ORDER_KEY = 'mm_col_order';
 
 function computeDefaultColumnOrder(){
@@ -334,7 +341,7 @@ function buildHeaders(){
   if (sortStateFav.key)     applySortIndicators(favHeaderRow,     sortStateFav.key,     sortStateFav.dir);
 }
 
-/* ========= Plano ========= */
+/* ========= Plano / sites do usuário (com URL de pesquisa) ========= */
 async function getSitesLimitForPlan(planKey){
   const k=(planKey||'').toLowerCase();
   try{
@@ -347,8 +354,7 @@ async function getSitesLimitForPlan(planKey){
   return DEFAULT_PLAN_SITE_LIMIT[k] ?? 2;
 }
 
-/* ========= user_sites -> chosen ========= */
-/* ===== NOVO: também traz url_pesquisa de 'sites' e guarda no chosen ===== */
+/* também traz 'url_pesquisa' para clique do preço */
 async function loadUserSelection(userId, planKey){
   dlog({step:'loadUserSelection.start', userId, planKey});
 
@@ -377,7 +383,6 @@ async function loadUserSelection(userId, planKey){
   if (!allNumeric){ showErr('IDs de site inválidos em user_sites.'); throw new Error('user_sites.site_id not numeric'); }
   const siteIds = siteIdsText.map(v => Number(v));
 
-  /* ===== ALTERADO: inclui url_pesquisa ===== */
   const rsSites = await sb.from('sites').select('id, nome, url_pesquisa').in('id', siteIds);
   if (rsSites.error){ const { message, code } = rsSites.error; showErr('Falha ao ler sites: '+message+' (code: '+code+')'); throw new Error('sites read failed'); }
   const sites = rsSites.data || [];
@@ -385,7 +390,6 @@ async function loadUserSelection(userId, planKey){
   const ordered=[]; for (const id of siteIds){ const s=byId.get(id); if(s && !ordered.includes(s)) ordered.push(s); }
   if (!ordered.length){ showErr('Sites não encontrados para os IDs do usuário.'); throw new Error('sites missing'); }
 
-  /* ===== ALTERADO: chosen inclui a URL de pesquisa ===== */
   chosen = ordered.map(s=>({ site_id:s.id, label:(s.nome||('Site '+s.id)).toString().trim(), url:(s.url_pesquisa||'').toString() }));
 
   const lim = await getSitesLimitForPlan(planKey);
@@ -398,7 +402,7 @@ async function loadUserSelection(userId, planKey){
   dlog({step:'loadUserSelection.done', chosen, unlocked:[...unlocked], locked:[...locked], columnOrder});
 }
 
-/* ========= Agrega, filtros, render ========= */
+/* ========= Agrega, análise de outliers, filtros, render ========= */
 function upsertRowsIntoProdutos(rows){
   const allowedById = new Map(chosen.map(c=>[c.site_id, c.label]));
   for (const r of rows){
@@ -411,11 +415,38 @@ function upsertRowsIntoProdutos(rows){
     const label = allowedById.get(r.site_id);
     const prev=item.sites[label];
     if (!prev || new Date(r.data) > new Date(prev.data)){
-      item.sites[label] = { precoRaw:r.preco, precoNum:r.preco_num, data:r.data, site_id:r.site_id, site_nome:r.site_nome };
+      item.sites[label] = { precoRaw:r.preco, precoNum:r.preco_num, data:r.data, site_id:r.site_id, site_nome:r.site_nome, valid:true };
     }
   }
   produtosList = Array.from(produtosMap.values());
+
+  // Após montar a lista, analisamos outliers por item
+  analyzeAllItemsOutliers();
 }
+
+function analyzeAllItemsOutliers(){
+  for (const item of produtosList){
+    const nums = [];
+    const entries = Object.values(item.sites||{});
+    for (const s of entries){
+      if (Number.isFinite(s.precoNum)) nums.push(s.precoNum);
+    }
+    // só aplica outlier se houver pelo menos 2 preços
+    if (nums.length >= 2){
+      const mean = nums.reduce((a,b)=>a+b,0)/nums.length;
+      const lo = mean*(1-OUTLIER_TOL), hi = mean*(1+OUTLIER_TOL);
+      item.analysis = { mean, lo, hi, n:nums.length };
+      for (const [label, s] of Object.entries(item.sites)){
+        if (!Number.isFinite(s.precoNum)){ s.valid = false; continue; }
+        s.valid = (s.precoNum >= lo && s.precoNum <= hi);
+      }
+    } else {
+      item.analysis = { mean: null, lo: null, hi: null, n: nums.length };
+      for (const s of entries){ s.valid = Number.isFinite(s.precoNum); } // com 0/1 preço, não filtramos por outlier
+    }
+  }
+}
+
 function matchesFilters(item){
   const qE=(currentEanQ||'').trim(), qD=norm(currentDescQ||'');
   if (qE && !String(item.sku||'').includes(qE)) return false;
@@ -423,13 +454,12 @@ function matchesFilters(item){
   return true;
 }
 
-/* ========= NOVO: construir URL de produto com {ean} ========= */
+/* ========= URL de pesquisa por site ========= */
 function buildSearchUrlByLabel(label, ean){
   const c = chosen.find(x => x.label === label);
   if (!c || !c.url) return null;
   const tpl = String(c.url);
   const enc = encodeURIComponent(String(ean||''));
-  // substitui {ean} ou {EAN}, case-insensitive
   return tpl.replace(/{ean}/gi, enc);
 }
 
@@ -440,38 +470,52 @@ function chartButtonSVG(){ return '<svg class="chart-icon" viewBox="0 0 24 24" a
   +'<rect x="15" y="5" width="3" height="13" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>'
   +'<path d="M3,18 L7,14 L12,15 L17,8 L21,10" fill="none" stroke="#00d084" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>'
   +'</svg>'; }
+
 function computeMinMaxForRow(item){
   let min={label:null,val:Infinity}, max={label:null,val:-Infinity};
   for (const c of chosen){
-    if (locked.has(c.site_id)) continue;
+    if (locked.has(c.site_id)) continue;               // só colunas liberadas contam
     const d=item.sites[c.label];
-    if (!d||!Number.isFinite(d.precoNum)) continue;
+    if (!d || !d.valid || !Number.isFinite(d.precoNum)) continue; // ignora outliers/indefinidos
     if (d.precoNum<min.val) min={label:c.label,val:d.precoNum};
     if (d.precoNum>max.val) max={label:c.label,val:d.precoNum};
   }
   return { min:min.label, max:max.label };
 }
 
-/* ===== ALTERADO: preço agora é link clicável (se liberado) que abre o site ===== */
+/* Preço clicável (se válido e não bloqueado) + filtro de outlier */
 function createPriceCell(item, label, isLocked, minLabel, maxLabel){
   const td=document.createElement('td'); if (isLocked) td.classList.add('locked-cell'); const d=item.sites[label];
   if (d){
     const dtStr=d.data?new Date(d.data).toLocaleString('pt-BR'):'';
     const url = buildSearchUrlByLabel(label, item.sku);
-    if (Number.isFinite(d.precoNum)){
-      const span=document.createElement('span'); span.className='price '+(!isLocked&&label===minLabel?'min':(!isLocked&&label===maxLabel?'max':''));
-      span.title=isLocked?'Excedeu o limite do plano':(dtStr?('Atualizado em '+dtStr):'');
-      span.textContent=formatBRL(d.precoNum);
 
-      // Se não estiver bloqueado e existe url_pesquisa, transforma em link
+    // se outlier (ou inválido), não exibe o preço
+    if (!d.valid){
+      const span=document.createElement('span');
+      span.className='price';
+      span.title = (item.analysis?.mean!=null)
+        ? `Filtrado por discrepância (>±${Math.round(OUTLIER_TOL*100)}% da média ${formatBRL(item.analysis.mean)})`
+        : 'Preço indisponível';
+      span.textContent='—';
+      td.appendChild(span);
+      return td;
+    }
+
+    if (Number.isFinite(d.precoNum)){
+      const cls = (!isLocked&&label===minLabel?'min':(!isLocked&&label===maxLabel?'max':'')) || '';
+      const priceSpan=document.createElement('span'); priceSpan.className='price '+cls;
+      priceSpan.title=isLocked?'Excedeu o limite do plano':(dtStr?('Atualizado em '+dtStr):'');
+      priceSpan.textContent=formatBRL(d.precoNum);
+
       if (!isLocked && url){
         const a=document.createElement('a');
         a.href=url; a.target="_blank"; a.rel="noopener noreferrer"; a.className='price-link';
         a.title='Abrir no site';
-        a.appendChild(span);
+        a.appendChild(priceSpan);
         td.appendChild(a);
       } else {
-        td.appendChild(span);
+        td.appendChild(priceSpan);
       }
 
       const b=document.createElement('button'); b.className='chart-btn'; b.type='button'; b.title=isLocked?'Disponível no upgrade':'Ver histórico'; b.innerHTML=chartButtonSVG();
@@ -493,6 +537,7 @@ function createPriceCell(item, label, isLocked, minLabel, maxLabel){
   } else { td.innerHTML='<span class="muted">—</span>'; }
   return td;
 }
+
 function createParamCell(item){
   const td=document.createElement('td'); td.className='col-param';
   const n=(typeof item.meu_preco==='number')?item.meu_preco:null;
@@ -509,7 +554,8 @@ function getValueForKey(item, key){
   if (key.startsWith('site:')){
     const label = key.slice(5);
     const d = item.sites?.[label];
-    return (d && Number.isFinite(d.precoNum)) ? d.precoNum : null;
+    // ordenar usando apenas preços exibíveis (não-outliers)
+    return (d && d.valid && Number.isFinite(d.precoNum)) ? d.precoNum : null;
   }
   return null;
 }
@@ -597,7 +643,6 @@ function setupReorderableHeaders(headerRow){
       const rect = th.getBoundingClientRect();
       const placeBefore = (ev.clientX - rect.left) < rect.width/2;
 
-      // Reordena em columnOrder
       const arr = columnOrder.slice();
       const srcIdx = arr.indexOf(srcKey);
       const destIdx = arr.indexOf(destKey);
@@ -608,10 +653,9 @@ function setupReorderableHeaders(headerRow){
       columnOrder = arr;
       saveColumnOrder();
 
-      // Reconstroi cabeçalhos e linhas
       buildHeaders();
-      recomputeGeneralView(); // respeita columnOrder
-      renderFavs();          // idem
+      recomputeGeneralView();
+      renderFavs();
     });
   });
 }
@@ -734,13 +778,15 @@ async function fetchNextPage(){
   if (fetching || serverExhausted) return; fetching = true; hideErr(); setStatus('Carregando… (offset ' + serverOffset + ')'); dlog({step:'fetch', offset:serverOffset});
   try{
     const from=serverOffset, to=serverOffset+PAGE_SIZE-1;
-    const { data, error, count } = await buildQuery().range(from,to);
+    const { data, error } = await buildQuery().range(from,to);
     if (error) throw error;
     if (!data || data.length===0){
       serverExhausted = true; setStatus('Todos os dados carregados.');
       if (itemsRendered >= generalView.length) endMarker.textContent = 'Fim da lista';
     } else {
-      upsertRowsIntoProdutos(data); recomputeGeneralView(); renderFavs();
+      upsertRowsIntoProdutos(data);
+      recomputeGeneralView();
+      renderFavs();
       if (!favFirstAutoRenderDone){ updateFavHeight(); favFirstAutoRenderDone=true; }
       serverOffset += PAGE_SIZE; setStatus('Carregados (parcial): ' + produtosList.length + ' SKUs');
     }
@@ -882,7 +928,6 @@ function buildPrintHTMLFromFav() {
   return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório — Favoritos</title><style>'+css+'</style></head><body><h1>Relatório — Favoritos</h1><div class="meta">Gerado em '+meta+'</div><table>'+thead+'<tbody>'+tbody+'</tbody></table><script>window.onload=()=>{window.print()}<\/script></body></html>';
 }
 function printFavReport(){ const win=window.open('', '_blank'); if(!win){ alert('Permita pop-ups para imprimir.'); return; } win.document.open(); win.document.write(buildPrintHTMLFromFav()); win.document.close(); }
-btnPrintFav && btnPrintFav.addEventListener('click', printFavReport);
 
 /* ========= Init ========= */
 (async function init(){
@@ -912,8 +957,6 @@ btnPrintFav && btnPrintFav.addEventListener('click', printFavReport);
 
     initScopeRadios();
 
-    // Ordenação padrão já está em sortStateGeneral/Fav (Descrição asc)
-    // Constrói cabeçalhos e carrega dados
     resetAndQuery();
     generalWrap.dispatchEvent(new Event('scroll'));
   }catch(e){ showErr('Falha na inicialização'); dlog({error:'init', detail:String(e)}); }
