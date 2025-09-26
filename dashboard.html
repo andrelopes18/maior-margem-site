@@ -275,7 +275,39 @@ function debounce(fn,ms=500){ let t; return (...a)=>{ clearTimeout(t); t=setTime
 function favSave(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet])); }
 function isFav(sku){ return favSet.has(String(sku)); }
 function formatBRL(n){ try{ return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) }catch{ return String(n) } }
-function norm(s){ return (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]/g,'').toLowerCase(); }
+
+/* Mantida: normalização “agressiva” (sem espaços) — usada em outros pontos quando necessário */
+function norm(s){
+  return (s||'').toString()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-zA-Z0-9]/g,'')
+    .toLowerCase();
+}
+
+/* NOVO: normaliza e devolve tokens (palavras), preservando separação
+   - remove acentos
+   - troca tudo que não é [a-z0-9] por espaço
+   - quebra por espaço e filtra vazios */
+function normTokens(s){
+  const cleaned = (s||'').toString()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g,' ')
+    .trim();
+  return cleaned ? cleaned.split(/\s+/) : [];
+}
+
+/* Gera índice de busca por descrição para um item (uma vez) */
+function ensureDescIndex(item){
+  if (!item) return;
+  if (!item._tokNeeds || item._descCached !== item.desc){
+    item._descCached = item.desc || '';
+    item._tok = normTokens(item._descCached);
+    item._tokNeeds = false;
+  }
+}
 
 /* ========= Minimizar/Maximizar ========= */
 function applyToggle(btn, wrap, extraEl, key){
@@ -453,14 +485,38 @@ function upsertRowsIntoProdutos(rows){
     if (!prev || new Date(r.data) > new Date(prev.data)){
       item.sites[label] = { precoRaw:r.preco, precoNum:r.preco_num, data:r.data, site_id:r.site_id, site_nome:r.site_nome, valid:true };
     }
+
+    /* NOVO: garante índice de tokens para busca por descrição */
+    item._tokNeeds = true; // marca para (re)gerar depois, evitando custo aqui
   }
   produtosList = Array.from(produtosMap.values());
+
+  /* Gera índices pendentes de uma vez só (eficiência) */
+  for (const it of produtosList){ if (it._tokNeeds) ensureDescIndex(it); }
+
   analyzeAllItemsOutliers();
 }
+
+/* ========= Busca robusta ========= */
 function matchesFilters(item){
-  const qE=(currentEanQ||'').trim(), qD=norm(currentDescQ||'');
+  /* EAN: igual ao original */
+  const qE = (currentEanQ||'').trim();
   if (qE && !String(item.sku||'').includes(qE)) return false;
-  if (qD && !norm(item.desc||'').includes(qD)) return false;
+
+  /* Descrição: tokens em qualquer ordem, aceitando parcial por palavra */
+  const qTokens = normTokens(currentDescQ);
+  if (qTokens.length){
+    ensureDescIndex(item);
+    const words = item._tok || [];
+    // Cada token do usuário deve aparecer em alguma palavra (substring)
+    for (const qt of qTokens){
+      let ok = false;
+      for (const w of words){
+        if (w.indexOf(qt) !== -1){ ok = true; break; }
+      }
+      if (!ok) return false;
+    }
+  }
   return true;
 }
 
@@ -955,7 +1011,6 @@ async function initUserAndSites(){
 }
 
 /* ========= Busca (EAN + Descrição) ========= */
-/* Recolocada: filtra em tempo real e aciona logSearchDebounced */
 const onFilterInput = debounce(()=>{
   currentEanQ = (eanFilter.value||'').trim();
   currentDescQ = (descFilter.value||'').trim();
