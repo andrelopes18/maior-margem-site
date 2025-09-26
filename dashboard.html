@@ -19,25 +19,31 @@
   .userChipWrap:hover .dropdown, .userChipWrap.open .dropdown { display:block; }
   .dd-item { width:100%; background:transparent; border:none; color:#eee; text-align:left; padding:10px 12px; border-radius:8px; cursor:pointer; font-size:14px; }
   .dd-item:hover { background:#1b1b1b; }
+
   .panel { background:#202020; border:1px solid #2a2a2a; border-radius:12px; padding:12px; margin-bottom:18px; }
   .panel-header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
   .panel-header h2 { margin:0; font-size:18px; color:#d5ffd5; }
   .toggle-btn { background:none; border:1px solid #2a2a2a; color:#ddd; padding:6px 10px; border-radius:8px; cursor:pointer; }
   .toggle-btn:hover { background:#1b1b1b; }
+
   .filters { display:grid; grid-template-columns: 1fr 1fr auto; gap:12px; margin:16px 0; align-items:center; }
   .filters input { padding:10px 12px; border-radius:6px; border:1px solid #333; background:#1e1e1e; color:#fff; }
   .scope { grid-column: 1 / -1; display:flex; gap:18px; align-items:center; color:#cfd8dc; font-size:13px; flex-wrap:wrap; }
   .scope label { display:flex; align-items:center; gap:6px; cursor:pointer; }
   .scope input[type="radio"] { accent-color:#00b140; }
+
   .status { margin:10px 0; color:#aaa; font-size:12px; }
   .err { display:none; color:#ff5d5d; margin:8px 0; font-size:13px; }
+
   .wrap { overflow:auto; border:1px solid #2a2a2a; border-radius:10px; position: relative; }
   #generalWrap { height:55vh; }
+
   table { width:100%; border-collapse:separate; border-spacing:0; }
   thead { position:sticky; top:0; z-index:3; }
   thead th { position:sticky; top:0; background:#0f0f0f; z-index:4; }
   th, td { border-bottom:1px solid #2a2a2a; padding:10px; text-align:left; font-size:14px; vertical-align:top; }
   tbody tr:hover { background:#1a1a1a; }
+
   .col-fav { width:40px; text-align:center; }
   .col-sku { width:160px; font-family: ui-monospace,Consolas,monospace; }
   .col-desc { min-width:260px; }
@@ -52,11 +58,14 @@
   .muted { display:none; }
   .end-marker { text-align:center; padding:10px; color:#9aa0a6; }
   .counts { margin-top:10px; font-size:12px; color:#9aa0a6; display:flex; gap:12px; flex-wrap:wrap; }
+
   .resizer { height:10px; margin-top:6px; border:1px solid #2a2a2a; border-radius:8px; cursor:ns-resize; background:linear-gradient(180deg,#1c1c1c,#111); display:flex; align-items:center; justify-content:center; }
   .resizer:after { content:""; width:40px; height:3px; border-radius:3px; background:#3a3a3a; }
   body.resizing, body.resizing * { cursor: ns-resize !important; user-select: none; }
+
   th[data-locked="true"] { position: relative; color: #aaa; }
   th[data-locked="true"]::after { content:"🔒"; margin-left:6px; opacity:.8; font-size:14px; }
+
   td.locked-cell { position: relative; }
   td.locked-cell .price { filter: blur(3px); }
   td.locked-cell .unlock {
@@ -68,14 +77,17 @@
   }
   td.locked-cell:hover .unlock { opacity:1; pointer-events:auto; }
   td.locked-cell .unlock:hover { background:#1b1b1b; }
+
   .chart-btn { margin-left:6px; background:transparent; border:0; padding:0; vertical-align:middle; cursor:pointer; }
   .chart-btn svg { width:18px; height:18px; display:block; }
   .chart-btn:hover svg rect { fill:#373737; }
   .chart-btn:active svg path { opacity:.9; }
+
   #dbgWrap { display:none; position:fixed; right:16px; bottom:16px; width:520px; max-height:60vh; z-index:9999;
              background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px; padding:10px; box-shadow:0 10px 30px rgba(0,0,0,.6); }
   #dbgWrap h3 { margin:0 0 8px 0; font-size:14px; color:#bfe3ff; }
   #dbg { white-space:pre-wrap; font-family: ui-monospace,Consolas,monospace; font-size:12px; color:#bfe3ff; max-height:48vh; overflow:auto; }
+
   #chartPopover { position:fixed; z-index:9998; background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px; padding:10px; box-shadow:0 10px 30px rgba(0,0,0,.6); }
   #chartPopover header { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
   #chartPopover .close { background:transparent; border:1px solid #333; color:#ddd; padding:2px 8px; border-radius:6px; cursor:pointer; }
@@ -110,6 +122,7 @@
   </div>
 </header>
 
+<!-- FILTROS + ESCOPO -->
 <div class="panel">
   <div class="filters">
     <input id="eanFilter" placeholder="Filtrar por EAN/GTIN…" />
@@ -126,6 +139,7 @@
   <div id="err" class="err"></div>
 </div>
 
+<!-- FAVORITOS -->
 <section id="favPanel" class="panel">
   <div class="panel-header">
     <h2>Favoritos</h2>
@@ -141,6 +155,7 @@
   <div id="favResizer" class="resizer" title="Arraste para redimensionar. Duplo clique volta ao automático."></div>
 </section>
 
+<!-- GERAL -->
 <section id="generalPanel" class="panel">
   <div class="panel-header">
     <h2>Geral</h2>
@@ -160,11 +175,13 @@
   </div>
 </section>
 
+<!-- DEBUG -->
 <div id="dbgWrap">
   <h3>Debug</h3>
   <pre id="dbg"></pre>
 </div>
 
+<!-- CHART POPOVER -->
 <div id="chartPopover" style="display:none;">
   <header>
     <span id="chartTitle">Histórico</span>
@@ -184,6 +201,7 @@ addEventListener('keydown', (e)=>{ if (e.ctrlKey && e.altKey && (e.key==='d'||e.
 /* ========= Erros ========= */
 const errEl = document.getElementById('err');
 function showErr(msg){ errEl.style.display='block'; errEl.textContent=msg; dlog({error:msg}); }
+function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
 addEventListener('error', e => showErr('Erro JS: '+e.message));
 addEventListener('unhandledrejection', e => showErr('Erro assíncrono: '+(e.reason?.message||e.reason)));
 
@@ -202,12 +220,14 @@ const btnSair     = document.getElementById('btnSair');
 const btnReload   = document.getElementById('btnReload');
 const eanFilter   = document.getElementById('eanFilter');
 const descFilter  = document.getElementById('descFilter');
+
 const favWrap  = document.getElementById('favWrap');
 const favBody  = document.querySelector('#favTable tbody');
 const favHeaderRow = document.getElementById('favHeaderRow');
 const favResizer  = document.getElementById('favResizer');
 const toggleFavBtn = document.getElementById('toggleFav');
 const btnPrintFav  = document.getElementById('btnPrintFav');
+
 const generalWrap = document.getElementById('generalWrap');
 const generalBody = document.querySelector('#produtosTable tbody');
 const generalHeaderRow = document.getElementById('generalHeaderRow');
@@ -217,7 +237,11 @@ const countShown  = document.getElementById('countShown');
 const countTotal  = document.getElementById('countTotal');
 const countFavs   = document.getElementById('countFavs');
 const scopeGroup = document.getElementById('scopeGroup');
-const pop=document.getElementById('chartPopover'), popTitle=document.getElementById('chartTitle'), popClose=document.getElementById('chartClose'), popMsg=document.getElementById('chartMsg');
+
+const pop=document.getElementById('chartPopover'),
+      popTitle=document.getElementById('chartTitle'),
+      popClose=document.getElementById('chartClose'),
+      popMsg=document.getElementById('chartMsg');
 const spark=document.getElementById('spark'), sparkCtx=spark.getContext('2d');
 
 /* ========= Estado ========= */
@@ -229,10 +253,14 @@ const OUTLIER_TOL = 0.50;
 let chosen=[], unlocked=new Set(), locked=new Set();
 let produtosMap=new Map(), produtosList=[];
 let serverOffset=0, serverExhausted=false, fetching=false;
+
 let generalView=[], itemsRendered=0;
+
 let favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
 let loadingMore=false; const generalChkMap=new Map();
+
 let favHeightUser = Number(localStorage.getItem('mm_fav_height')) || null, favFirstAutoRenderDone=false;
+
 let currentEanQ='', currentDescQ='', searchScope='both';
 
 let sortStateGeneral = { key:'desc', dir:'asc' };
@@ -241,9 +269,8 @@ let sortStateFav     = { key:'desc', dir:'asc' };
 let columnOrder = [];
 const COL_ORDER_KEY = 'mm_col_order';
 
-/* ========= Helpers ========= */
+/* ========= Utils ========= */
 function setStatus(t){ statusEl.textContent = t||''; }
-function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
 function debounce(fn,ms=500){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); } }
 function favSave(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet])); }
 function isFav(sku){ return favSet.has(String(sku)); }
@@ -354,11 +381,7 @@ async function loadUserSelection(userId, planKey){
   dlog({step:'loadUserSelection.start', userId, planKey});
 
   const rs = await sb.from('user_sites').select('site_id, created_at').eq('user_id', userId);
-  if (rs.error){
-    const { message, code } = rs.error;
-    showErr('Falha ao ler user_sites: '+message+' (code: '+code+')');
-    throw new Error('user_sites read failed');
-  }
+  if (rs.error){ showErr('Falha ao ler user_sites: '+rs.error.message+' (code: '+rs.error.code+')'); throw rs.error; }
   const rows = rs.data || [];
   rows.sort((a,b)=>{
     const ca=a.created_at?new Date(a.created_at).getTime():0; const cb=b.created_at?new Date(b.created_at).getTime():0;
@@ -374,12 +397,11 @@ async function loadUserSelection(userId, planKey){
     return;
   }
 
-  const allNumeric = siteIdsText.every(v => /^[0-9]+$/.test(v));
-  if (!allNumeric){ showErr('IDs de site inválidos em user_sites.'); throw new Error('user_sites.site_id not numeric'); }
+  if (!siteIdsText.every(v => /^[0-9]+$/.test(v))){ showErr('IDs de site inválidos em user_sites.'); throw new Error('user_sites.site_id not numeric'); }
   const siteIds = siteIdsText.map(v => Number(v));
 
   const rsSites = await sb.from('sites').select('id, nome, url_pesquisa').in('id', siteIds);
-  if (rsSites.error){ const { message, code } = rsSites.error; showErr('Falha ao ler sites: '+message+' (code: '+code+')'); throw new Error('sites read failed'); }
+  if (rsSites.error){ showErr('Falha ao ler sites: '+rsSites.error.message+' (code: '+rsSites.error.code+')'); throw rsSites.error; }
   const sites = rsSites.data || [];
   const byId=new Map(sites.map(s=>[s.id,s]));
   const ordered=[]; for (const id of siteIds){ const s=byId.get(id); if(s && !ordered.includes(s)) ordered.push(s); }
@@ -757,7 +779,7 @@ async function fetchNextPage(){
     const from=serverOffset, to=serverOffset+PAGE_SIZE-1;
     const { data, error, status } = await buildQuery().range(from,to);
     if (error){
-      // Trata 416 "Requested range not satisfiable"
+      // Trata 416 "Requested range not satisfiable" sem poluir a UI
       if ((status===416) || /Requested range not satisfiable/i.test(error.message||'')) {
         serverExhausted = true;
         setStatus('Todos os dados carregados.');
@@ -777,8 +799,7 @@ async function fetchNextPage(){
       serverOffset += PAGE_SIZE; setStatus('Carregados (parcial): ' + produtosList.length + ' SKUs');
     }
   }catch(e){
-    const m = (e && (e.message || e.error_description || e.error)) ? (e.message || e.error_description || e.error) : String(e);
-    showErr('Falha ao carregar view: '+m);
+    showErr('Falha ao carregar view: '+(e.message||String(e)));
     serverExhausted = true;
   } finally { fetching=false; updateCounts(); }
 }
@@ -790,7 +811,7 @@ function resetAndQuery(){
   generalView=[]; resetGeneralDom(); renderFavs(); updateFavHeight(); updateCounts(); fetchNextPage();
 }
 
-/* ========= LOG DE PESQUISA (sem endereço) ========= */
+/* ========= LOG DE PESQUISA (sem localização) ========= */
 const logSearchDebounced = debounce(doLogSearch, 1200);
 async function doLogSearch(){
   try{
@@ -840,18 +861,16 @@ function buildPrintHTMLFromFav() {
   return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório — Favoritos</title><style>'+css+'</style></head><body><h1>Relatório — Favoritos</h1><div class="meta">Gerado em '+meta+'</div><table>'+thead+'<tbody>'+tbody+'</tbody></table></body></html>';
 }
 function printFavReport(){
-  // cria iframe oculto, escreve o HTML e imprime
+  // cria iframe oculto, escreve o HTML e imprime — não depende de pop-up
   const iframe = document.createElement('iframe');
   iframe.style.position='fixed'; iframe.style.right='0'; iframe.style.bottom='0';
   iframe.style.width='0'; iframe.style.height='0'; iframe.style.border='0'; iframe.style.visibility='hidden';
   document.body.appendChild(iframe);
   const doc = iframe.contentWindow || iframe.contentDocument;
-  const win = iframe.contentWindow;
   const html = buildPrintHTMLFromFav();
   (doc.document || doc).open();
   (doc.document || doc).write(html + '<script>window.onload=function(){setTimeout(function(){window.focus();window.print();},10)}<\/script>');
   (doc.document || doc).close();
-  // remove o iframe após impressão (alguns navegadores não disparam onafterprint no iframe; removo por timeout)
   setTimeout(()=>{ try{ document.body.removeChild(iframe); }catch{} }, 2000);
 }
 
@@ -889,6 +908,67 @@ async function openChartFor(ev, ean, label, siteId){
   const points = await fetchHistory(String(ean), Number(siteId)); drawSparkFull(points);
 }
 
+/* ========= Escopo ========= */
+function initScopeRadios(){
+  localStorage.setItem('mm_scope','both'); searchScope='both';
+  const radios=scopeGroup.querySelectorAll('input[name="scope"]');
+  radios.forEach(r=>{
+    r.checked=(r.value===searchScope);
+    r.addEventListener('change', ()=>{
+      if(!r.checked) return;
+      searchScope=r.value; localStorage.setItem('mm_scope',searchScope);
+      recomputeGeneralView(); renderFavs(); updateFavHeight(); updateCounts();
+      dlog({step:'scopeChange', scope:searchScope});
+      logSearchDebounced();
+    });
+  });
+}
+
+/* ========= INIT: sessão, plano e sites ========= */
+async function initUserAndSites(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if (!session){ location.href = CFG.SITE_URL || 'index.html'; return; }
+  userChip.textContent = session.user?.email || 'Logado';
+  dlog({step:'session', user:session.user?.id, email:session.user?.email});
+
+  // Ler somente 'plan' — NÃO mexe em outras colunas para evitar inconsistências
+  let planKey='basico';
+  try{
+    const rs = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
+    if (!rs.error){
+      const raw = (rs.data?.plan ?? 'basico').toString();
+      planKey = raw.toLowerCase();
+      planChip.textContent = 'Plano: ' + (raw.charAt(0).toUpperCase()+raw.slice(1));
+    }else{
+      dlog({warn:'profiles.select.failed', detail: rs.error});
+    }
+  }catch(e){
+    dlog({warn:'profiles.exception', detail:String(e)});
+  }
+
+  try{
+    await loadUserSelection(session.user.id, planKey);
+  }catch(e){
+    dlog({fatal:'init user_sites/sites failed', raw:String(e)});
+    throw e;
+  }
+}
+
+/* ========= Busca (EAN + Descrição) ========= */
+/* Recolocada: filtra em tempo real e aciona logSearchDebounced */
+const onFilterInput = debounce(()=>{
+  currentEanQ = (eanFilter.value||'').trim();
+  currentDescQ = (descFilter.value||'').trim();
+  recomputeGeneralView();
+  renderFavs();
+  updateFavHeight();
+  updateCounts();
+  dlog({step:'filter', ean:currentEanQ, desc:currentDescQ});
+  logSearchDebounced();
+}, 350);
+eanFilter.addEventListener('input', onFilterInput);
+descFilter.addEventListener('input', onFilterInput);
+
 /* ========= UI ========= */
 ddMeusDados.addEventListener('click', ()=> location.href='meusdados.html');
 ddPlanos.addEventListener('click', ()=> location.href='planos.html');
@@ -913,52 +993,6 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
   favResizer.addEventListener('dblclick', ()=>{ favHeightUser=null; localStorage.removeItem('mm_fav_height'); updateFavHeight(); });
 })();
 
-/* ========= Escopo ========= */
-function initScopeRadios(){
-  localStorage.setItem('mm_scope','both'); searchScope='both';
-  const radios=scopeGroup.querySelectorAll('input[name="scope"]');
-  radios.forEach(r=>{
-    r.checked=(r.value===searchScope);
-    r.addEventListener('change', ()=>{
-      if(!r.checked) return;
-      searchScope=r.value; localStorage.setItem('mm_scope',searchScope);
-      recomputeGeneralView(); renderFavs(); updateFavHeight(); updateCounts();
-      dlog({step:'scopeChange', scope:searchScope});
-      logSearchDebounced();
-    });
-  });
-}
-
-/* ========= INIT: sessão, plano e sites ========= */
-async function initUserAndSites(){
-  const { data:{ session } } = await sb.auth.getSession();
-  if (!session){ location.href = CFG.SITE_URL || 'index.html'; return; }
-  userChip.textContent = session.user?.email || 'Logado';
-  dlog({step:'session', user:session.user?.id, email:session.user?.email});
-
-  // Lê somente 'plan'
-  let planKey='basico';
-  try{
-    const rs = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
-    if (!rs.error){
-      const raw = (rs.data?.plan ?? 'basico').toString();
-      planKey = raw.toLowerCase();
-      planChip.textContent = 'Plano: ' + (raw.charAt(0).toUpperCase()+raw.slice(1));
-    }else{
-      dlog({warn:'profiles.select.failed', detail: rs.error});
-    }
-  }catch(e){
-    dlog({warn:'profiles.exception', detail:String(e)});
-  }
-
-  try{
-    await loadUserSelection(session.user.id, planKey);
-  }catch(e){
-    dlog({fatal:'init user_sites/sites failed', raw:String(e)});
-    throw e;
-  }
-}
-
 /* ========= Start ========= */
 (async function init(){
   try{
@@ -966,6 +1000,7 @@ async function initUserAndSites(){
     initScopeRadios();
     loadColumnOrder(); buildHeaders();
 
+    // Minimizar/Maximizar reativado e persistente
     applyToggle(toggleFavBtn, favWrap, document.getElementById('favResizer'), 'mm_tgl_fav');
     applyToggle(toggleGenBtn, generalWrap, null, 'mm_tgl_gen');
 
