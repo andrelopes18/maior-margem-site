@@ -262,7 +262,7 @@ function applyToggle(btn, wrap, extraEl, key){
   setState(collapsed);
   btn.addEventListener('click', ()=>{
     const currExpanded = btn.getAttribute('aria-expanded') === 'true';
-    const nextCollapsed = currExpanded; // clicou -> alterna
+    const nextCollapsed = currExpanded;
     localStorage.setItem(key, nextCollapsed ? '1' : '0');
     setState(nextCollapsed);
   });
@@ -755,8 +755,17 @@ async function fetchNextPage(){
   if (fetching || serverExhausted) return; fetching = true; hideErr(); setStatus('Carregando… (offset ' + serverOffset + ')'); dlog({step:'fetch', offset:serverOffset});
   try{
     const from=serverOffset, to=serverOffset+PAGE_SIZE-1;
-    const { data, error } = await buildQuery().range(from,to);
-    if (error) throw error;
+    const { data, error, status } = await buildQuery().range(from,to);
+    if (error){
+      // Trata 416 "Requested range not satisfiable"
+      if ((status===416) || /Requested range not satisfiable/i.test(error.message||'')) {
+        serverExhausted = true;
+        setStatus('Todos os dados carregados.');
+        endMarker.textContent = 'Fim da lista';
+        return;
+      }
+      throw error;
+    }
     if (!data || data.length===0){
       serverExhausted = true; setStatus('Todos os dados carregados.');
       if (itemsRendered >= generalView.length) endMarker.textContent = 'Fim da lista';
@@ -815,7 +824,7 @@ async function doLogSearch(){
   }
 }
 
-/* ========= Print favoritos ========= */
+/* ========= Impressão (via iframe oculto, sem pop-up) ========= */
 function buildPrintHTMLFromFav() {
   const favHeaderRow = document.getElementById('favHeaderRow');
   const headers = Array.from(favHeaderRow?.children || []).map((th,i) => i===0 ? null : th.textContent.trim()).filter(Boolean);
@@ -828,12 +837,22 @@ function buildPrintHTMLFromFav() {
   }
   const css = '*{box-sizing:border-box;} body{font-family:Arial,sans-serif;color:#000;background:#fff;padding:24px;} h1{margin:0 0 4px 0;font-size:18px;} .meta{color:#444;font-size:12px;margin-bottom:14px;} table{width:100%;border-collapse:collapse;} thead th{text-align:left;font-weight:700;padding:6px 0;} tbody td{padding:4px 0;} @media print{body{padding:0;}}';
   const now=new Date(); const meta = now.toLocaleDateString('pt-BR')+' '+now.toLocaleTimeString('pt-BR');
-  return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório — Favoritos</title><style>'+css+'</style></head><body><h1>Relatório — Favoritos</h1><div class="meta">Gerado em '+meta+'</div><table>'+thead+'<tbody>'+tbody+'</tbody></table><script>window.onload=()=>{window.print()}<\/script></body></html>';
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório — Favoritos</title><style>'+css+'</style></head><body><h1>Relatório — Favoritos</h1><div class="meta">Gerado em '+meta+'</div><table>'+thead+'<tbody>'+tbody+'</tbody></table></body></html>';
 }
 function printFavReport(){
-  const win=window.open('', '_blank', 'noopener');
-  if(!win){ alert('Permita pop-ups para imprimir.'); return; }
-  win.document.open(); win.document.write(buildPrintHTMLFromFav()); win.document.close();
+  // cria iframe oculto, escreve o HTML e imprime
+  const iframe = document.createElement('iframe');
+  iframe.style.position='fixed'; iframe.style.right='0'; iframe.style.bottom='0';
+  iframe.style.width='0'; iframe.style.height='0'; iframe.style.border='0'; iframe.style.visibility='hidden';
+  document.body.appendChild(iframe);
+  const doc = iframe.contentWindow || iframe.contentDocument;
+  const win = iframe.contentWindow;
+  const html = buildPrintHTMLFromFav();
+  (doc.document || doc).open();
+  (doc.document || doc).write(html + '<script>window.onload=function(){setTimeout(function(){window.focus();window.print();},10)}<\/script>');
+  (doc.document || doc).close();
+  // remove o iframe após impressão (alguns navegadores não disparam onafterprint no iframe; removo por timeout)
+  setTimeout(()=>{ try{ document.body.removeChild(iframe); }catch{} }, 2000);
 }
 
 /* ========= Chart ========= */
@@ -947,7 +966,6 @@ async function initUserAndSites(){
     initScopeRadios();
     loadColumnOrder(); buildHeaders();
 
-    // aplica comportamento minimizar/maximizar (agora presente de novo)
     applyToggle(toggleFavBtn, favWrap, document.getElementById('favResizer'), 'mm_tgl_fav');
     applyToggle(toggleGenBtn, generalWrap, null, 'mm_tgl_gen');
 
