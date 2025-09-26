@@ -83,9 +83,7 @@
 
   th.sortable { cursor:pointer; user-select:none; }
   th.reorderable { cursor:move; }
-  th.drop-left::before, th.drop-right::after {
-    content:""; position:absolute; top:0; bottom:0; width:3px; background:#00b140;
-  }
+  th.drop-left::before, th.drop-right::after { content:""; position:absolute; top:0; bottom:0; width:3px; background:#00b140; }
   th.drop-left::before { left:0; }
   th.drop-right::after { right:0; }
   th .sort-ind { margin-left:6px; opacity:.8; font-size:11px; }
@@ -104,11 +102,11 @@
     <div class="userChipWrap">
       <span id="userChip" class="chip">Usuário</span>
       <div class="dropdown" role="menu" aria-hidden="true">
-        <button class="dd-item" id="ddMeusDados">Meus dados</button>
-        <button class="dd-item" id="ddPlanos">Planos</button>
+        <button class="dd-item" id="ddMeusDados" type="button">Meus dados</button>
+        <button class="dd-item" id="ddPlanos" type="button">Planos</button>
       </div>
     </div>
-    <button id="btnSair" class="btn">Sair</button>
+    <button id="btnSair" class="btn" type="button">Sair</button>
   </div>
 </header>
 
@@ -116,7 +114,7 @@
   <div class="filters">
     <input id="eanFilter" placeholder="Filtrar por EAN/GTIN…" />
     <input id="descFilter" placeholder="Filtrar por descrição…" />
-    <button id="btnReload" class="btn">Recarregar</button>
+    <button id="btnReload" class="btn" type="button">Recarregar</button>
     <div class="scope" id="scopeGroup" role="radiogroup" aria-label="Escopo da pesquisa">
       <span>Filtrar em:</span>
       <label><input type="radio" name="scope" value="both" checked> Ambas</label>
@@ -131,8 +129,8 @@
 <section id="favPanel" class="panel">
   <div class="panel-header">
     <h2>Favoritos</h2>
-    <button id="btnPrintFav" class="toggle-btn" title="Imprimir favoritos">Imprimir</button>
-    <button id="toggleFav" class="toggle-btn" aria-expanded="true">Minimizar</button>
+    <button id="btnPrintFav" class="toggle-btn" title="Imprimir favoritos" type="button">Imprimir</button>
+    <button id="toggleFav" class="toggle-btn" aria-expanded="true" type="button">Minimizar</button>
   </div>
   <div id="favWrap" class="wrap">
     <table id="favTable">
@@ -146,7 +144,7 @@
 <section id="generalPanel" class="panel">
   <div class="panel-header">
     <h2>Geral</h2>
-    <button id="toggleGen" class="toggle-btn" aria-expanded="true">Minimizar</button>
+    <button id="toggleGen" class="toggle-btn" aria-expanded="true" type="button">Minimizar</button>
   </div>
   <div id="generalWrap" class="wrap">
     <table id="produtosTable">
@@ -170,7 +168,7 @@
 <div id="chartPopover" style="display:none;">
   <header>
     <span id="chartTitle">Histórico</span>
-    <button class="close" id="chartClose" aria-label="Fechar">×</button>
+    <button class="close" id="chartClose" aria-label="Fechar" type="button">×</button>
   </header>
   <canvas id="spark" width="220" height="180"></canvas>
   <div id="chartMsg" class="msg" style="display:none;"></div>
@@ -219,6 +217,8 @@ const countShown  = document.getElementById('countShown');
 const countTotal  = document.getElementById('countTotal');
 const countFavs   = document.getElementById('countFavs');
 const scopeGroup = document.getElementById('scopeGroup');
+const pop=document.getElementById('chartPopover'), popTitle=document.getElementById('chartTitle'), popClose=document.getElementById('chartClose'), popMsg=document.getElementById('chartMsg');
+const spark=document.getElementById('spark'), sparkCtx=spark.getContext('2d');
 
 /* ========= Estado ========= */
 const DEFAULT_PLAN_SITE_LIMIT = { trial:2, basico:4, intermediario:6, premium:8 };
@@ -249,6 +249,24 @@ function favSave(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet]))
 function isFav(sku){ return favSet.has(String(sku)); }
 function formatBRL(n){ try{ return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) }catch{ return String(n) } }
 function norm(s){ return (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]/g,'').toLowerCase(); }
+
+/* ========= Minimizar/Maximizar ========= */
+function applyToggle(btn, wrap, extraEl, key){
+  const collapsed = localStorage.getItem(key) === '1';
+  function setState(isCollapsed){
+    btn.setAttribute('aria-expanded', String(!isCollapsed));
+    btn.textContent = isCollapsed ? 'Maximizar' : 'Minimizar';
+    wrap.style.display = isCollapsed ? 'none' : 'block';
+    if (extraEl) extraEl.style.display = isCollapsed ? 'none' : '';
+  }
+  setState(collapsed);
+  btn.addEventListener('click', ()=>{
+    const currExpanded = btn.getAttribute('aria-expanded') === 'true';
+    const nextCollapsed = currExpanded; // clicou -> alterna
+    localStorage.setItem(key, nextCollapsed ? '1' : '0');
+    setState(nextCollapsed);
+  });
+}
 
 /* ========= Cabeçalhos / colunas ========= */
 function computeDefaultColumnOrder(){ return ['sku','desc','meu_preco', ...chosen.map(c => 'site:' + c.label)]; }
@@ -697,7 +715,7 @@ function renderFavs(){
     const tr=document.createElement('tr');
 
     const tdAct=document.createElement('td'); tdAct.className='col-fav';
-    const btn=document.createElement('button'); btn.title='Remover'; btn.innerHTML='🗑️';
+    const btn=document.createElement('button'); btn.title='Remover'; btn.innerHTML='🗑️'; btn.type='button';
     btn.addEventListener('click',()=>{ favSet.delete(item.sku); favSave(); const chk=generalChkMap.get(item.sku); if(chk){ chk.checked=false; } renderFavs(); updateFavHeight(); updateCounts(); });
     tdAct.appendChild(btn); tr.appendChild(tdAct);
 
@@ -797,46 +815,30 @@ async function doLogSearch(){
   }
 }
 
-/* ========= UI ========= */
-ddMeusDados.addEventListener('click', ()=> location.href='meusdados.html');
-ddPlanos.addEventListener('click', ()=> location.href='planos.html');
-btnSair.addEventListener('click', async ()=>{ try{ await sb.auth.signOut(); } finally{ localStorage.removeItem('mm_login_date'); location.href = CFG.SITE_URL || 'index.html'; }});
+/* ========= Print favoritos ========= */
+function buildPrintHTMLFromFav() {
+  const favHeaderRow = document.getElementById('favHeaderRow');
+  const headers = Array.from(favHeaderRow?.children || []).map((th,i) => i===0 ? null : th.textContent.trim()).filter(Boolean);
+  const favBody = document.querySelector('#favTable tbody'); const rows = Array.from(favBody?.rows || []);
+  const thead = '<thead><tr>' + headers.map(h => '<th>'+h+'</th>').join('') + '</tr></thead>';
+  let tbody = '';
+  for (const tr of rows) {
+    const cells = Array.from(tr.cells).slice(1).map(td => { const txt = (td.textContent || '').replace(/\s+/g, ' ').trim(); return '<td>'+(txt || '—')+'</td>'; });
+    tbody += '<tr>'+cells.join('')+'</tr>';
+  }
+  const css = '*{box-sizing:border-box;} body{font-family:Arial,sans-serif;color:#000;background:#fff;padding:24px;} h1{margin:0 0 4px 0;font-size:18px;} .meta{color:#444;font-size:12px;margin-bottom:14px;} table{width:100%;border-collapse:collapse;} thead th{text-align:left;font-weight:700;padding:6px 0;} tbody td{padding:4px 0;} @media print{body{padding:0;}}';
+  const now=new Date(); const meta = now.toLocaleDateString('pt-BR')+' '+now.toLocaleTimeString('pt-BR');
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório — Favoritos</title><style>'+css+'</style></head><body><h1>Relatório — Favoritos</h1><div class="meta">Gerado em '+meta+'</div><table>'+thead+'<tbody>'+tbody+'</tbody></table><script>window.onload=()=>{window.print()}<\/script></body></html>';
+}
+function printFavReport(){
+  const win=window.open('', '_blank', 'noopener');
+  if(!win){ alert('Permita pop-ups para imprimir.'); return; }
+  win.document.open(); win.document.write(buildPrintHTMLFromFav()); win.document.close();
+}
 
-const onFilterInput = debounce(()=>{
-  currentEanQ=(eanFilter.value||'').trim();
-  currentDescQ=(descFilter.value||'').trim();
-  recomputeGeneralView(); renderFavs(); updateFavHeight(); updateCounts();
-  dlog({step:'filter', ean:currentEanQ, desc:currentDescQ});
-  logSearchDebounced();
-},400);
-eanFilter.addEventListener('input', onFilterInput);
-descFilter.addEventListener('input', onFilterInput);
-
-btnReload.addEventListener('click', async ()=>{
-  dlog({step:'manualReload.start'});
-  await initUserAndSites(); // lê plano e sites novamente
-  resetAndQuery();
-  dlog({step:'manualReload.end'});
-});
-
-/* ========= Favoritos: altura/resizer ========= */
-function measureRowHeight(){ const row=document.querySelector('#favTable tbody tr'); if(!row) return 44; const h=Math.round(row.getBoundingClientRect().height); return Math.max(36, h||44); }
-function measureHeadHeight(){ const head=document.querySelector('#favTable thead'); if(!head) return 40; const h=Math.round(head.getBoundingClientRect().height); return Math.max(32, h||40); }
-function applyFavHeight(px){ if(!px||!Number.isFinite(px)) return; const maxPx=Math.round(window.innerHeight*0.85); const clamped=Math.max(120, Math.min(px, maxPx)); favWrap.style.height=clamped+'px'; }
-function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); return; } const rowsLen=favBody.children.length; const rows=Math.min(rowsLen,20); const rowH=measureRowHeight(); const headH=measureHeadHeight(); const pad=8; const target=headH + rows*rowH + pad; applyFavHeight(target); }
-(function initResizer(){ let startY=0, startH=0;
-  function onMove(ev){ const dy=ev.clientY-startY; favHeightUser=startH+dy; localStorage.setItem('mm_fav_height', String(favHeightUser)); applyFavHeight(favHeightUser); }
-  function stop(){ removeEventListener('mousemove', onMove); removeEventListener('mouseup', stop); document.body.classList.remove('resizing'); }
-  favResizer.addEventListener('mousedown', (ev)=>{ startY=ev.clientY; startH=favWrap.offsetHeight; document.body.classList.add('resizing'); addEventListener('mousemove', onMove); addEventListener('mouseup', stop); });
-  favResizer.addEventListener('dblclick', ()=>{ favHeightUser=null; localStorage.removeItem('mm_fav_height'); updateFavHeight(); });
-})();
-
-/* ========= Gráfico ========= */
-const pop=document.getElementById('chartPopover'), popTitle=document.getElementById('chartTitle'), popClose=document.getElementById('chartClose'), popMsg=document.getElementById('chartMsg');
-const spark=document.getElementById('spark'), sparkCtx=spark.getContext('2d');
+/* ========= Chart ========= */
 popClose.addEventListener('click', ()=> pop.style.display='none');
 addEventListener('click', (ev)=>{ if(pop.style.display!=='none' && !pop.contains(ev.target) && !ev.target.closest('.chart-btn')) pop.style.display='none'; });
-
 function drawSparkFull(points){
   const ctx=sparkCtx,W=spark.width,H=spark.height; ctx.clearRect(0,0,W,H);
   if(!points || points.length<3){ popMsg.style.display='block'; popMsg.textContent='Histórico insuficiente (≥3 pontos).'; return; }
@@ -868,35 +870,29 @@ async function openChartFor(ev, ean, label, siteId){
   const points = await fetchHistory(String(ean), Number(siteId)); drawSparkFull(points);
 }
 
-/* ========= INIT: sessão, plano e sites ========= */
-async function initUserAndSites(){
-  const { data:{ session } } = await sb.auth.getSession();
-  if (!session){ location.href = CFG.SITE_URL || 'index.html'; return; }
-  userChip.textContent = session.user?.email || 'Logado';
-  dlog({step:'session', user:session.user?.id, email:session.user?.email});
+/* ========= UI ========= */
+ddMeusDados.addEventListener('click', ()=> location.href='meusdados.html');
+ddPlanos.addEventListener('click', ()=> location.href='planos.html');
+btnSair.addEventListener('click', async ()=>{ try{ await sb.auth.signOut(); } finally{ localStorage.removeItem('mm_login_date'); location.href = CFG.SITE_URL || 'index.html'; }});
+btnReload.addEventListener('click', async ()=>{
+  dlog({step:'manualReload.start'});
+  await initUserAndSites();
+  resetAndQuery();
+  dlog({step:'manualReload.end'});
+});
+btnPrintFav.addEventListener('click', printFavReport);
 
-  // Busca SOMENTE a coluna 'plan'
-  let planKey='basico';
-  try{
-    const rs = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
-    if (rs.error){
-      dlog({warn:'profiles.select.failed', detail: rs.error});
-    } else {
-      const raw = (rs.data?.plan ?? 'basico').toString();
-      planKey = raw.toLowerCase();
-      planChip.textContent = 'Plano: ' + (raw.charAt(0).toUpperCase()+raw.slice(1));
-    }
-  }catch(e){
-    dlog({warn:'profiles.exception', detail:String(e)});
-  }
-
-  try{
-    await loadUserSelection(session.user.id, planKey);
-  }catch(e){
-    dlog({fatal:'init user_sites/sites failed', raw:String(e)});
-    throw e;
-  }
-}
+/* ========= Favoritos: altura/resizer ========= */
+function measureRowHeight(){ const row=document.querySelector('#favTable tbody tr'); if(!row) return 44; const h=Math.round(row.getBoundingClientRect().height); return Math.max(36, h||44); }
+function measureHeadHeight(){ const head=document.querySelector('#favTable thead'); if(!head) return 40; const h=Math.round(head.getBoundingClientRect().height); return Math.max(32, h||40); }
+function applyFavHeight(px){ if(!px||!Number.isFinite(px)) return; const maxPx=Math.round(window.innerHeight*0.85); const clamped=Math.max(120, Math.min(px, maxPx)); favWrap.style.height=clamped+'px'; }
+function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); return; } const rowsLen=favBody.children.length; const rows=Math.min(rowsLen,20); const rowH=measureRowHeight(); const headH=measureHeadHeight(); const pad=8; const target=headH + rows*rowH + pad; applyFavHeight(target); }
+(function initResizer(){ let startY=0, startH=0;
+  function onMove(ev){ const dy=ev.clientY-startY; favHeightUser=startH+dy; localStorage.setItem('mm_fav_height', String(favHeightUser)); applyFavHeight(favHeightUser); }
+  function stop(){ removeEventListener('mousemove', onMove); removeEventListener('mouseup', stop); document.body.classList.remove('resizing'); }
+  favResizer.addEventListener('mousedown', (ev)=>{ startY=ev.clientY; startH=favWrap.offsetHeight; document.body.classList.add('resizing'); addEventListener('mousemove', onMove); addEventListener('mouseup', stop); });
+  favResizer.addEventListener('dblclick', ()=>{ favHeightUser=null; localStorage.removeItem('mm_fav_height'); updateFavHeight(); });
+})();
 
 /* ========= Escopo ========= */
 function initScopeRadios(){
@@ -914,15 +910,49 @@ function initScopeRadios(){
   });
 }
 
+/* ========= INIT: sessão, plano e sites ========= */
+async function initUserAndSites(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if (!session){ location.href = CFG.SITE_URL || 'index.html'; return; }
+  userChip.textContent = session.user?.email || 'Logado';
+  dlog({step:'session', user:session.user?.id, email:session.user?.email});
+
+  // Lê somente 'plan'
+  let planKey='basico';
+  try{
+    const rs = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
+    if (!rs.error){
+      const raw = (rs.data?.plan ?? 'basico').toString();
+      planKey = raw.toLowerCase();
+      planChip.textContent = 'Plano: ' + (raw.charAt(0).toUpperCase()+raw.slice(1));
+    }else{
+      dlog({warn:'profiles.select.failed', detail: rs.error});
+    }
+  }catch(e){
+    dlog({warn:'profiles.exception', detail:String(e)});
+  }
+
+  try{
+    await loadUserSelection(session.user.id, planKey);
+  }catch(e){
+    dlog({fatal:'init user_sites/sites failed', raw:String(e)});
+    throw e;
+  }
+}
+
 /* ========= Start ========= */
 (async function init(){
   try{
     await initUserAndSites();
     initScopeRadios();
     loadColumnOrder(); buildHeaders();
+
+    // aplica comportamento minimizar/maximizar (agora presente de novo)
+    applyToggle(toggleFavBtn, favWrap, document.getElementById('favResizer'), 'mm_tgl_fav');
+    applyToggle(toggleGenBtn, generalWrap, null, 'mm_tgl_gen');
+
     resetAndQuery();
     generalWrap.dispatchEvent(new Event('scroll'));
-    btnPrintFav.addEventListener('click', printFavReport);
   }catch(e){ showErr('Falha na inicialização'); dlog({error:'init', detail:String(e)}); }
 })();
 </script>
