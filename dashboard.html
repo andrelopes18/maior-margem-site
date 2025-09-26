@@ -248,6 +248,13 @@ let sortStateFav     = { key:'desc', dir:'asc' };
 let columnOrder = []; // ex: ['sku','desc','meu_preco','site:Loja A', 'site:Loja B', ...]
 const COL_ORDER_KEY = 'mm_col_order';
 
+/* ========= PERFIL (para localização do usuário) ========= */
+let PROFILE_ADDR = {
+  address: null, city: null, state: null, country: null,
+  lat: null, lng: null
+};
+
+/* ========= Helpers ========= */
 function computeDefaultColumnOrder(){
   return ['sku','desc','meu_preco', ...chosen.map(c => 'site:' + c.label)];
 }
@@ -262,8 +269,6 @@ function loadColumnOrder(){
 function saveColumnOrder(){
   localStorage.setItem(COL_ORDER_KEY, JSON.stringify(columnOrder));
 }
-
-/* ========= Helpers ========= */
 function setStatus(t){ statusEl.textContent = t||''; }
 function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
 function debounce(fn,ms=500){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); } }
@@ -804,14 +809,66 @@ function resetAndQuery(){
   generalView=[]; resetGeneralDom(); renderFavs(); updateFavHeight(); updateCounts(); fetchNextPage();
 }
 
+/* ========= LOG DE PESQUISA ========= */
+
+/* Debounce para logging (1.2s após o último input) */
+const logSearchDebounced = debounce(doLogSearch, 1200);
+
+/* Captura e envia log (EAN + descrição + escopo + contagem) */
+async function doLogSearch(){
+  try{
+    const { data:{ session } } = await sb.auth.getSession();
+    if (!session || !session.user) return;
+
+    const eanQ  = (currentEanQ||'').trim();
+    const descQ = (currentDescQ||'').trim();
+    const scope = searchScope;
+
+    // Evita logs vazios ou ruído de 1 char; EAN ≥ 8 dígitos ou descrição ≥ 3 chars
+    const isEanOk  = eanQ.replace(/\D/g,'').length >= 8;
+    const isDescOk = descQ.length >= 3;
+    if (!isEanOk && !isDescOk) return;
+
+    const payload = {
+      user_id:   session.user.id,
+      email:     session.user.email || null,
+      ean_query: isEanOk  ? eanQ  : null,
+      desc_query:isDescOk ? descQ : null,
+      scope:     scope,
+      results_count: generalView?.length ?? null,
+      source:    'dashboard',
+      user_agent: navigator.userAgent || null,
+      user_address: PROFILE_ADDR.address,
+      city:      PROFILE_ADDR.city,
+      state:     PROFILE_ADDR.state,
+      country:   PROFILE_ADDR.country,
+      lat:       PROFILE_ADDR.lat,
+      lng:       PROFILE_ADDR.lng
+    };
+
+    const { error } = await sb.from('search_logs').insert(payload);
+    if (error) { dlog({warn:'search_log.insert.failed', error}); }
+    else { dlog({step:'search_log.insert.ok', eanQ, descQ, scope, results: payload.results_count}); }
+  }catch(err){
+    dlog({warn:'search_log.insert.exception', detail: String(err)});
+  }
+}
+
 /* ========= UI ========= */
 ddMeusDados.addEventListener('click', ()=> location.href='meusdados.html');
 ddPlanos.addEventListener('click', ()=> location.href='planos.html');
 btnSair.addEventListener('click', async ()=>{ try{ await sb.auth.signOut(); } finally{ localStorage.removeItem('mm_login_date'); location.href = CFG.SITE_URL || 'index.html'; }});
 
-const onFilterInput = debounce(()=>{ currentEanQ=(eanFilter.value||'').trim(); currentDescQ=(descFilter.value||'').trim();
-  recomputeGeneralView(); renderFavs(); updateFavHeight(); updateCounts(); dlog({step:'filter', ean:currentEanQ, desc:currentDescQ}); },400);
-eanFilter.addEventListener('input', onFilterInput); descFilter.addEventListener('input', onFilterInput);
+/* Ao digitar nos filtros, além de filtrar, agenda log */
+const onFilterInput = debounce(()=>{
+  currentEanQ=(eanFilter.value||'').trim();
+  currentDescQ=(descFilter.value||'').trim();
+  recomputeGeneralView(); renderFavs(); updateFavHeight(); updateCounts();
+  dlog({step:'filter', ean:currentEanQ, desc:currentDescQ});
+  logSearchDebounced();
+},400);
+eanFilter.addEventListener('input', onFilterInput);
+descFilter.addEventListener('input', onFilterInput);
 
 btnReload.addEventListener('click', async ()=>{
   dlog({step:'manualReload.start'});
@@ -849,6 +906,7 @@ function initScopeRadios(){
       searchScope=r.value; localStorage.setItem('mm_scope',searchScope);
       recomputeGeneralView(); renderFavs(); updateFavHeight(); updateCounts();
       dlog({step:'scopeChange', scope:searchScope});
+      logSearchDebounced(); // também loga mudança de escopo
     });
   });
 }
@@ -939,10 +997,23 @@ function printFavReport(){ const win=window.open('', '_blank'); if(!win){ alert(
 
     let planKey='basico';
     try{
-      const rs = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
+      /* Aqui pedimos também campos de endereço para log de pesquisa (se existirem no seu schema). */
+      const rs = await sb.from('profiles')
+        .select('plan, address, endereco, city, cidade, state, estado, country, pais, lat, lng')
+        .eq('id', session.user.id)
+        .maybeSingle();
+
       if (!rs.error){
         const raw=(rs.data?.plan||'basico').toString(); planKey=raw.toLowerCase();
         planChip.textContent='Plano: '+(raw.charAt(0).toUpperCase()+raw.slice(1));
+
+        // Fallback inteligente para nomes de campos diferentes
+        PROFILE_ADDR.address = rs.data?.address ?? rs.data?.endereco ?? null;
+        PROFILE_ADDR.city    = rs.data?.city    ?? rs.data?.cidade   ?? null;
+        PROFILE_ADDR.state   = rs.data?.state   ?? rs.data?.estado   ?? null;
+        PROFILE_ADDR.country = rs.data?.country ?? rs.data?.pais     ?? null;
+        PROFILE_ADDR.lat     = rs.data?.lat ?? null;
+        PROFILE_ADDR.lng     = rs.data?.lng ?? null;
       }else{
         planChip.textContent='Plano: (erro)';
       }
@@ -959,6 +1030,9 @@ function printFavReport(){ const win=window.open('', '_blank'); if(!win){ alert(
 
     resetAndQuery();
     generalWrap.dispatchEvent(new Event('scroll'));
+
+    // Preparar botão imprimir
+    btnPrintFav.addEventListener('click', printFavReport);
   }catch(e){ showErr('Falha na inicialização'); dlog({error:'init', detail:String(e)}); }
 })();
 
