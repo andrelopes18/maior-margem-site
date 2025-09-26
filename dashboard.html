@@ -227,7 +227,8 @@ const PAGE_SIZE = 200, RENDER_CHUNK = 60;
 const OUTLIER_TOL = 0.50;
 
 let chosen=[], unlocked=new Set(), locked=new Set();
-let produtosMap=new Map(), produtosList=[], serverOffset=0, serverExhausted=false, fetching=false;
+let produtosMap=new Map(), produtosList=[];
+let serverOffset=0, serverExhausted=false, fetching=false;
 let generalView=[], itemsRendered=0;
 let favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
 let loadingMore=false; const generalChkMap=new Map();
@@ -249,67 +250,7 @@ function isFav(sku){ return favSet.has(String(sku)); }
 function formatBRL(n){ try{ return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) }catch{ return String(n) } }
 function norm(s){ return (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]/g,'').toLowerCase(); }
 
-/* ========= Plano / sites ========= */
-async function getSitesLimitForPlan(planKey){
-  const k=(planKey||'').toLowerCase();
-  try{
-    const { data, error } = await sb.from('billing_plans').select('sites_limit, max_sites').eq('plan_key', k).maybeSingle();
-    if (!error){
-      const v = Number(data?.sites_limit ?? data?.max_sites);
-      if (Number.isFinite(v) && v>0) return v;
-    }
-  }catch(e){ dlog({warn:'fallback site limit', plan:k}); }
-  return DEFAULT_PLAN_SITE_LIMIT[k] ?? 2;
-}
-
-async function loadUserSelection(userId, planKey){
-  dlog({step:'loadUserSelection.start', userId, planKey});
-
-  const rs = await sb.from('user_sites').select('site_id, created_at').eq('user_id', userId);
-  if (rs.error){
-    const { message, code } = rs.error;
-    showErr('Falha ao ler user_sites: '+message+' (code: '+code+')');
-    throw new Error('user_sites read failed');
-  }
-  const rows = rs.data || [];
-  rows.sort((a,b)=>{
-    const ca=a.created_at?new Date(a.created_at).getTime():0; const cb=b.created_at?new Date(b.created_at).getTime():0;
-    return ca-cb;
-  });
-
-  const siteIdsText = rows.map(r=>String(r.site_id||'')).filter(x=>x.length>0);
-  if (!siteIdsText.length){
-    chosen=[]; unlocked=new Set(); locked=new Set();
-    loadColumnOrder(); buildHeaders();
-    setStatus('Nenhum site selecionado em Meus Dados.');
-    dlog({step:'loadUserSelection.none'});
-    return;
-  }
-
-  const allNumeric = siteIdsText.every(v => /^[0-9]+$/.test(v));
-  if (!allNumeric){ showErr('IDs de site inválidos em user_sites.'); throw new Error('user_sites.site_id not numeric'); }
-  const siteIds = siteIdsText.map(v => Number(v));
-
-  const rsSites = await sb.from('sites').select('id, nome, url_pesquisa').in('id', siteIds);
-  if (rsSites.error){ const { message, code } = rsSites.error; showErr('Falha ao ler sites: '+message+' (code: '+code+')'); throw new Error('sites read failed'); }
-  const sites = rsSites.data || [];
-  const byId=new Map(sites.map(s=>[s.id,s]));
-  const ordered=[]; for (const id of siteIds){ const s=byId.get(id); if(s && !ordered.includes(s)) ordered.push(s); }
-  if (!ordered.length){ showErr('Sites não encontrados para os IDs do usuário.'); throw new Error('sites missing'); }
-
-  chosen = ordered.map(s=>({ site_id:s.id, label:(s.nome||('Site '+s.id)).toString().trim(), url:(s.url_pesquisa||'').toString() }));
-
-  const lim = await getSitesLimitForPlan(planKey);
-  unlocked=new Set(chosen.slice(0,lim).map(c=>c.site_id));
-  locked=new Set(chosen.slice(lim).map(c=>c.site_id));
-
-  loadColumnOrder();
-  buildHeaders();
-  setStatus('Sites: '+chosen.map(c=>c.label).join(' · '));
-  dlog({step:'loadUserSelection.done', chosen, unlocked:[...unlocked], locked:[...locked], columnOrder});
-}
-
-/* ========= Cabeçalhos e colunas ========= */
+/* ========= Cabeçalhos / colunas ========= */
 function computeDefaultColumnOrder(){ return ['sku','desc','meu_preco', ...chosen.map(c => 'site:' + c.label)]; }
 function loadColumnOrder(){
   const saved = (()=>{ try{ return JSON.parse(localStorage.getItem(COL_ORDER_KEY) || '[]'); }catch{ return []; }})();
@@ -378,6 +319,66 @@ function buildHeaders(){
   if (sortStateFav.key)     applySortIndicators(favHeaderRow,     sortStateFav.key,     sortStateFav.dir);
 }
 
+/* ========= Plano / sites ========= */
+async function getSitesLimitForPlan(planKey){
+  const k=(planKey||'').toLowerCase();
+  try{
+    const { data, error } = await sb.from('billing_plans').select('sites_limit, max_sites').eq('plan_key', k).maybeSingle();
+    if (!error){
+      const v = Number(data?.sites_limit ?? data?.max_sites);
+      if (Number.isFinite(v) && v>0) return v;
+    }
+  }catch(e){ dlog({warn:'fallback site limit', plan:k}); }
+  return DEFAULT_PLAN_SITE_LIMIT[k] ?? 2;
+}
+
+async function loadUserSelection(userId, planKey){
+  dlog({step:'loadUserSelection.start', userId, planKey});
+
+  const rs = await sb.from('user_sites').select('site_id, created_at').eq('user_id', userId);
+  if (rs.error){
+    const { message, code } = rs.error;
+    showErr('Falha ao ler user_sites: '+message+' (code: '+code+')');
+    throw new Error('user_sites read failed');
+  }
+  const rows = rs.data || [];
+  rows.sort((a,b)=>{
+    const ca=a.created_at?new Date(a.created_at).getTime():0; const cb=b.created_at?new Date(b.created_at).getTime():0;
+    return ca-cb;
+  });
+
+  const siteIdsText = rows.map(r=>String(r.site_id||'')).filter(x=>x.length>0);
+  if (!siteIdsText.length){
+    chosen=[]; unlocked=new Set(); locked=new Set();
+    loadColumnOrder(); buildHeaders();
+    setStatus('Nenhum site selecionado em Meus Dados.');
+    dlog({step:'loadUserSelection.none'});
+    return;
+  }
+
+  const allNumeric = siteIdsText.every(v => /^[0-9]+$/.test(v));
+  if (!allNumeric){ showErr('IDs de site inválidos em user_sites.'); throw new Error('user_sites.site_id not numeric'); }
+  const siteIds = siteIdsText.map(v => Number(v));
+
+  const rsSites = await sb.from('sites').select('id, nome, url_pesquisa').in('id', siteIds);
+  if (rsSites.error){ const { message, code } = rsSites.error; showErr('Falha ao ler sites: '+message+' (code: '+code+')'); throw new Error('sites read failed'); }
+  const sites = rsSites.data || [];
+  const byId=new Map(sites.map(s=>[s.id,s]));
+  const ordered=[]; for (const id of siteIds){ const s=byId.get(id); if(s && !ordered.includes(s)) ordered.push(s); }
+  if (!ordered.length){ showErr('Sites não encontrados para os IDs do usuário.'); throw new Error('sites missing'); }
+
+  chosen = ordered.map(s=>({ site_id:s.id, label:(s.nome||('Site '+s.id)).toString().trim(), url:(s.url_pesquisa||'').toString() }));
+
+  const lim = await getSitesLimitForPlan(planKey);
+  unlocked=new Set(chosen.slice(0,lim).map(c=>c.site_id));
+  locked=new Set(chosen.slice(lim).map(c=>c.site_id));
+
+  loadColumnOrder();
+  buildHeaders();
+  setStatus('Sites: '+chosen.map(c=>c.label).join(' · '));
+  dlog({step:'loadUserSelection.done', chosen, unlocked:[...unlocked], locked:[...locked], columnOrder});
+}
+
 /* ========= Outliers / filtros / render ========= */
 function analyzeAllItemsOutliers(){
   for (const item of produtosList){
@@ -388,7 +389,7 @@ function analyzeAllItemsOutliers(){
       const mean = nums.reduce((a,b)=>a+b,0)/nums.length;
       const lo = mean*(1-OUTLIER_TOL), hi = mean*(1+OUTLIER_TOL);
       item.analysis = { mean, lo, hi, n:nums.length };
-      for (const [label, s] of Object.entries(item.sites)){
+      for (const s of entries){
         if (!Number.isFinite(s.precoNum)){ s.valid = false; continue; }
         s.valid = (s.precoNum >= lo && s.precoNum <= hi);
       }
@@ -622,7 +623,6 @@ function setupReorderableHeaders(headerRow){
 }
 
 /* ========= View (Geral) ========= */
-let itemsRendered=0, generalView=[];
 function recomputeGeneralView(){
   generalView = (searchScope==='both' || searchScope==='general') ? produtosList.filter(matchesFilters) : produtosList.slice();
   if (sortStateGeneral.key){
@@ -726,14 +726,13 @@ function updateCounts(){
   countFavs.textContent  = 'Favoritos: ' + favSet.size;
 }
 
-/* ========= Query ========= */
+/* ========= Query / paginação ========= */
 function buildQuery(){
   return sb.from(VIEW).select(
     'ean, site_id, site_nome, preco, data, descricao, preco_num, meu_preco, descricao_cliente',
     { count:'estimated' }
   ).order('data', { ascending:false });
 }
-let fetching=false, serverOffset=0, serverExhausted=false;
 async function fetchNextPage(){
   if (fetching || serverExhausted) return; fetching = true; hideErr(); setStatus('Carregando… (offset ' + serverOffset + ')'); dlog({step:'fetch', offset:serverOffset});
   try{
@@ -764,8 +763,7 @@ function resetAndQuery(){
   generalView=[]; resetGeneralDom(); renderFavs(); updateFavHeight(); updateCounts(); fetchNextPage();
 }
 
-/* ========= LOG DE PESQUISA ========= */
-/* Agora sem endereço/localização no payload */
+/* ========= LOG DE PESQUISA (sem endereço) ========= */
 const logSearchDebounced = debounce(doLogSearch, 1200);
 async function doLogSearch(){
   try{
@@ -821,21 +819,6 @@ btnReload.addEventListener('click', async ()=>{
   dlog({step:'manualReload.end'});
 });
 
-function initScopeRadios(){
-  localStorage.setItem('mm_scope','both'); searchScope='both';
-  const radios=scopeGroup.querySelectorAll('input[name="scope"]');
-  radios.forEach(r=>{
-    r.checked=(r.value===searchScope);
-    r.addEventListener('change', ()=>{
-      if(!r.checked) return;
-      searchScope=r.value; localStorage.setItem('mm_scope',searchScope);
-      recomputeGeneralView(); renderFavs(); updateFavHeight(); updateCounts();
-      dlog({step:'scopeChange', scope:searchScope});
-      logSearchDebounced();
-    });
-  });
-}
-
 /* ========= Favoritos: altura/resizer ========= */
 function measureRowHeight(){ const row=document.querySelector('#favTable tbody tr'); if(!row) return 44; const h=Math.round(row.getBoundingClientRect().height); return Math.max(36, h||44); }
 function measureHeadHeight(){ const head=document.querySelector('#favTable thead'); if(!head) return 40; const h=Math.round(head.getBoundingClientRect().height); return Math.max(32, h||40); }
@@ -885,33 +868,6 @@ async function openChartFor(ev, ean, label, siteId){
   const points = await fetchHistory(String(ean), Number(siteId)); drawSparkFull(points);
 }
 
-/* ========= Minimizar/Maximizar ========= */
-function applyToggle(btn, wrap, extraEl, key){
-  const collapsed = localStorage.getItem(key) === '1';
-  function setState(isCollapsed){ btn.setAttribute('aria-expanded', String(!isCollapsed)); btn.textContent = isCollapsed ? 'Maximizar' : 'Minimizar'; wrap.style.display = isCollapsed ? 'none' : 'block'; if (extraEl) extraEl.style.display = isCollapsed ? 'none' : ''; }
-  setState(collapsed);
-  btn.addEventListener('click', ()=>{ const curr = btn.getAttribute('aria-expanded') === 'true'; const nextCollapsed = curr; localStorage.setItem(key, nextCollapsed ? '1' : '0'); setState(nextCollapsed); });
-}
-applyToggle(toggleFavBtn, favWrap, document.getElementById('favResizer'), 'mm_tgl_fav');
-applyToggle(toggleGenBtn, generalWrap, null, 'mm_tgl_gen');
-
-/* ========= Impressão de Favoritos ========= */
-function buildPrintHTMLFromFav() {
-  const favHeaderRow = document.getElementById('favHeaderRow');
-  const headers = Array.from(favHeaderRow?.children || []).map((th,i) => i===0 ? null : th.textContent.trim()).filter(Boolean);
-  const favBody = document.querySelector('#favTable tbody'); const rows = Array.from(favBody?.rows || []);
-  const thead = '<thead><tr>' + headers.map(h => '<th>'+h+'</th>').join('') + '</tr></thead>';
-  let tbody = '';
-  for (const tr of rows) {
-    const cells = Array.from(tr.cells).slice(1).map(td => { const txt = (td.textContent || '').replace(/\s+/g, ' ').trim(); return '<td>'+(txt || '—')+'</td>'; });
-    tbody += '<tr>'+cells.join('')+'</tr>';
-  }
-  const css = '*{box-sizing:border-box;} body{font-family:Arial,sans-serif;color:#000;background:#fff;padding:24px;} h1{margin:0 0 4px 0;font-size:18px;} .meta{color:#444;font-size:12px;margin-bottom:14px;} table{width:100%;border-collapse:collapse;} thead th{text-align:left;font-weight:700;padding:6px 0;} tbody td{padding:4px 0;} @media print{body{padding:0;}}';
-  const now=new Date(); const meta = now.toLocaleDateString('pt-BR')+' '+now.toLocaleTimeString('pt-BR');
-  return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório — Favoritos</title><style>'+css+'</style></head><body><h1>Relatório — Favoritos</h1><div class="meta">Gerado em '+meta+'</div><table>'+thead+'<tbody>'+tbody+'</tbody></table><script>window.onload=()=>{window.print()}<\/script></body></html>';
-}
-function printFavReport(){ const win=window.open('', '_blank'); if(!win){ alert('Permita pop-ups para imprimir.'); return; } win.document.open(); win.document.write(buildPrintHTMLFromFav()); win.document.close(); }
-
 /* ========= INIT: sessão, plano e sites ========= */
 async function initUserAndSites(){
   const { data:{ session } } = await sb.auth.getSession();
@@ -919,7 +875,7 @@ async function initUserAndSites(){
   userChip.textContent = session.user?.email || 'Logado';
   dlog({step:'session', user:session.user?.id, email:session.user?.email});
 
-  // Busca SOMENTE a coluna 'plan' (evita erro e evita default aleatório)
+  // Busca SOMENTE a coluna 'plan'
   let planKey='basico';
   try{
     const rs = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
@@ -942,7 +898,8 @@ async function initUserAndSites(){
   }
 }
 
-function initScopeRadiosOnce(){
+/* ========= Escopo ========= */
+function initScopeRadios(){
   localStorage.setItem('mm_scope','both'); searchScope='both';
   const radios=scopeGroup.querySelectorAll('input[name="scope"]');
   radios.forEach(r=>{
@@ -961,7 +918,7 @@ function initScopeRadiosOnce(){
 (async function init(){
   try{
     await initUserAndSites();
-    initScopeRadiosOnce();
+    initScopeRadios();
     loadColumnOrder(); buildHeaders();
     resetAndQuery();
     generalWrap.dispatchEvent(new Event('scroll'));
