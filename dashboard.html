@@ -20,7 +20,7 @@
   .dd-item { width:100%; background:transparent; border:none; color:#eee; text-align:left; padding:10px 12px; border-radius:8px; cursor:pointer; font-size:14px; }
   .dd-item:hover { background:#1b1b1b; }
   .panel { background:#202020; border:1px solid #2a2a2a; border-radius:12px; padding:12px; margin-bottom:18px; }
-  .panel-header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }
+  .panel-header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
   .panel-header h2 { margin:0; font-size:18px; color:#d5ffd5; }
   .toggle-btn { background:none; border:1px solid #2a2a2a; color:#ddd; padding:6px 10px; border-radius:8px; cursor:pointer; }
   .toggle-btn:hover { background:#1b1b1b; }
@@ -43,12 +43,11 @@
   .col-desc { min-width:260px; }
   .col-param { width:140px; }
 
-  /* ===== PREÇOS ===== */
-  .price { font-weight:700; display:inline-block; font-size:16px; vertical-align:middle; color:#fff; } /* branco por padrão */
+  .price { font-weight:700; display:inline-block; font-size:16px; vertical-align:middle; color:#fff; }
   @media (min-width:1200px){ .price{ font-size:18px; } }
-  .price.min { color:#ff4d4f; }   /* menor = vermelho */
-  .price.max { color:#00d084; }   /* maior = verde */
-  .price.param { color:#ffd54f; } /* meu preço = amarelo */
+  .price.min { color:#ff4d4f; }
+  .price.max { color:#00d084; }
+  .price.param { color:#ffd54f; }
 
   .muted { display:none; }
   .end-marker { text-align:center; padding:10px; color:#9aa0a6; }
@@ -82,7 +81,6 @@
   #chartPopover .close { background:transparent; border:1px solid #333; color:#ddd; padding:2px 8px; border-radius:6px; cursor:pointer; }
   #chartPopover .msg { font-size:12px; color:#9aa0a6; }
 
-  /* ===== Ordenação e Reordenamento ===== */
   th.sortable { cursor:pointer; user-select:none; }
   th.reorderable { cursor:move; }
   th.drop-left::before, th.drop-right::after {
@@ -92,10 +90,8 @@
   th.drop-right::after { right:0; }
   th .sort-ind { margin-left:6px; opacity:.8; font-size:11px; }
 
-  /* ===== Link do preço ===== */
   a.price-link { text-decoration:none; }
   a.price-link:hover .price { text-decoration: underline; }
-
 </style>
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="./config.js"></script>
@@ -228,8 +224,6 @@ const scopeGroup = document.getElementById('scopeGroup');
 const DEFAULT_PLAN_SITE_LIMIT = { trial:2, basico:4, intermediario:6, premium:8 };
 const VIEW = 'vw_precos_dinamica';
 const PAGE_SIZE = 200, RENDER_CHUNK = 60;
-
-/* tolerância de outlier: ±50% da média */
 const OUTLIER_TOL = 0.50;
 
 let chosen=[], unlocked=new Set(), locked=new Set();
@@ -240,21 +234,27 @@ let loadingMore=false; const generalChkMap=new Map();
 let favHeightUser = Number(localStorage.getItem('mm_fav_height')) || null, favFirstAutoRenderDone=false;
 let currentEanQ='', currentDescQ='', searchScope='both';
 
-/* ===== Ordenação: padrão por Descrição ASC ===== */
 let sortStateGeneral = { key:'desc', dir:'asc' };
 let sortStateFav     = { key:'desc', dir:'asc' };
 
-/* ===== Reordenação de colunas (persistida) ===== */
-let columnOrder = []; // ex: ['sku','desc','meu_preco','site:Loja A', 'site:Loja B', ...]
+let columnOrder = [];
 const COL_ORDER_KEY = 'mm_col_order';
 
-/* ========= PERFIL (para localização do usuário) ========= */
+/* ========= PERFIL / ENDEREÇO ========= */
 let PROFILE_ADDR = {
   address: null, city: null, state: null, country: null,
   lat: null, lng: null
 };
 
 /* ========= Helpers ========= */
+function setStatus(t){ statusEl.textContent = t||''; }
+function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
+function debounce(fn,ms=500){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); } }
+function favSave(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet])); }
+function isFav(sku){ return favSet.has(String(sku)); }
+function formatBRL(n){ try{ return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) }catch{ return String(n) } }
+function norm(s){ return (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]/g,'').toLowerCase(); }
+
 function computeDefaultColumnOrder(){
   return ['sku','desc','meu_preco', ...chosen.map(c => 'site:' + c.label)];
 }
@@ -269,15 +269,6 @@ function loadColumnOrder(){
 function saveColumnOrder(){
   localStorage.setItem(COL_ORDER_KEY, JSON.stringify(columnOrder));
 }
-function setStatus(t){ statusEl.textContent = t||''; }
-function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
-function debounce(fn,ms=500){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); } }
-function favSave(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet])); }
-function isFav(sku){ return favSet.has(String(sku)); }
-function formatBRL(n){ try{ return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) }catch{ return String(n) } }
-function norm(s){ return (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]/g,'').toLowerCase(); }
-function shouldFilterGeneral(){ return searchScope==='both' || searchScope==='general'; }
-function shouldFilterFavs(){ return searchScope==='both' || searchScope==='favorites'; }
 
 /* ========= Cabeçalhos ========= */
 function titleForKey(key){
@@ -341,12 +332,11 @@ function buildHeaders(){
   setupReorderableHeaders(generalHeaderRow);
   setupReorderableHeaders(favHeaderRow);
 
-  // reaplica indicadores de ordenação
   if (sortStateGeneral.key) applySortIndicators(generalHeaderRow, sortStateGeneral.key, sortStateGeneral.dir);
   if (sortStateFav.key)     applySortIndicators(favHeaderRow,     sortStateFav.key,     sortStateFav.dir);
 }
 
-/* ========= Plano / sites do usuário (com URL de pesquisa) ========= */
+/* ========= Plano / sites ========= */
 async function getSitesLimitForPlan(planKey){
   const k=(planKey||'').toLowerCase();
   try{
@@ -359,7 +349,6 @@ async function getSitesLimitForPlan(planKey){
   return DEFAULT_PLAN_SITE_LIMIT[k] ?? 2;
 }
 
-/* também traz 'url_pesquisa' para clique do preço */
 async function loadUserSelection(userId, planKey){
   dlog({step:'loadUserSelection.start', userId, planKey});
 
@@ -401,13 +390,13 @@ async function loadUserSelection(userId, planKey){
   unlocked=new Set(chosen.slice(0,lim).map(c=>c.site_id));
   locked=new Set(chosen.slice(lim).map(c=>c.site_id));
 
-  loadColumnOrder(); // depende de chosen
+  loadColumnOrder();
   buildHeaders();
   setStatus('Sites: '+chosen.map(c=>c.label).join(' · '));
   dlog({step:'loadUserSelection.done', chosen, unlocked:[...unlocked], locked:[...locked], columnOrder});
 }
 
-/* ========= Agrega, análise de outliers, filtros, render ========= */
+/* ========= Outliers / filtros / render ========= */
 function upsertRowsIntoProdutos(rows){
   const allowedById = new Map(chosen.map(c=>[c.site_id, c.label]));
   for (const r of rows){
@@ -424,11 +413,8 @@ function upsertRowsIntoProdutos(rows){
     }
   }
   produtosList = Array.from(produtosMap.values());
-
-  // Após montar a lista, analisamos outliers por item
   analyzeAllItemsOutliers();
 }
-
 function analyzeAllItemsOutliers(){
   for (const item of produtosList){
     const nums = [];
@@ -436,7 +422,6 @@ function analyzeAllItemsOutliers(){
     for (const s of entries){
       if (Number.isFinite(s.precoNum)) nums.push(s.precoNum);
     }
-    // só aplica outlier se houver pelo menos 2 preços
     if (nums.length >= 2){
       const mean = nums.reduce((a,b)=>a+b,0)/nums.length;
       const lo = mean*(1-OUTLIER_TOL), hi = mean*(1+OUTLIER_TOL);
@@ -447,11 +432,10 @@ function analyzeAllItemsOutliers(){
       }
     } else {
       item.analysis = { mean: null, lo: null, hi: null, n: nums.length };
-      for (const s of entries){ s.valid = Number.isFinite(s.precoNum); } // com 0/1 preço, não filtramos por outlier
+      for (const s of entries){ s.valid = Number.isFinite(s.precoNum); }
     }
   }
 }
-
 function matchesFilters(item){
   const qE=(currentEanQ||'').trim(), qD=norm(currentDescQ||'');
   if (qE && !String(item.sku||'').includes(qE)) return false;
@@ -459,7 +443,7 @@ function matchesFilters(item){
   return true;
 }
 
-/* ========= URL de pesquisa por site ========= */
+/* ========= URL pesquisa por site ========= */
 function buildSearchUrlByLabel(label, ean){
   const c = chosen.find(x => x.label === label);
   if (!c || !c.url) return null;
@@ -479,23 +463,20 @@ function chartButtonSVG(){ return '<svg class="chart-icon" viewBox="0 0 24 24" a
 function computeMinMaxForRow(item){
   let min={label:null,val:Infinity}, max={label:null,val:-Infinity};
   for (const c of chosen){
-    if (locked.has(c.site_id)) continue;               // só colunas liberadas contam
+    if (locked.has(c.site_id)) continue;
     const d=item.sites[c.label];
-    if (!d || !d.valid || !Number.isFinite(d.precoNum)) continue; // ignora outliers/indefinidos
+    if (!d || !d.valid || !Number.isFinite(d.precoNum)) continue;
     if (d.precoNum<min.val) min={label:c.label,val:d.precoNum};
     if (d.precoNum>max.val) max={label:c.label,val:d.precoNum};
   }
   return { min:min.label, max:max.label };
 }
-
-/* Preço clicável (se válido e não bloqueado) + filtro de outlier */
 function createPriceCell(item, label, isLocked, minLabel, maxLabel){
   const td=document.createElement('td'); if (isLocked) td.classList.add('locked-cell'); const d=item.sites[label];
   if (d){
     const dtStr=d.data?new Date(d.data).toLocaleString('pt-BR'):'';
     const url = buildSearchUrlByLabel(label, item.sku);
 
-    // se outlier (ou inválido), não exibe o preço
     if (!d.valid){
       const span=document.createElement('span');
       span.className='price';
@@ -542,7 +523,6 @@ function createPriceCell(item, label, isLocked, minLabel, maxLabel){
   } else { td.innerHTML='<span class="muted">—</span>'; }
   return td;
 }
-
 function createParamCell(item){
   const td=document.createElement('td'); td.className='col-param';
   const n=(typeof item.meu_preco==='number')?item.meu_preco:null;
@@ -559,7 +539,6 @@ function getValueForKey(item, key){
   if (key.startsWith('site:')){
     const label = key.slice(5);
     const d = item.sites?.[label];
-    // ordenar usando apenas preços exibíveis (não-outliers)
     return (d && d.valid && Number.isFinite(d.precoNum)) ? d.precoNum : null;
   }
   return null;
@@ -585,7 +564,6 @@ function makeComparator(key, dir){
 }
 function applySortIndicators(rowEl, activeKey, dir){
   Array.from(rowEl.children).forEach(th=>{
-    if (!th) return;
     const ind = th.querySelector('.sort-ind');
     if (ind) ind.remove();
   });
@@ -599,7 +577,7 @@ function applySortIndicators(rowEl, activeKey, dir){
 function setupSortableHeaders(headerRow, tableKind){
   const ths = Array.from(headerRow.children);
   ths.forEach((th, idx)=>{
-    if (idx===0) return; // primeira coluna fixa
+    if (idx===0) return;
     const key = th.getAttribute('data-sortkey');
     if (!key) return;
     th.classList.add('sortable');
@@ -619,11 +597,11 @@ function setupSortableHeaders(headerRow, tableKind){
   });
 }
 
-/* ========= Reordenar colunas (drag & drop) ========= */
+/* ========= Reordenar colunas ========= */
 function setupReorderableHeaders(headerRow){
   const ths = Array.from(headerRow.children);
   ths.forEach((th, idx)=>{
-    if (idx===0) { th.draggable=false; return; } // fixa a 1ª coluna
+    if (idx===0) { th.draggable=false; return; }
     th.addEventListener('dragstart', (ev)=>{
       ev.dataTransfer.setData('text/plain', th.getAttribute('data-sortkey') || '');
       headerRow.querySelectorAll('th').forEach(x=>x.classList.remove('drop-left','drop-right'));
@@ -635,9 +613,7 @@ function setupReorderableHeaders(headerRow){
       th.classList.toggle('drop-left', before);
       th.classList.toggle('drop-right', !before);
     });
-    th.addEventListener('dragleave', ()=>{
-      th.classList.remove('drop-left','drop-right');
-    });
+    th.addEventListener('dragleave', ()=>{ th.classList.remove('drop-left','drop-right'); });
     th.addEventListener('drop', (ev)=>{
       ev.preventDefault();
       const srcKey = ev.dataTransfer.getData('text/plain');
@@ -667,7 +643,7 @@ function setupReorderableHeaders(headerRow){
 
 /* ========= View (Geral) ========= */
 function recomputeGeneralView(){
-  generalView = shouldFilterGeneral() ? produtosList.filter(matchesFilters) : produtosList.slice();
+  generalView = (searchScope==='both' || searchScope==='general') ? produtosList.filter(matchesFilters) : produtosList.slice();
   if (sortStateGeneral.key){
     generalView.sort(makeComparator(sortStateGeneral.key, sortStateGeneral.dir));
   }
@@ -708,7 +684,6 @@ generalWrap.addEventListener('scroll', onGeneralScroll);
 
 /* ========= Linhas ========= */
 function renderRowIntoGeneral(tr,item){
-  // 1ª coluna: favorito
   const tdFav=document.createElement('td'); tdFav.className='col-fav';
   const chk=document.createElement('input'); chk.type='checkbox'; chk.checked=isFav(item.sku);
   chk.addEventListener('change',()=>{ if(chk.checked) favSet.add(item.sku); else favSet.delete(item.sku); favSave(); renderFavs(); updateFavHeight(); updateCounts(); });
@@ -727,8 +702,7 @@ function renderRowIntoGeneral(tr,item){
     }
   }
 }
-
-function itemMatchesFavScope(item){ if (!shouldFilterFavs()) return true; return matchesFilters(item); }
+function itemMatchesFavScope(item){ if (!(searchScope==='both' || searchScope==='favorites')) return true; return matchesFilters(item); }
 function renderFavs(){
   favBody.innerHTML='';
   let favList = produtosList.filter(p=>isFav(p.sku)).filter(itemMatchesFavScope);
@@ -741,7 +715,6 @@ function renderFavs(){
   for (const item of favList){
     const tr=document.createElement('tr');
 
-    // 1ª coluna: ação
     const tdAct=document.createElement('td'); tdAct.className='col-fav';
     const btn=document.createElement('button'); btn.title='Remover'; btn.innerHTML='🗑️';
     btn.addEventListener('click',()=>{ favSet.delete(item.sku); favSave(); const chk=generalChkMap.get(item.sku); if(chk){ chk.checked=false; } renderFavs(); updateFavHeight(); updateCounts(); });
@@ -810,11 +783,7 @@ function resetAndQuery(){
 }
 
 /* ========= LOG DE PESQUISA ========= */
-
-/* Debounce para logging (1.2s após o último input) */
 const logSearchDebounced = debounce(doLogSearch, 1200);
-
-/* Captura e envia log (EAN + descrição + escopo + contagem) */
 async function doLogSearch(){
   try{
     const { data:{ session } } = await sb.auth.getSession();
@@ -824,7 +793,6 @@ async function doLogSearch(){
     const descQ = (currentDescQ||'').trim();
     const scope = searchScope;
 
-    // Evita logs vazios ou ruído de 1 char; EAN ≥ 8 dígitos ou descrição ≥ 3 chars
     const isEanOk  = eanQ.replace(/\D/g,'').length >= 8;
     const isDescOk = descQ.length >= 3;
     if (!isEanOk && !isDescOk) return;
@@ -859,7 +827,6 @@ ddMeusDados.addEventListener('click', ()=> location.href='meusdados.html');
 ddPlanos.addEventListener('click', ()=> location.href='planos.html');
 btnSair.addEventListener('click', async ()=>{ try{ await sb.auth.signOut(); } finally{ localStorage.removeItem('mm_login_date'); location.href = CFG.SITE_URL || 'index.html'; }});
 
-/* Ao digitar nos filtros, além de filtrar, agenda log */
 const onFilterInput = debounce(()=>{
   currentEanQ=(eanFilter.value||'').trim();
   currentDescQ=(descFilter.value||'').trim();
@@ -872,26 +839,7 @@ descFilter.addEventListener('input', onFilterInput);
 
 btnReload.addEventListener('click', async ()=>{
   dlog({step:'manualReload.start'});
-  const s=(await sb.auth.getSession()).data.session;
-  if (s?.user?.id){
-    let planKey='basico';
-    try{
-      const rs = await sb.from('profiles').select('plan').eq('id', s.user.id).maybeSingle();
-      if (!rs.error){
-        const raw=(rs.data?.plan||'basico').toString(); planKey=raw.toLowerCase();
-        planChip.textContent = 'Plano: ' + (raw.charAt(0).toUpperCase()+raw.slice(1));
-      }else{
-        planChip.textContent='Plano: (erro)';
-      }
-    }catch(e){ dlog({warn:'get plan failed', detail:String(e)}); }
-
-    try{
-      await loadUserSelection(s.user.id, planKey);
-    }catch(e){
-      dlog({fatal:'reload user_sites/sites failed', raw:String(e)});
-      return;
-    }
-  }
+  await initUserAndSites(); // reutiliza a mesma lógica de init
   resetAndQuery();
   dlog({step:'manualReload.end'});
 });
@@ -906,7 +854,7 @@ function initScopeRadios(){
       searchScope=r.value; localStorage.setItem('mm_scope',searchScope);
       recomputeGeneralView(); renderFavs(); updateFavHeight(); updateCounts();
       dlog({step:'scopeChange', scope:searchScope});
-      logSearchDebounced(); // também loga mudança de escopo
+      logSearchDebounced();
     });
   });
 }
@@ -923,7 +871,7 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
   favResizer.addEventListener('dblclick', ()=>{ favHeightUser=null; localStorage.removeItem('mm_fav_height'); updateFavHeight(); });
 })();
 
-/* ========= Gráfico simples ========= */
+/* ========= Gráfico ========= */
 const pop=document.getElementById('chartPopover'), popTitle=document.getElementById('chartTitle'), popClose=document.getElementById('chartClose'), popMsg=document.getElementById('chartMsg');
 const spark=document.getElementById('spark'), sparkCtx=spark.getContext('2d');
 popClose.addEventListener('click', ()=> pop.style.display='none');
@@ -960,7 +908,7 @@ async function openChartFor(ev, ean, label, siteId){
   const points = await fetchHistory(String(ean), Number(siteId)); drawSparkFull(points);
 }
 
-/* ========= Minimizar/Maximizar painéis ========= */
+/* ========= Minimizar/Maximizar ========= */
 function applyToggle(btn, wrap, extraEl, key){
   const collapsed = localStorage.getItem(key) === '1';
   function setState(isCollapsed){ btn.setAttribute('aria-expanded', String(!isCollapsed)); btn.textContent = isCollapsed ? 'Maximizar' : 'Minimizar'; wrap.style.display = isCollapsed ? 'none' : 'block'; if (extraEl) extraEl.style.display = isCollapsed ? 'none' : ''; }
@@ -987,57 +935,106 @@ function buildPrintHTMLFromFav() {
 }
 function printFavReport(){ const win=window.open('', '_blank'); if(!win){ alert('Permita pop-ups para imprimir.'); return; } win.document.open(); win.document.write(buildPrintHTMLFromFav()); win.document.close(); }
 
-/* ========= Init ========= */
-(async function init(){
-  try{
-    const { data:{ session } } = await sb.auth.getSession();
-    if (!session){ location.href = CFG.SITE_URL || 'index.html'; return; }
-    userChip.textContent = session.user?.email || 'Logado';
-    dlog({step:'session', user:session.user?.id, email:session.user?.email});
+/* ========= INIT: sessão, plano e sites ========= */
+async function initUserAndSites(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if (!session){ location.href = CFG.SITE_URL || 'index.html'; return; }
+  userChip.textContent = session.user?.email || 'Logado';
+  dlog({step:'session', user:session.user?.id, email:session.user?.email});
 
-    let planKey='basico';
+  let planKey='basico';
+  let gotProfile=false;
+
+  // 1ª tentativa: nomes padrão de endereço
+  try{
+    const rs1 = await sb.from('profiles')
+      .select('plan, address, city, state, country, lat, lng')
+      .eq('id', session.user.id)
+      .maybeSingle();
+
+    if (!rs1.error){
+      const raw=(rs1.data?.plan||'basico')+''; planKey=raw.toLowerCase();
+      planChip.textContent='Plano: '+(raw.charAt(0).toUpperCase()+raw.slice(1));
+      PROFILE_ADDR.address = rs1.data?.address ?? null;
+      PROFILE_ADDR.city    = rs1.data?.city    ?? null;
+      PROFILE_ADDR.state   = rs1.data?.state   ?? null;
+      PROFILE_ADDR.country = rs1.data?.country ?? null;
+      PROFILE_ADDR.lat     = rs1.data?.lat ?? null;
+      PROFILE_ADDR.lng     = rs1.data?.lng ?? null;
+      gotProfile = true;
+    } else {
+      dlog({warn:'profiles.select.std.failed', detail: rs1.error});
+    }
+  }catch(e){
+    dlog({warn:'profiles.std.exception', detail:String(e)});
+  }
+
+  // 2ª tentativa (fallback): nomes alternativos de endereço
+  if (!gotProfile){
     try{
-      /* Aqui pedimos também campos de endereço para log de pesquisa (se existirem no seu schema). */
-      const rs = await sb.from('profiles')
-        .select('plan, address, endereco, city, cidade, state, estado, country, pais, lat, lng')
+      const rs2 = await sb.from('profiles')
+        .select('plan, endereco, cidade, estado, pais, lat, lng')
         .eq('id', session.user.id)
         .maybeSingle();
 
-      if (!rs.error){
-        const raw=(rs.data?.plan||'basico').toString(); planKey=raw.toLowerCase();
+      if (!rs2.error){
+        const raw=(rs2.data?.plan||'basico')+''; planKey=raw.toLowerCase();
         planChip.textContent='Plano: '+(raw.charAt(0).toUpperCase()+raw.slice(1));
-
-        // Fallback inteligente para nomes de campos diferentes
-        PROFILE_ADDR.address = rs.data?.address ?? rs.data?.endereco ?? null;
-        PROFILE_ADDR.city    = rs.data?.city    ?? rs.data?.cidade   ?? null;
-        PROFILE_ADDR.state   = rs.data?.state   ?? rs.data?.estado   ?? null;
-        PROFILE_ADDR.country = rs.data?.country ?? rs.data?.pais     ?? null;
-        PROFILE_ADDR.lat     = rs.data?.lat ?? null;
-        PROFILE_ADDR.lng     = rs.data?.lng ?? null;
-      }else{
-        planChip.textContent='Plano: (erro)';
+        PROFILE_ADDR.address = rs2.data?.endereco ?? null;
+        PROFILE_ADDR.city    = rs2.data?.cidade   ?? null;
+        PROFILE_ADDR.state   = rs2.data?.estado   ?? null;
+        PROFILE_ADDR.country = rs2.data?.pais     ?? null;
+        PROFILE_ADDR.lat     = rs2.data?.lat ?? null;
+        PROFILE_ADDR.lng     = rs2.data?.lng ?? null;
+        gotProfile = true;
+      } else {
+        dlog({warn:'profiles.select.alt.failed', detail: rs2.error});
       }
-    }catch(e){ dlog({warn:'get plan failed', detail:String(e)}); }
-
-    try{
-      await loadUserSelection(session.user.id, planKey);
     }catch(e){
-      dlog({fatal:'init user_sites/sites failed', raw:String(e)});
-      return; // aborta se falhou user_sites/sites
+      dlog({warn:'profiles.alt.exception', detail:String(e)});
     }
+  }
 
-    initScopeRadios();
+  if (!gotProfile){
+    // mantém funcionando mesmo sem perfil/planos
+    planChip.textContent='Plano: Básico';
+    planKey='basico';
+  }
 
+  try{
+    await loadUserSelection(session.user.id, planKey);
+  }catch(e){
+    dlog({fatal:'init user_sites/sites failed', raw:String(e)});
+    throw e;
+  }
+}
+
+function initScopeRadiosOnce(){
+  localStorage.setItem('mm_scope','both'); searchScope='both';
+  const radios=scopeGroup.querySelectorAll('input[name="scope"]');
+  radios.forEach(r=>{
+    r.checked=(r.value===searchScope);
+    r.addEventListener('change', ()=>{
+      if(!r.checked) return;
+      searchScope=r.value; localStorage.setItem('mm_scope',searchScope);
+      recomputeGeneralView(); renderFavs(); updateFavHeight(); updateCounts();
+      dlog({step:'scopeChange', scope:searchScope});
+      logSearchDebounced();
+    });
+  });
+}
+
+/* ========= Start ========= */
+(async function init(){
+  try{
+    await initUserAndSites();
+    initScopeRadiosOnce();
+    loadColumnOrder(); buildHeaders();
     resetAndQuery();
     generalWrap.dispatchEvent(new Event('scroll'));
-
-    // Preparar botão imprimir
     btnPrintFav.addEventListener('click', printFavReport);
   }catch(e){ showErr('Falha na inicialização'); dlog({error:'init', detail:String(e)}); }
 })();
-
-/* ========= Status helper ========= */
-function setStatus(t){ statusEl.textContent = t||''; }
 </script>
 </body>
 </html>
