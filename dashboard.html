@@ -240,12 +240,6 @@ let sortStateFav     = { key:'desc', dir:'asc' };
 let columnOrder = [];
 const COL_ORDER_KEY = 'mm_col_order';
 
-/* ========= PERFIL / ENDEREÇO ========= */
-let PROFILE_ADDR = {
-  address: null, city: null, state: null, country: null,
-  lat: null, lng: null
-};
-
 /* ========= Helpers ========= */
 function setStatus(t){ statusEl.textContent = t||''; }
 function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
@@ -254,87 +248,6 @@ function favSave(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet]))
 function isFav(sku){ return favSet.has(String(sku)); }
 function formatBRL(n){ try{ return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) }catch{ return String(n) } }
 function norm(s){ return (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]/g,'').toLowerCase(); }
-
-function computeDefaultColumnOrder(){
-  return ['sku','desc','meu_preco', ...chosen.map(c => 'site:' + c.label)];
-}
-function loadColumnOrder(){
-  const saved = (()=>{ try{ return JSON.parse(localStorage.getItem(COL_ORDER_KEY) || '[]'); }catch{ return []; }})();
-  const base = computeDefaultColumnOrder();
-  const setBase = new Set(base);
-  const filtered = saved.filter(k => setBase.has(k));
-  const missing = base.filter(k => !filtered.includes(k));
-  columnOrder = filtered.concat(missing);
-}
-function saveColumnOrder(){
-  localStorage.setItem(COL_ORDER_KEY, JSON.stringify(columnOrder));
-}
-
-/* ========= Cabeçalhos ========= */
-function titleForKey(key){
-  if (key==='sku') return 'EAN';
-  if (key==='desc') return 'Descrição';
-  if (key==='meu_preco') return 'Meu preço';
-  if (key.startsWith('site:')) return key.slice(5);
-  return key;
-}
-function siteInfoByLabel(label){
-  const c = chosen.find(x=>x.label===label);
-  return c ? { site_id:c.site_id, locked: locked.has(c.site_id) } : { site_id:null, locked:false };
-}
-function buildHeaders(){
-  // Geral
-  generalHeaderRow.innerHTML = '';
-  const thFav = document.createElement('th'); thFav.className='col-fav'; thFav.textContent='★';
-  generalHeaderRow.appendChild(thFav);
-  for (const key of columnOrder){
-    const th=document.createElement('th');
-    th.setAttribute('data-sortkey', key);
-    th.classList.add('sortable','reorderable');
-    th.draggable = true;
-    if (key==='sku') th.classList.add('col-sku');
-    if (key==='desc') th.classList.add('col-desc');
-    if (key==='meu_preco') th.classList.add('col-param');
-    if (key.startsWith('site:')){
-      const label=key.slice(5);
-      const info=siteInfoByLabel(label);
-      th.dataset.siteid = String(info.site_id||'');
-      th.setAttribute('data-locked', info.locked ? 'true' : 'false');
-    }
-    th.textContent = titleForKey(key);
-    generalHeaderRow.appendChild(th);
-  }
-
-  // Favoritos
-  favHeaderRow.innerHTML='';
-  const thAcao = document.createElement('th'); thAcao.className='col-fav'; thAcao.textContent='Ação';
-  favHeaderRow.appendChild(thAcao);
-  for (const key of columnOrder){
-    const th=document.createElement('th');
-    th.setAttribute('data-sortkey', key);
-    th.classList.add('sortable','reorderable');
-    th.draggable = true;
-    if (key==='sku') th.classList.add('col-sku');
-    if (key==='desc') th.classList.add('col-desc');
-    if (key==='meu_preco') th.classList.add('col-param');
-    if (key.startsWith('site:')){
-      const label=key.slice(5);
-      const info=siteInfoByLabel(label);
-      th.dataset.siteid = String(info.site_id||'');
-      th.setAttribute('data-locked', info.locked ? 'true' : 'false');
-    }
-    th.textContent = titleForKey(key);
-    favHeaderRow.appendChild(th);
-  }
-
-  setupSortableHeaders(generalHeaderRow, 'general');
-  setupSortableHeaders(favHeaderRow, 'fav');
-  setupReorderableHeaders(generalHeaderRow);
-  setupReorderableHeaders(favHeaderRow);
-
-  if (sortStateGeneral.key) applySortIndicators(generalHeaderRow, sortStateGeneral.key, sortStateGeneral.dir);
-  if (sortStateFav.key)     applySortIndicators(favHeaderRow,     sortStateFav.key,     sortStateFav.dir);
-}
 
 /* ========= Plano / sites ========= */
 async function getSitesLimitForPlan(planKey){
@@ -396,7 +309,95 @@ async function loadUserSelection(userId, planKey){
   dlog({step:'loadUserSelection.done', chosen, unlocked:[...unlocked], locked:[...locked], columnOrder});
 }
 
+/* ========= Cabeçalhos e colunas ========= */
+function computeDefaultColumnOrder(){ return ['sku','desc','meu_preco', ...chosen.map(c => 'site:' + c.label)]; }
+function loadColumnOrder(){
+  const saved = (()=>{ try{ return JSON.parse(localStorage.getItem(COL_ORDER_KEY) || '[]'); }catch{ return []; }})();
+  const base = computeDefaultColumnOrder();
+  const setBase = new Set(base);
+  const filtered = saved.filter(k => setBase.has(k));
+  const missing = base.filter(k => !filtered.includes(k));
+  columnOrder = filtered.concat(missing);
+}
+function saveColumnOrder(){ localStorage.setItem(COL_ORDER_KEY, JSON.stringify(columnOrder)); }
+
+function titleForKey(key){ if (key==='sku') return 'EAN'; if (key==='desc') return 'Descrição'; if (key==='meu_preco') return 'Meu preço'; if (key.startsWith('site:')) return key.slice(5); return key; }
+function siteInfoByLabel(label){ const c = chosen.find(x=>x.label===label); return c ? { site_id:c.site_id, locked: locked.has(c.site_id) } : { site_id:null, locked:false }; }
+
+function buildHeaders(){
+  // Geral
+  generalHeaderRow.innerHTML = '';
+  const thFav = document.createElement('th'); thFav.className='col-fav'; thFav.textContent='★';
+  generalHeaderRow.appendChild(thFav);
+  for (const key of columnOrder){
+    const th=document.createElement('th');
+    th.setAttribute('data-sortkey', key);
+    th.classList.add('sortable','reorderable');
+    th.draggable = true;
+    if (key==='sku') th.classList.add('col-sku');
+    if (key==='desc') th.classList.add('col-desc');
+    if (key==='meu_preco') th.classList.add('col-param');
+    if (key.startsWith('site:')){
+      const label=key.slice(5);
+      const info=siteInfoByLabel(label);
+      th.dataset.siteid = String(info.site_id||'');
+      th.setAttribute('data-locked', info.locked ? 'true' : 'false');
+    }
+    th.textContent = titleForKey(key);
+    generalHeaderRow.appendChild(th);
+  }
+
+  // Favoritos
+  favHeaderRow.innerHTML='';
+  const thAcao = document.createElement('th'); thAcao.className='col-fav'; thAcao.textContent='Ação';
+  favHeaderRow.appendChild(thAcao);
+  for (const key of columnOrder){
+    const th=document.createElement('th');
+    th.setAttribute('data-sortkey', key);
+    th.classList.add('sortable','reorderable');
+    th.draggable = true;
+    if (key==='sku') th.classList.add('col-sku');
+    if (key==='desc') th.classList.add('col-desc');
+    if (key==='meu_preco') th.classList.add('col-param');
+    if (key.startsWith('site:')){
+      const label=key.slice(5);
+      const info=siteInfoByLabel(label);
+      th.dataset.siteid = String(info.site_id||'');
+      th.setAttribute('data-locked', info.locked ? 'true' : 'false');
+    }
+    th.textContent = titleForKey(key);
+    favHeaderRow.appendChild(th);
+  }
+
+  setupSortableHeaders(generalHeaderRow, 'general');
+  setupSortableHeaders(favHeaderRow, 'fav');
+  setupReorderableHeaders(generalHeaderRow);
+  setupReorderableHeaders(favHeaderRow);
+
+  if (sortStateGeneral.key) applySortIndicators(generalHeaderRow, sortStateGeneral.key, sortStateGeneral.dir);
+  if (sortStateFav.key)     applySortIndicators(favHeaderRow,     sortStateFav.key,     sortStateFav.dir);
+}
+
 /* ========= Outliers / filtros / render ========= */
+function analyzeAllItemsOutliers(){
+  for (const item of produtosList){
+    const nums = [];
+    const entries = Object.values(item.sites||{});
+    for (const s of entries){ if (Number.isFinite(s.precoNum)) nums.push(s.precoNum); }
+    if (nums.length >= 2){
+      const mean = nums.reduce((a,b)=>a+b,0)/nums.length;
+      const lo = mean*(1-OUTLIER_TOL), hi = mean*(1+OUTLIER_TOL);
+      item.analysis = { mean, lo, hi, n:nums.length };
+      for (const [label, s] of Object.entries(item.sites)){
+        if (!Number.isFinite(s.precoNum)){ s.valid = false; continue; }
+        s.valid = (s.precoNum >= lo && s.precoNum <= hi);
+      }
+    } else {
+      item.analysis = { mean: null, lo: null, hi: null, n: nums.length };
+      for (const s of entries){ s.valid = Number.isFinite(s.precoNum); }
+    }
+  }
+}
 function upsertRowsIntoProdutos(rows){
   const allowedById = new Map(chosen.map(c=>[c.site_id, c.label]));
   for (const r of rows){
@@ -414,27 +415,6 @@ function upsertRowsIntoProdutos(rows){
   }
   produtosList = Array.from(produtosMap.values());
   analyzeAllItemsOutliers();
-}
-function analyzeAllItemsOutliers(){
-  for (const item of produtosList){
-    const nums = [];
-    const entries = Object.values(item.sites||{});
-    for (const s of entries){
-      if (Number.isFinite(s.precoNum)) nums.push(s.precoNum);
-    }
-    if (nums.length >= 2){
-      const mean = nums.reduce((a,b)=>a+b,0)/nums.length;
-      const lo = mean*(1-OUTLIER_TOL), hi = mean*(1+OUTLIER_TOL);
-      item.analysis = { mean, lo, hi, n:nums.length };
-      for (const [label, s] of Object.entries(item.sites)){
-        if (!Number.isFinite(s.precoNum)){ s.valid = false; continue; }
-        s.valid = (s.precoNum >= lo && s.precoNum <= hi);
-      }
-    } else {
-      item.analysis = { mean: null, lo: null, hi: null, n: nums.length };
-      for (const s of entries){ s.valid = Number.isFinite(s.precoNum); }
-    }
-  }
 }
 function matchesFilters(item){
   const qE=(currentEanQ||'').trim(), qD=norm(currentDescQ||'');
@@ -642,6 +622,7 @@ function setupReorderableHeaders(headerRow){
 }
 
 /* ========= View (Geral) ========= */
+let itemsRendered=0, generalView=[];
 function recomputeGeneralView(){
   generalView = (searchScope==='both' || searchScope==='general') ? produtosList.filter(matchesFilters) : produtosList.slice();
   if (sortStateGeneral.key){
@@ -752,6 +733,7 @@ function buildQuery(){
     { count:'estimated' }
   ).order('data', { ascending:false });
 }
+let fetching=false, serverOffset=0, serverExhausted=false;
 async function fetchNextPage(){
   if (fetching || serverExhausted) return; fetching = true; hideErr(); setStatus('Carregando… (offset ' + serverOffset + ')'); dlog({step:'fetch', offset:serverOffset});
   try{
@@ -783,6 +765,7 @@ function resetAndQuery(){
 }
 
 /* ========= LOG DE PESQUISA ========= */
+/* Agora sem endereço/localização no payload */
 const logSearchDebounced = debounce(doLogSearch, 1200);
 async function doLogSearch(){
   try{
@@ -805,13 +788,7 @@ async function doLogSearch(){
       scope:     scope,
       results_count: generalView?.length ?? null,
       source:    'dashboard',
-      user_agent: navigator.userAgent || null,
-      user_address: PROFILE_ADDR.address,
-      city:      PROFILE_ADDR.city,
-      state:     PROFILE_ADDR.state,
-      country:   PROFILE_ADDR.country,
-      lat:       PROFILE_ADDR.lat,
-      lng:       PROFILE_ADDR.lng
+      user_agent: navigator.userAgent || null
     };
 
     const { error } = await sb.from('search_logs').insert(payload);
@@ -839,7 +816,7 @@ descFilter.addEventListener('input', onFilterInput);
 
 btnReload.addEventListener('click', async ()=>{
   dlog({step:'manualReload.start'});
-  await initUserAndSites(); // reutiliza a mesma lógica de init
+  await initUserAndSites(); // lê plano e sites novamente
   resetAndQuery();
   dlog({step:'manualReload.end'});
 });
@@ -942,63 +919,19 @@ async function initUserAndSites(){
   userChip.textContent = session.user?.email || 'Logado';
   dlog({step:'session', user:session.user?.id, email:session.user?.email});
 
+  // Busca SOMENTE a coluna 'plan' (evita erro e evita default aleatório)
   let planKey='basico';
-  let gotProfile=false;
-
-  // 1ª tentativa: nomes padrão de endereço
   try{
-    const rs1 = await sb.from('profiles')
-      .select('plan, address, city, state, country, lat, lng')
-      .eq('id', session.user.id)
-      .maybeSingle();
-
-    if (!rs1.error){
-      const raw=(rs1.data?.plan||'basico')+''; planKey=raw.toLowerCase();
-      planChip.textContent='Plano: '+(raw.charAt(0).toUpperCase()+raw.slice(1));
-      PROFILE_ADDR.address = rs1.data?.address ?? null;
-      PROFILE_ADDR.city    = rs1.data?.city    ?? null;
-      PROFILE_ADDR.state   = rs1.data?.state   ?? null;
-      PROFILE_ADDR.country = rs1.data?.country ?? null;
-      PROFILE_ADDR.lat     = rs1.data?.lat ?? null;
-      PROFILE_ADDR.lng     = rs1.data?.lng ?? null;
-      gotProfile = true;
+    const rs = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
+    if (rs.error){
+      dlog({warn:'profiles.select.failed', detail: rs.error});
     } else {
-      dlog({warn:'profiles.select.std.failed', detail: rs1.error});
+      const raw = (rs.data?.plan ?? 'basico').toString();
+      planKey = raw.toLowerCase();
+      planChip.textContent = 'Plano: ' + (raw.charAt(0).toUpperCase()+raw.slice(1));
     }
   }catch(e){
-    dlog({warn:'profiles.std.exception', detail:String(e)});
-  }
-
-  // 2ª tentativa (fallback): nomes alternativos de endereço
-  if (!gotProfile){
-    try{
-      const rs2 = await sb.from('profiles')
-        .select('plan, endereco, cidade, estado, pais, lat, lng')
-        .eq('id', session.user.id)
-        .maybeSingle();
-
-      if (!rs2.error){
-        const raw=(rs2.data?.plan||'basico')+''; planKey=raw.toLowerCase();
-        planChip.textContent='Plano: '+(raw.charAt(0).toUpperCase()+raw.slice(1));
-        PROFILE_ADDR.address = rs2.data?.endereco ?? null;
-        PROFILE_ADDR.city    = rs2.data?.cidade   ?? null;
-        PROFILE_ADDR.state   = rs2.data?.estado   ?? null;
-        PROFILE_ADDR.country = rs2.data?.pais     ?? null;
-        PROFILE_ADDR.lat     = rs2.data?.lat ?? null;
-        PROFILE_ADDR.lng     = rs2.data?.lng ?? null;
-        gotProfile = true;
-      } else {
-        dlog({warn:'profiles.select.alt.failed', detail: rs2.error});
-      }
-    }catch(e){
-      dlog({warn:'profiles.alt.exception', detail:String(e)});
-    }
-  }
-
-  if (!gotProfile){
-    // mantém funcionando mesmo sem perfil/planos
-    planChip.textContent='Plano: Básico';
-    planKey='basico';
+    dlog({warn:'profiles.exception', detail:String(e)});
   }
 
   try{
