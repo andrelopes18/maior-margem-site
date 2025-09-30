@@ -1048,4 +1048,13 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
     loadColumnOrder(); buildHeaders();
 
     // Minimizar/Maximizar reativado e persistente
-    applyToggle(toggleFavBtn, favWrap, document.getElement
+    applyToggle(toggleFavBtn, favWrap, document.getElementById('favResizer'), 'mm_tgl_fav');
+    applyToggle(toggleGenBtn, generalWrap, null, 'mm_tgl_gen');
+
+    resetAndQuery();
+    generalWrap.dispatchEvent(new Event('scroll'));
+  }catch(e){ showErr('Falha na inicializaÃ§Ã£o'); dlog({error:'init', detail:String(e)}); }
+})();
+</script>
+</body>
+</html>
