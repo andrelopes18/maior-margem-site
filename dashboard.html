@@ -9,12 +9,19 @@
   body { margin:0; font-family: Arial, sans-serif; background:#121212; color:#fff; padding:20px; }
   header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; gap:12px; flex-wrap:wrap; }
   h1 { color:#00b140; margin:0; }
-  .userbox { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+
+  .userbox { display:flex; gap:12px; align-items:center; position:relative; flex-wrap:wrap; }
   .chip { font-size:12px; background:#1e1e1e; border:1px solid #333; padding:6px 10px; border-radius:999px; cursor:default; }
   .chip.plan { color:#bfffc1; border-color:#2f5a2f; background:#132313; }
   .chip.build { color:#bfe3ff; border-color:#2a3b5a; background:#101522; }
   .btn { background:#00b140; color:#fff; border:none; padding:8px 14px; border-radius:6px; cursor:pointer; }
   .btn:hover { background:#009b38; }
+
+  .userChipWrap { position: relative; }
+  .user-dropdown { position:absolute; right:0; top:calc(100% + 6px); display:none; min-width:220px; padding:6px; background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px; box-shadow:0 10px 30px rgba(0,0,0,.5); z-index:50; }
+  .user-dropdown.open { display:block; }
+  .dd-item { width:100%; background:transparent; border:none; color:#eee; text-align:left; padding:10px 12px; border-radius:8px; cursor:pointer; font-size:14px; }
+  .dd-item:hover { background:#1b1b1b; }
 
   .panel { background:#202020; border:1px solid #2a2a2a; border-radius:12px; padding:12px; margin-bottom:18px; }
   .panel-header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
@@ -57,25 +64,41 @@
   .end-marker { text-align:center; padding:10px; color:#9aa0a6; }
   .counts { margin-top:10px; font-size:12px; color:#9aa0a6; display:flex; gap:12px; flex-wrap:wrap; }
 
+  /* Colunas travadas por plano */
   th[data-locked="true"] { position: relative; color: #aaa; }
   th[data-locked="true"]::after { content:"🔒"; margin-left:6px; opacity:.8; font-size:14px; }
-
   td.locked-cell { position: relative; }
   td.locked-cell .price { filter: blur(3px); }
   td.locked-cell .unlock {
     position:absolute; left:50%; top:50%; transform: translate(-50%, -50%);
     padding:6px 10px; border-radius:8px; border:1px solid #2e2e2e;
-    background:#141414; color:#ddd; font-size:12px;
-    cursor:pointer; opacity:0; pointer-events:none; transition: opacity .15s;
-    white-space:nowrap;
+    background:#141414; color:#ddd; font-size:12px; cursor:pointer;
+    opacity:0; pointer-events:none; transition: opacity .15s; white-space:nowrap;
   }
   td.locked-cell:hover .unlock { opacity:1; pointer-events:auto; }
-  td.locked-cell .unlock:hover { background:#1b1b1b; }
 
-  .chart-btn { margin-left:6px; background:transparent; border:0; padding:0; vertical-align:middle; cursor:pointer; }
-  .chart-btn svg { width:18px; height:18px; display:block; }
-  .chart-btn:hover svg rect { fill:#373737; }
-  .chart-btn:active svg path { opacity:.9; }
+  /* Ordenação e reordenação */
+  th.sortable { cursor:pointer; user-select:none; }
+  th.reorderable { cursor:move; }
+  th.drop-left::before, th.drop-right::after { content:""; position:absolute; top:0; bottom:0; width:3px; background:#00b140; }
+  th.drop-left::before { left:0; }
+  th.drop-right::after { right:0; }
+  th .sort-ind { margin-left:6px; opacity:.8; font-size:11px; }
+
+  a.price-link { text-decoration:none; }
+  a.price-link:hover .price { text-decoration: underline; }
+
+  /* Debug popover */
+  #dbgWrap { display:none; position:fixed; right:16px; bottom:16px; width:520px; max-height:60vh; z-index:9999;
+             background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px; padding:10px; box-shadow:0 10px 30px rgba(0,0,0,.6); }
+  #dbgWrap h3 { margin:0 0 8px 0; font-size:14px; color:#bfe3ff; }
+  #dbg { white-space:pre-wrap; font-family: ui-monospace,Consolas,monospace; font-size:12px; color:#bfe3ff; max-height:48vh; overflow:auto; }
+
+  /* Chart popover */
+  #chartPopover { position:fixed; z-index:9998; background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px; padding:10px; box-shadow:0 10px 30px rgba(0,0,0,.6); display:none; }
+  #chartPopover header { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+  #chartPopover .msg { font-size:12px; color:#9aa0a6; }
+  #chartClose { background:transparent; border:1px solid #333; color:#ddd; padding:2px 8px; border-radius:6px; cursor:pointer; }
 </style>
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="./config.js"></script>
@@ -86,8 +109,14 @@
   <div class="userbox">
     <span id="buildChip" class="chip build" title="Versão do build">Build: —</span>
     <span id="planChip" class="chip plan">Plano: —</span>
-    <span id="userChip" class="chip">Usuário</span>
-    <button id="btnSair" class="btn" type="button">Sair</button>
+    <div class="userChipWrap">
+      <span id="userChip" class="chip" style="cursor:pointer;">Usuário ▾</span>
+      <div id="userDropdown" class="user-dropdown" role="menu" aria-hidden="true">
+        <button class="dd-item" id="ddMeusDados" type="button">Meus dados</button>
+        <button class="dd-item" id="ddPlanos" type="button">Planos</button>
+        <button class="dd-item" id="ddSair" type="button">Sair</button>
+      </div>
+    </div>
   </div>
 </header>
 
@@ -110,8 +139,8 @@
 <section id="favPanel" class="panel">
   <div class="panel-header">
     <h2>Favoritos</h2>
-    <button id="btnPrintFav" class="toggle-btn" title="Imprimir favoritos" type="button">Imprimir</button>
-    <button id="toggleFav" class="toggle-btn" aria-expanded="true" type="button">Minimizar</button>
+    <button id="btnPrintFav" class="btn" title="Imprimir favoritos" type="button">Imprimir</button>
+    <button id="toggleFav" class="btn" aria-expanded="true" type="button" style="background:#252525;border:1px solid #2a2a2a;">Minimizar</button>
   </div>
   <div id="favWrap" class="wrap" style="height:280px;">
     <table id="favTable">
@@ -124,7 +153,7 @@
 <section id="generalPanel" class="panel">
   <div class="panel-header">
     <h2>Geral</h2>
-    <button id="toggleGen" class="toggle-btn" aria-expanded="true" type="button">Minimizar</button>
+    <button id="toggleGen" class="btn" aria-expanded="true" type="button" style="background:#252525;border:1px solid #2a2a2a;">Minimizar</button>
   </div>
   <div class="loadbar"><div id="loadBar" class="bar"></div></div>
   <div id="generalWrap" class="wrap">
@@ -141,27 +170,37 @@
   </div>
 </section>
 
-<div id="chartPopover" style="display:none; position:fixed; z-index:9998; background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px; padding:10px; box-shadow:0 10px 30px rgba(0,0,0,.6);">
-  <header style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+<div id="dbgWrap">
+  <h3>Debug</h3>
+  <pre id="dbg"></pre>
+</div>
+
+<div id="chartPopover">
+  <header>
     <span id="chartTitle">Histórico</span>
-    <button class="btn" id="chartClose" type="button" style="background:#222;">×</button>
+    <button class="close" id="chartClose" aria-label="Fechar" type="button">×</button>
   </header>
   <canvas id="spark" width="220" height="180"></canvas>
-  <div id="chartMsg" class="msg" style="display:none; font-size:12px; color:#9aa0a6;"></div>
+  <div id="chartMsg" class="msg" style="display:none;"></div>
 </div>
 
 <script>
 /* ========= Build ========= */
-const BUILD_VERSION = '2025-09-30 17:20 BRT';
+const BUILD_VERSION = '2025-09-30 21:10 BRT'; // atualize em cada deploy
 const qBuild = new URLSearchParams(location.search).get('build');
 
 /* ========= Debug ========= */
-function dlog(o){ try{ const el=document.getElementById('status'); if(el){ el.textContent=(typeof o==='string'?o:JSON.stringify(o)); } }catch{} }
+const dbgWrap = document.getElementById('dbgWrap');
+const dbg = document.getElementById('dbg');
+function dlog(o){ try{ dbg.textContent += (typeof o==='string' ? o : JSON.stringify(o,null,2)) + "\\n"; dbg.scrollTop = dbg.scrollHeight; }catch{} }
+addEventListener('keydown', (e)=>{ if (e.ctrlKey && e.altKey && (e.key==='d'||e.key==='D')) dbgWrap.style.display = (dbgWrap.style.display==='none'||!dbgWrap.style.display)?'block':'none'; });
 
 /* ========= Erros ========= */
 const errEl = document.getElementById('err');
-function showErr(msg){ errEl.style.display='block'; errEl.textContent=msg; }
+function showErr(msg){ errEl.style.display='block'; errEl.textContent=msg; dlog({error:msg}); }
 function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
+addEventListener('error', e => showErr('Erro JS: '+e.message));
+addEventListener('unhandledrejection', e => showErr('Erro assíncrono: '+(e.reason?.message||e.reason)));
 
 /* ========= Supabase ========= */
 const CFG = window.CONFIG || {};
@@ -169,57 +208,61 @@ if(!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY){ showErr('CONFIG ausente (config
 const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth:{ persistSession:true, autoRefreshToken:true, detectSessionInUrl:true }});
 
 /* ========= Elementos ========= */
+const statusEl = document.getElementById('status');
 const buildChip = document.getElementById('buildChip');
 const planChip  = document.getElementById('planChip');
 const userChip  = document.getElementById('userChip');
-const btnSair   = document.getElementById('btnSair');
+const userDropdown = document.getElementById('userDropdown');
+const btnSairDropdown = document.getElementById('ddSair');
+const btnMeusDados = document.getElementById('ddMeusDados');
+const btnPlanos    = document.getElementById('ddPlanos');
 const btnReload = document.getElementById('btnReload');
 const eanFilter = document.getElementById('eanFilter');
 const descFilter= document.getElementById('descFilter');
 const scopeGroup= document.getElementById('scopeGroup');
 
-const loadBar     = document.getElementById('loadBar');
+const favBody  = document.querySelector('#favTable tbody');
+const favHeaderRow = document.getElementById('favHeaderRow');
+
 const generalWrap = document.getElementById('generalWrap');
 const generalBody = document.querySelector('#produtosTable tbody');
 const generalHeaderRow = document.getElementById('generalHeaderRow');
 const endMarker   = document.getElementById('endMarker');
-
-const favBody  = document.querySelector('#favTable tbody');
-const favHeaderRow = document.getElementById('favHeaderRow');
 const countShown  = document.getElementById('countShown');
 const countTotal  = document.getElementById('countTotal');
 const countFavs   = document.getElementById('countFavs');
+const loadBar     = document.getElementById('loadBar');
 
 /* ========= Estado ========= */
 const DEFAULT_PLAN_SITE_LIMIT = { trial:2, basico:4, intermediario:6, premium:8 };
-const VIEW_TABLE    = 'latest_prices_view';   // <- AQUI: lê a VIEW com descrição
-const HISTORY_TABLE = 'latest_prices';        // <- gráfico busca no histórico simples
+const VIEW_TABLE    = 'latest_prices_view';   // <- view com descrição
+const HISTORY_TABLE = 'latest_prices';        // <- histórico puro para o gráfico
 const PAGE_SIZE = 200, RENDER_CHUNK = 60;
 const OUTLIER_TOL = 0.50;
 
-/* Escala (se banco veio x1000) */
+/* Correção de escala — por padrão divide por 1000 para consertar preços “milhados” */
 const qs = new URLSearchParams(location.search);
 const PRICE_DIVISOR = (()=>{
-  const qd = Number(qs.get('div'));
-  const v = Number.isFinite(qd) ? qd : Number(CFG.PRICE_DIVISOR ?? 1000);
-  return (Number.isFinite(v) && v>0) ? v : 1;
+  const fromQS = Number(qs.get('div'));
+  if (Number.isFinite(fromQS) && fromQS>0) return fromQS;
+  const fromCfg = Number(CFG.PRICE_DIVISOR ?? 1000);
+  return Number.isFinite(fromCfg) && fromCfg>0 ? fromCfg : 1;
 })();
-function scale(n){ return (typeof n==='number' && Number.isFinite(n)) ? (n/PRICE_DIVISOR) : n; }
-
-/* Limite de linhas totais */
-const MAX_ROWS = (()=>{
-  const qm = Number(qs.get('max'));
-  const v = Number.isFinite(qm) ? qm : Number(CFG.MAX_ROWS ?? 1500);
-  return (Number.isFinite(v) && v>0) ? v : 1500;
-})();
+function applyScaleMaybe(n){
+  // Se preco_num já estiver em reais, mantenha; se vier “milhado”, divide.
+  // Critério: valores > 50.000 sugerem milhado; caso contrário usa divisor configurado.
+  if (typeof n==='number' && Number.isFinite(n)){
+    if (n > 50000) return n/1000;
+    return n / PRICE_DIVISOR;
+  }
+  return n;
+}
 
 let sessionUserId = null;
 let chosen=[], unlocked=new Set(), locked=new Set();
-
 let produtosMap=new Map(), produtosList=[];
 let serverOffset=0, serverExhausted=false, fetching=false;
 let totalEstimated = null;
-
 let generalView=[], itemsRendered=0;
 let favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
 let currentEanQ='', currentDescQ='', searchScope='both';
@@ -230,7 +273,7 @@ const COL_ORDER_KEY = 'mm_col_order';
 const generalChkMap=new Map();
 
 /* ========= Utils ========= */
-function setStatus(t){ const el=document.getElementById('status'); if(el) el.textContent = t||''; }
+function setStatus(t){ statusEl.textContent = t||''; }
 function debounce(fn,ms=500){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); } }
 function favSave(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet])); }
 function isFav(sku){ return favSet.has(String(sku)); }
@@ -257,6 +300,13 @@ function ensureDescIndex(item){
   item._tok = normTokens(item._descCached);
   item._tokNeeds = false;
 }
+
+/* ========= Menu Usuário ========= */
+userChip.addEventListener('click', (e)=>{ e.stopPropagation(); userDropdown.classList.toggle('open'); });
+document.addEventListener('click', ()=> userDropdown.classList.remove('open'));
+btnMeusDados.addEventListener('click', ()=> { location.href = 'meus-dados.html'; });
+btnPlanos.addEventListener('click', ()=> { location.href = 'planos.html'; });
+btnSairDropdown.addEventListener('click', async ()=>{ try{ await sb.auth.signOut(); } finally{ localStorage.removeItem('mm_login_date'); location.href = CFG.SITE_URL || 'index.html'; }});
 
 /* ========= Cabeçalhos ========= */
 function computeDefaultColumnOrder(){ return ['sku','desc','meu_preco', ...chosen.map(c => 'site:' + c.label)]; }
@@ -315,6 +365,9 @@ function buildHeaders(){
   setupSortableHeaders(favHeaderRow, 'fav');
   setupReorderableHeaders(generalHeaderRow);
   setupReorderableHeaders(favHeaderRow);
+
+  if (sortStateGeneral.key) applySortIndicators(generalHeaderRow, sortStateGeneral.key, sortStateGeneral.dir);
+  if (sortStateFav.key)     applySortIndicators(favHeaderRow,     sortStateFav.key,     sortStateFav.dir);
 }
 function setupSortableHeaders(headerRow, tableKind){
   const ths = Array.from(headerRow.children);
@@ -374,8 +427,8 @@ function setupReorderableHeaders(headerRow){
       columnOrder = arr;
       saveColumnOrder();
 
-      buildHeaders();
-      recomputeGeneralView();
+      buildHeaders(); // feedback imediato nos headers
+      recomputeGeneralView(); // re-render linhas com nova ordem
       renderFavs();
     });
   });
@@ -446,7 +499,7 @@ function analyzeAllItemsOutliers(){
     const entries = Object.values(item.sites||{});
     for (const s of entries){
       let v = Number.isFinite(s.precoNum) ? s.precoNum : toNumberFromAny(s.precoRaw);
-      if (Number.isFinite(v)) nums.push(scale(v));
+      if (Number.isFinite(v)) nums.push(applyScaleMaybe(v));
     }
     if (nums.length >= 2){
       const mean = nums.reduce((a,b)=>a+b,0)/nums.length;
@@ -454,7 +507,7 @@ function analyzeAllItemsOutliers(){
       item.analysis = { mean, lo, hi, n:nums.length };
       for (const s of entries){
         let v = Number.isFinite(s.precoNum) ? s.precoNum : toNumberFromAny(s.precoRaw);
-        v = Number.isFinite(v) ? scale(v) : NaN;
+        v = Number.isFinite(v) ? applyScaleMaybe(v) : NaN;
         s.valid = Number.isFinite(v) && (v >= lo && v <= hi);
       }
     } else {
@@ -473,7 +526,6 @@ function upsertRowsIntoProdutos(rows){
     const ean = String(r.ean||'');
     if (!produtosMap.has(ean)) produtosMap.set(ean, { sku:ean, desc:'', meu_preco:null, sites:{} });
     const item = produtosMap.get(ean);
-    // Descrição da própria VIEW
     if (!item.desc && r.descricao){ item.desc = String(r.descricao); item._tokNeeds = true; }
     const label = allowedById.get(r.site_id);
     const prev=item.sites[label];
@@ -517,6 +569,7 @@ function chartButtonSVG(){ return '<svg class="chart-icon" viewBox="0 0 24 24" a
   +'<rect x="15" y="5" width="3" height="13" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>'
   +'<path d="M3,18 L7,14 L12,15 L17,8 L21,10" fill="none" stroke="#00d084" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>'
   +'</svg>'; }
+
 function computeMinMaxForRow(item){
   let min={label:null,val:Infinity}, max={label:null,val:-Infinity};
   for (const c of chosen){
@@ -525,31 +578,48 @@ function computeMinMaxForRow(item){
     if (!d || !d.valid) continue;
     let v = Number.isFinite(d.precoNum) ? d.precoNum : toNumberFromAny(d.precoRaw);
     if (!Number.isFinite(v)) continue;
-    v = scale(v);
+    v = applyScaleMaybe(v);
     if (v<min.val) min={label:c.label,val:v};
     if (v>max.val) max={label:c.label,val:v};
   }
   return { min:min.label, max:max.label };
 }
+
 function createPriceCell(item, label, isLocked, minLabel, maxLabel){
   const td=document.createElement('td'); if (isLocked) td.classList.add('locked-cell'); const d=item.sites[label];
   if (!d){ td.innerHTML='<span class="muted">—</span>'; return td; }
+
   const dtStr=d.data?new Date(d.data).toLocaleString('pt-BR'):'';
   const url = buildSearchUrlByLabel(label, item.sku);
+
   if (!d.valid){ td.innerHTML='<span class="price" title="Fora de faixa">—</span>'; return td; }
+
   let valueNum = Number.isFinite(d.precoNum) ? d.precoNum : toNumberFromAny(d.precoRaw);
-  if (Number.isFinite(valueNum)) valueNum = scale(valueNum);
+  if (Number.isFinite(valueNum)) valueNum = applyScaleMaybe(valueNum);
+
   const cls = (!isLocked&&label===minLabel?'min':(!isLocked&&label===maxLabel?'max':'')) || '';
   const priceSpan=document.createElement('span'); priceSpan.className='price '+cls;
   priceSpan.title=isLocked?'Excedeu o limite do plano':(dtStr?('Atualizado em '+dtStr):'');
+
   priceSpan.textContent = Number.isFinite(valueNum) ? formatBRL(valueNum) : String(d.precoRaw ?? '—');
-  if (!isLocked && url){ const a=document.createElement('a'); a.href=url; a.target="_blank"; a.rel="noopener noreferrer"; a.className='price-link'; a.title='Abrir no site'; a.appendChild(priceSpan); td.appendChild(a); }
-  else td.appendChild(priceSpan);
+
+  if (!isLocked && url){
+    const a=document.createElement('a');
+    a.href=url; a.target="_blank"; a.rel="noopener noreferrer"; a.className='price-link';
+    a.title='Abrir no site';
+    a.appendChild(priceSpan);
+    td.appendChild(a);
+  } else {
+    td.appendChild(priceSpan);
+  }
+
   const b=document.createElement('button'); b.className='chart-btn'; b.type='button'; b.title=isLocked?'Disponível no upgrade':'Ver histórico'; b.innerHTML=chartButtonSVG();
   const c=chosen.find(x=>x.label===label); b.addEventListener('click',(ev)=>{ if(isLocked){location.href='planos.html';return;} openChartFor(ev,item.sku,label,c?.site_id); }); td.appendChild(b);
   if (isLocked){ const up=document.createElement('button'); up.className='unlock'; up.type='button'; up.textContent='Ver planos'; up.addEventListener('click',()=>location.href='planos.html'); td.appendChild(up); }
+
   return td;
 }
+
 function createParamCell(item){
   const td=document.createElement('td'); td.className='col-param';
   const n=(typeof item.meu_preco==='number')?item.meu_preco:null;
@@ -567,7 +637,7 @@ function getValueForKey(item, key){
     const label = key.slice(5);
     const d = item.sites?.[label];
     let v = d ? (Number.isFinite(d.precoNum) ? d.precoNum : toNumberFromAny(d.precoRaw)) : null;
-    v = Number.isFinite(v) ? scale(v) : null;
+    v = Number.isFinite(v) ? applyScaleMaybe(v) : null;
     return v;
   }
   return null;
@@ -618,7 +688,12 @@ function renderGeneralChunk(){
 }
 function resetGeneralDom(){ generalBody.innerHTML=''; itemsRendered=0; endMarker.textContent=''; }
 
-/* ========= Scroll / Paginação/limite ========= */
+/* ========= Scroll / Paginação ========= */
+const MAX_ROWS = (()=>{
+  const qm = Number(qs.get('max'));
+  const v = Number.isFinite(qm) ? qm : Number(CFG.MAX_ROWS ?? 1500);
+  return (Number.isFinite(v) && v>0) ? v : 1500;
+})();
 generalWrap.addEventListener('scroll', ()=>{
   const nearBottom = generalWrap.scrollTop + generalWrap.clientHeight >= generalWrap.scrollHeight - 100;
   if (nearBottom && itemsRendered < generalView.length){ renderGeneralChunk(); }
@@ -699,9 +774,8 @@ function buildQuery(){
 /* ========= Fetch ========= */
 async function fetchNextPage(){
   if (fetching || serverExhausted) return; fetching = true; hideErr();
-  setStatus('Carregando… (offset ' + serverOffset + ')');
+  setStatus('Carregando… (offset ' + serverOffset + ')'); dlog({step:'fetch', offset:serverOffset});
   try{
-    // respeita o limite máximo
     if (serverOffset >= MAX_ROWS){ serverExhausted = true; setStatus('Limite de itens atingido ('+MAX_ROWS+').'); updateCounts(); return; }
 
     const from=serverOffset, to=Math.min(serverOffset+PAGE_SIZE-1, MAX_ROWS-1);
@@ -732,14 +806,11 @@ async function fetchNextPage(){
   } finally { fetching=false; updateCounts(); }
 }
 
-/* ========= Reset ========= */
-function resetAndQuery(){
-  produtosMap.clear(); produtosList=[]; serverOffset=0; serverExhausted=false;
-  totalEstimated=null; generalView=[]; generalBody.innerHTML=''; endMarker.textContent='';
-  renderFavs(); updateCounts(); fetchNextPage();
-}
-
-/* ========= Gráfico ========= */
+/* ========= Chart ========= */
+const pop=document.getElementById('chartPopover'),
+      popTitle=document.getElementById('chartTitle'),
+      popClose=document.getElementById('chartClose'),
+      popMsg=document.getElementById('chartMsg');
 const spark=document.getElementById('spark'), sparkCtx=spark.getContext('2d');
 document.getElementById('chartClose').addEventListener('click', ()=> document.getElementById('chartPopover').style.display='none');
 addEventListener('click', (ev)=>{ const pop=document.getElementById('chartPopover'); if(pop.style.display!=='none' && !pop.contains(ev.target) && !ev.target.closest('.chart-btn')) pop.style.display='none'; });
@@ -763,7 +834,7 @@ async function fetchHistory(ean, siteId){
   let pts=[];
   try{
     const { data } = await sb.from(HISTORY_TABLE).select('data, preco_num').eq('ean', ean).eq('site_id', siteId).not('preco_num','is',null).order('data',{ascending:true}).limit(180);
-    if (data && data.length){ pts = data.map(r=>({ x:new Date(r.data), y: scale(Number(r.preco_num)) })).filter(p=>Number.isFinite(p.y)); }
+    if (data && data.length){ pts = data.map(r=>({ x:new Date(r.data), y: applyScaleMaybe(Number(r.preco_num)) })).filter(p=>Number.isFinite(p.y)); }
   }catch(_){}
   const byTs = new Map(pts.map(p=>[p.x.getTime(), p])); return Array.from(byTs.values()).sort((a,b)=>a.x-b.x);
 }
@@ -782,6 +853,7 @@ function initScopeRadios(){
     r.addEventListener('change', ()=>{
       if(!r.checked) return;
       searchScope=r.value; recomputeGeneralView(); renderFavs(); updateCounts();
+      dlog({step:'scopeChange', scope:searchScope});
     });
   });
 }
@@ -789,6 +861,7 @@ const onFilterInput = debounce(()=>{
   currentEanQ = (eanFilter.value||'').trim();
   currentDescQ = (descFilter.value||'').trim();
   recomputeGeneralView(); renderFavs(); updateCounts();
+  dlog({step:'filter', ean:currentEanQ, desc:currentDescQ});
 }, 300);
 eanFilter.addEventListener('input', onFilterInput);
 descFilter.addEventListener('input', onFilterInput);
@@ -798,7 +871,7 @@ async function initUserAndSites(){
   const { data:{ session } } = await sb.auth.getSession();
   if (!session){ location.href = CFG.SITE_URL || 'index.html'; return; }
   sessionUserId = session.user?.id || null;
-  userChip.textContent = session.user?.email || 'Logado';
+  userChip.textContent = (session.user?.email || 'Logado') + ' ▾';
   buildChip.textContent = 'Build: ' + (qBuild || BUILD_VERSION);
 
   let planKey='basico';
@@ -814,8 +887,27 @@ async function initUserAndSites(){
   await loadUserSelection(session.user.id, planKey);
 }
 
-/* ========= UI ========= */
-btnSair.addEventListener('click', async ()=>{ try{ await sb.auth.signOut(); } finally{ localStorage.removeItem('mm_login_date'); location.href = CFG.SITE_URL || 'index.html'; }});
+/* ========= Contadores ========= */
+function updateCounts(){
+  const loaded = produtosList.length;
+  countShown.textContent = 'Exibindo ' + itemsRendered + ' de ' + generalView.length + ' no Geral';
+  if (serverExhausted){ countTotal.textContent = 'Total carregado: ' + loaded; loadBar.style.width = '100%'; loadBar.classList.add('done'); }
+  else {
+    if (typeof totalEstimated === 'number' && totalEstimated > 0){
+      const pct = Math.min(1, loaded / Math.max(totalEstimated, MAX_ROWS));
+      loadBar.style.width = (pct*100).toFixed(1) + '%'; loadBar.classList.remove('done');
+      countTotal.textContent  = 'Carregando… (' + loaded + ' de ~' + Math.min(totalEstimated, MAX_ROWS) + ')';
+    } else { loadBar.style.width = '35%'; loadBar.classList.remove('done'); countTotal.textContent  = 'Carregando… (' + loaded + '+ )'; }
+  }
+  countFavs.textContent  = 'Favoritos: ' + favSet.size;
+}
+
+/* ========= Reset / Reload ========= */
+function resetAndQuery(){
+  produtosMap.clear(); produtosList=[]; serverOffset=0; serverExhausted=false;
+  totalEstimated=null; generalView=[]; generalBody.innerHTML=''; endMarker.textContent='';
+  renderFavs(); updateCounts(); fetchNextPage();
+}
 btnReload.addEventListener('click', async ()=>{ await initUserAndSites(); resetAndQuery(); });
 
 /* ========= Start ========= */
@@ -825,7 +917,7 @@ btnReload.addEventListener('click', async ()=>{ await initUserAndSites(); resetA
     initScopeRadios();
     loadColumnOrder(); buildHeaders();
     resetAndQuery();
-  }catch(e){ showErr('Falha na inicialização'); }
+  }catch(e){ showErr('Falha na inicialização'); dlog({error:'init', detail:String(e)}); }
 })();
 </script>
 </body>
