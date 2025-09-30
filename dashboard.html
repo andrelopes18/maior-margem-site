@@ -199,7 +199,7 @@
 
 <script>
 /* ========= Build Version ========= */
-const BUILD_VERSION = '2025-09-29 11:30 BRT'; // atualize a cada deploy
+const BUILD_VERSION = '2025-09-29 14:30 BRT'; // atualize a cada deploy
 const qBuild = new URLSearchParams(location.search).get('build');
 
 /* ========= Debug ========= */
@@ -260,7 +260,9 @@ const spark=document.getElementById('spark'), sparkCtx=spark.getContext('2d');
 const DEFAULT_PLAN_SITE_LIMIT = { trial:2, basico:4, intermediario:6, premium:8 };
 const VIEW = 'latest_prices';
 const PAGE_SIZE = 200, RENDER_CHUNK = 60;
-const OUTLIER_TOL = 0.50; /* << única declaração */
+const OUTLIER_TOL = 0.50;
+
+let sessionUserId = null;
 
 let chosen=[], unlocked=new Set(), locked=new Set();
 let produtosMap=new Map(), produtosList=[];
@@ -282,17 +284,22 @@ function debounce(fn,ms=500){ let t; return (...a)=>{ clearTimeout(t); t=setTime
 function favSave(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet])); }
 function isFav(sku){ return favSet.has(String(sku)); }
 function formatBRL(n){ try{ return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) }catch{ return String(n) } }
-function normTokens(s){
-  const cleaned = (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-  return cleaned ? cleaned.split(/\s+/) : [];
-}
-function ensureDescIndex(item){
-  if (!item) return;
-  if (!item._tokNeeds || item._descCached !== item.desc){
-    item._descCached = item.desc || '';
-    item._tok = normTokens(item._descCached);
-    item._tokNeeds = false;
+
+/* Tenta converter strings como "1.234,56", "1234.56" etc. em número */
+function toNumberFromAny(v){
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  if (v == null) return null;
+  let s = String(v).trim();
+  if (!s) return null;
+  // remove tudo que não é dígito, ponto, vírgula, ou sinal
+  s = s.replace(/[^\d.,-]+/g,'');
+  const hasComma = s.includes(',');
+  if (hasComma){
+    // "1.234,56" -> "1234,56" -> "1234.56"
+    s = s.replace(/\./g,'').replace(',','.');
   }
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
 }
 
 /* ========= Minimizar/Maximizar ========= */
@@ -476,7 +483,10 @@ function upsertRowsIntoProdutos(rows){
 function matchesFilters(item){
   const qE = (currentEanQ||'').trim();
   if (qE && !String(item.sku||'').includes(qE)) return false;
-  const qTokens = normTokens(currentDescQ);
+  const qTokens = (function(s){
+    const cleaned = (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    return cleaned ? cleaned.split(/\s+/) : [];
+  })(currentDescQ);
   if (qTokens.length){
     ensureDescIndex(item);
     const words = item._tok || [];
@@ -511,37 +521,30 @@ function computeMinMaxForRow(item){
   for (const c of chosen){
     if (locked.has(c.site_id)) continue;
     const d=item.sites[c.label];
-    if (!d || !d.valid || !Number.isFinite(d.precoNum)) continue;
-    if (d.precoNum<min.val) min={label:c.label,val:d.precoNum};
-    if (d.precoNum>max.val) max={label:c.label,val:d.precoNum};
+    if (!d || !d.valid){
+      continue;
+    }
+    let v = Number.isFinite(d.precoNum) ? d.precoNum : toNumberFromAny(d.precoRaw);
+    if (!Number.isFinite(v)) continue;
+    if (v<min.val) min={label:c.label,val:v};
+    if (v>max.val) max={label:c.label,val:v};
   }
   return { min:min.label, max:max.label };
-}
-
-function createLoadingCell(){
-  const span = document.createElement('span');
-  span.className = 'cell-loading';
-  span.title = 'Carregando…';
-  const dot = document.createElement('span');
-  dot.className = 'spinner';
-  const txt = document.createElement('span');
-  txt.textContent = 'Carregando…';
-  span.appendChild(dot); span.appendChild(txt);
-  return span;
 }
 
 function createPriceCell(item, label, isLocked, minLabel, maxLabel){
   const td=document.createElement('td'); if (isLocked) td.classList.add('locked-cell'); const d=item.sites[label];
 
+  // NOVO: sem "carregando" por célula — tabela é estática
   if (!d){
-    if (!serverExhausted){ td.appendChild(createLoadingCell()); }
-    else { td.innerHTML='<span class="muted">—</span>'; }
+    td.innerHTML='<span class="muted">—</span>';
     return td;
   }
 
   const dtStr=d.data?new Date(d.data).toLocaleString('pt-BR'):'';
   const url = buildSearchUrlByLabel(label, item.sku);
 
+  // validação de outlier
   if (!d.valid){
     const span=document.createElement('span');
     span.className='price';
@@ -553,37 +556,32 @@ function createPriceCell(item, label, isLocked, minLabel, maxLabel){
     return td;
   }
 
-  if (Number.isFinite(d.precoNum)){
-    const cls = (!isLocked&&label===minLabel?'min':(!isLocked&&label===maxLabel?'max':'')) || '';
-    const priceSpan=document.createElement('span'); priceSpan.className='price '+cls;
-    priceSpan.title=isLocked?'Excedeu o limite do plano':(dtStr?('Atualizado em '+dtStr):'');
-    priceSpan.textContent=formatBRL(d.precoNum);
+  // Preferimos preco_num; se não houver, tentamos parsear precoRaw
+  let valueNum = Number.isFinite(d.precoNum) ? d.precoNum : toNumberFromAny(d.precoRaw);
+  const cssCls = (!isLocked&&label===minLabel?'min':(!isLocked&&label===maxLabel?'max':'')) || '';
+  const priceSpan=document.createElement('span'); priceSpan.className='price '+cssCls;
+  priceSpan.title=isLocked?'Excedeu o limite do plano':(dtStr?('Atualizado em '+dtStr):'');
 
-    if (!isLocked && url){
-      const a=document.createElement('a');
-      a.href=url; a.target="_blank"; a.rel="noopener noreferrer"; a.className='price-link';
-      a.title='Abrir no site';
-      a.appendChild(priceSpan);
-      td.appendChild(a);
-    } else {
-      td.appendChild(priceSpan);
-    }
-
-    const b=document.createElement('button'); b.className='chart-btn'; b.type='button'; b.title=isLocked?'Disponível no upgrade':'Ver histórico'; b.innerHTML=chartButtonSVG();
-    const c=chosen.find(x=>x.label===label); b.addEventListener('click',(ev)=>{ if(isLocked){location.href='planos.html';return;} openChartFor(ev,item.sku,label,c?.site_id); }); td.appendChild(b);
-    if (isLocked){ const up=document.createElement('button'); up.className='unlock'; up.type='button'; up.textContent='Ver planos'; up.addEventListener('click',()=>location.href='planos.html'); td.appendChild(up); }
+  if (Number.isFinite(valueNum)){
+    priceSpan.textContent = formatBRL(valueNum);
   } else {
-    const span=document.createElement('span'); span.className='price'; span.title=isLocked?'Excedeu o limite do plano':(dtStr?('Atualizado em '+dtStr):''); span.textContent=(d.precoRaw??'').toString();
-    if (!isLocked && url){
-      const a=document.createElement('a');
-      a.href=url; a.target="_blank"; a.rel="noopener noreferrer"; a.className='price-link';
-      a.title='Abrir no site';
-      a.appendChild(span);
-      td.appendChild(a);
-    } else {
-      td.appendChild(span);
-    }
+    priceSpan.textContent = (d.precoRaw ?? '—').toString();
   }
+
+  if (!isLocked && url){
+    const a=document.createElement('a');
+    a.href=url; a.target="_blank"; a.rel="noopener noreferrer"; a.className='price-link';
+    a.title='Abrir no site';
+    a.appendChild(priceSpan);
+    td.appendChild(a);
+  } else {
+    td.appendChild(priceSpan);
+  }
+
+  const b=document.createElement('button'); b.className='chart-btn'; b.type='button'; b.title=isLocked?'Disponível no upgrade':'Ver histórico'; b.innerHTML=chartButtonSVG();
+  const c=chosen.find(x=>x.label===label); b.addEventListener('click',(ev)=>{ if(isLocked){location.href='planos.html';return;} openChartFor(ev,item.sku,label,c?.site_id); }); td.appendChild(b);
+  if (isLocked){ const up=document.createElement('button'); up.className='unlock'; up.type='button'; up.textContent='Ver planos'; up.addEventListener('click',()=>location.href='planos.html'); td.appendChild(up); }
+
   return td;
 }
 
@@ -603,7 +601,8 @@ function getValueForKey(item, key){
   if (key.startsWith('site:')){
     const label = key.slice(5);
     const d = item.sites?.[label];
-    return (d && d.valid && Number.isFinite(d.precoNum)) ? d.precoNum : null;
+    let v = d ? (Number.isFinite(d.precoNum) ? d.precoNum : toNumberFromAny(d.precoRaw)) : null;
+    return Number.isFinite(v) ? v : null;
   }
   return null;
 }
@@ -811,6 +810,103 @@ function buildQuery(){
            .order('ean', { ascending:true });
 }
 
+/* ======== Descrições: hidratação a partir de múltiplas fontes ======== */
+let descHydrating = false;
+const descTriedEans = new Set();
+
+async function ensureDescriptions(){
+  if (descHydrating) return;
+  const missing = produtosList.filter(it=>!it.desc).map(it=>it.sku).filter(e=>!descTriedEans.has(e));
+  if (!missing.length) return;
+
+  descHydrating = true;
+  const batch = missing.slice(0, 1000);
+  batch.forEach(e=>descTriedEans.add(e));
+  dlog({step:'desc.hydrate.start', count:batch.length});
+
+  try{
+    const map = await fetchDescriptionsFromSources(batch);
+    let changed=0;
+    for (const [ean,desc] of map){
+      const it = produtosMap.get(ean);
+      if (it && !it.desc && desc){ it.desc = desc; it._tokNeeds = true; changed++; }
+    }
+    if (changed>0){
+      produtosList = Array.from(produtosMap.values());
+      recomputeGeneralView();
+      renderFavs();
+    }
+    dlog({step:'desc.hydrate.done', changed});
+  }catch(e){
+    dlog({warn:'desc.hydrate.error', detail:String(e)});
+  } finally {
+    descHydrating = false;
+  }
+}
+
+async function fetchDescriptionsFromSources(eans){
+  const out = new Map();
+
+  // Ordem de prioridade: fonte do cliente -> fonte geral
+  const SOURCES = [
+    { table:'itens_cliente'     },
+    { table:'produtos_cliente'  },
+    { table:'cliente_itens'     },
+    { table:'itens'             },
+    { table:'produtos'          },
+    { table:'catalogo_itens'    },
+  ];
+  const COL_EAN_CAND = ['ean','gtin','codigo_ean','codigo','cod_barras','codigo_barras','sku'];
+  // Coleta de uma fonte
+  async function tryTable(table){
+    // tentamos filtrar por uma coluna de EAN conhecida
+    for (const col of COL_EAN_CAND){
+      try{
+        const { data, error } = await sb.from(table).select(`*, ${col}`).in(col, eans).limit(2000);
+        if (error) continue;
+        if (Array.isArray(data) && data.length){
+          for (const row of data){
+            const ean = pickEan(row);
+            const desc = pickDesc(row);
+            const ownerId = row.user_id || row.usuario_id || row.owner_id || null;
+            // se a tabela tiver user_id e não for do usuário atual, ignora
+            if (('user_id' in row || 'usuario_id' in row || 'owner_id' in row) && sessionUserId && ownerId && ownerId !== sessionUserId) continue;
+            if (ean && desc && !out.has(ean)){ out.set(ean, desc); }
+          }
+          return; // conseguimos nesta coluna, não precisa testar as outras
+        }
+      }catch(_){ /* coluna não existe ou RLS bloqueou; segue */ }
+    }
+  }
+  function pickEan(row){
+    for (const k of Object.keys(row)){
+      if (['ean','gtin','codigo_ean','codigo','cod_barras','codigo_barras','sku'].includes(k)){
+        const v = row[k]; if (v!=null) return String(v);
+      }
+    }
+    for (const k of Object.keys(row)){
+      const v=row[k];
+      if (typeof v==='string' && /^[0-9]{8,14}$/.test(v)) return v;
+    }
+    return null;
+  }
+  function pickDesc(row){
+    // prioriza campos que parecem "descricao"
+    let key = Object.keys(row).find(k=>/descri|desc/i.test(k));
+    if (!key) key = Object.keys(row).find(k=>/^nome/i.test(k));
+    const v = key ? row[key] : null;
+    if (v==null) return null;
+    const s = String(v).trim();
+    return s || null;
+  }
+
+  for (const src of SOURCES){
+    try{ await tryTable(src.table); } catch(_){}
+  }
+  return out;
+}
+
+/* ========= Fetch ========= */
 async function fetchNextPage(){
   if (fetching || serverExhausted) return; fetching = true; hideErr();
   setStatus('Carregando… (offset ' + serverOffset + ')'); dlog({step:'fetch', offset:serverOffset});
@@ -832,6 +928,10 @@ async function fetchNextPage(){
       if (itemsRendered >= generalView.length) endMarker.textContent = 'Fim da lista';
     } else {
       upsertRowsIntoProdutos(data);
+
+      // Hidrata descrições para os EANs sem descrição
+      await ensureDescriptions();
+
       recomputeGeneralView();
       renderFavs();
       if (!favFirstAutoRenderDone){ updateFavHeight(); favFirstAutoRenderDone=true; }
@@ -924,8 +1024,6 @@ function drawSparkFull(points){
   ctx.fillStyle='#9aa0a6'; ctx.font='10px Arial'; ctx.fillText(new Date(xMin).toLocaleDateString('pt-BR'), m.l, H-8); ctx.fillText(new Date(xMax).toLocaleDateString('pt-BR'), W-m.r-64, H-8);
 }
 async function fetchHistory(ean, siteId){
-  // latest_prices guarda só o último por site; gráfico pode ficar curto.
-  // Se quiser histórico "completo", troque a fonte aqui para a tabela Precos.
   let pts=[];
   try{
     const { data, error } = await sb.from(VIEW).select('data, preco_num').eq('ean', ean).eq('site_id', siteId).not('preco_num','is',null).order('data',{ascending:true}).limit(180);
@@ -961,6 +1059,7 @@ function initScopeRadios(){
 async function initUserAndSites(){
   const { data:{ session } } = await sb.auth.getSession();
   if (!session){ location.href = CFG.SITE_URL || 'index.html'; return; }
+  sessionUserId = session.user?.id || null;
   document.getElementById('userChip').textContent = session.user?.email || 'Logado';
   buildChip.textContent = 'Build: ' + (qBuild || BUILD_VERSION);
 
