@@ -9,23 +9,16 @@
   body { margin:0; font-family: Arial, sans-serif; background:#121212; color:#fff; padding:20px; }
   header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; gap:12px; flex-wrap:wrap; }
   h1 { color:#00b140; margin:0; }
-  .userbox { display:flex; gap:12px; align-items:center; position: relative; flex-wrap:wrap; }
+  .userbox { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
   .chip { font-size:12px; background:#1e1e1e; border:1px solid #333; padding:6px 10px; border-radius:999px; cursor:default; }
   .chip.plan { color:#bfffc1; border-color:#2f5a2f; background:#132313; }
   .chip.build { color:#bfe3ff; border-color:#2a3b5a; background:#101522; }
   .btn { background:#00b140; color:#fff; border:none; padding:8px 14px; border-radius:6px; cursor:pointer; }
   .btn:hover { background:#009b38; }
-  .userChipWrap { position: relative; display:inline-block; }
-  .dropdown { position:absolute; right:0; top:calc(100% + 6px); display:none; min-width:180px; padding:6px; background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px; box-shadow:0 10px 30px rgba(0,0,0,.5); z-index:50; }
-  .userChipWrap:hover .dropdown, .userChipWrap.open .dropdown { display:block; }
-  .dd-item { width:100%; background:transparent; border:none; color:#eee; text-align:left; padding:10px 12px; border-radius:8px; cursor:pointer; font-size:14px; }
-  .dd-item:hover { background:#1b1b1b; }
 
   .panel { background:#202020; border:1px solid #2a2a2a; border-radius:12px; padding:12px; margin-bottom:18px; }
   .panel-header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
   .panel-header h2 { margin:0; font-size:18px; color:#d5ffd5; }
-  .toggle-btn { background:none; border:1px solid #2a2a2a; color:#ddd; padding:6px 10px; border-radius:8px; cursor:pointer; }
-  .toggle-btn:hover { background:#1b1b1b; }
 
   .filters { display:grid; grid-template-columns: 1fr 1fr auto; gap:12px; margin:16px 0; align-items:center; }
   .filters input { padding:10px 12px; border-radius:6px; border:1px solid #333; background:#1e1e1e; color:#fff; }
@@ -60,17 +53,9 @@
   .price.max { color:#00d084; }
   .price.param { color:#ffd54f; }
 
-  .cell-loading { display:inline-flex; align-items:center; gap:8px; color:#9aa0a6; font-size:13px; }
-  .spinner { width:14px; height:14px; border-radius:50%; border:2px solid #2a2a2a; border-top-color:#00b140; animation: spin .8s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
   .muted { color:#666; }
   .end-marker { text-align:center; padding:10px; color:#9aa0a6; }
   .counts { margin-top:10px; font-size:12px; color:#9aa0a6; display:flex; gap:12px; flex-wrap:wrap; }
-
-  .resizer { height:10px; margin-top:6px; border:1px solid #2a2a2a; border-radius:8px; cursor:ns-resize; background:linear-gradient(180deg,#1c1c1c,#111); display:flex; align-items:center; justify-content:center; }
-  .resizer:after { content:""; width:40px; height:3px; border-radius:3px; background:#3a3a3a; }
-  body.resizing, body.resizing * { cursor: ns-resize !important; user-select: none; }
 
   th[data-locked="true"] { position: relative; color: #aaa; }
   th[data-locked="true"]::after { content:"🔒"; margin-left:6px; opacity:.8; font-size:14px; }
@@ -91,26 +76,6 @@
   .chart-btn svg { width:18px; height:18px; display:block; }
   .chart-btn:hover svg rect { fill:#373737; }
   .chart-btn:active svg path { opacity:.9; }
-
-  #dbgWrap { display:none; position:fixed; right:16px; bottom:16px; width:520px; max-height:60vh; z-index:9999;
-             background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px; padding:10px; box-shadow:0 10px 30px rgba(0,0,0,.6); }
-  #dbgWrap h3 { margin:0 0 8px 0; font-size:14px; color:#bfe3ff; }
-  #dbg { white-space:pre-wrap; font-family: ui-monospace,Consolas,monospace; font-size:12px; color:#bfe3ff; max-height:48vh; overflow:auto; }
-
-  #chartPopover { position:fixed; z-index:9998; background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px; padding:10px; box-shadow:0 10px 30px rgba(0,0,0,.6); }
-  #chartPopover header { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
-  #chartPopover .close { background:transparent; border:1px solid #333; color:#ddd; padding:2px 8px; border-radius:6px; cursor:pointer; }
-  #chartPopover .msg { font-size:12px; color:#9aa0a6; }
-
-  th.sortable { cursor:pointer; user-select:none; }
-  th.reorderable { cursor:move; }
-  th.drop-left::before, th.drop-right::after { content:""; position:absolute; top:0; bottom:0; width:3px; background:#00b140; }
-  th.drop-left::before { left:0; }
-  th.drop-right::after { right:0; }
-  th .sort-ind { margin-left:6px; opacity:.8; font-size:11px; }
-
-  a.price-link { text-decoration:none; }
-  a.price-link:hover .price { text-decoration: underline; }
 </style>
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="./config.js"></script>
@@ -121,13 +86,7 @@
   <div class="userbox">
     <span id="buildChip" class="chip build" title="Versão do build">Build: —</span>
     <span id="planChip" class="chip plan">Plano: —</span>
-    <div class="userChipWrap">
-      <span id="userChip" class="chip">Usuário</span>
-      <div class="dropdown" role="menu" aria-hidden="true">
-        <button class="dd-item" id="ddMeusDados" type="button">Meus dados</button>
-        <button class="dd-item" id="ddPlanos" type="button">Planos</button>
-      </div>
-    </div>
+    <span id="userChip" class="chip">Usuário</span>
     <button id="btnSair" class="btn" type="button">Sair</button>
   </div>
 </header>
@@ -154,13 +113,12 @@
     <button id="btnPrintFav" class="toggle-btn" title="Imprimir favoritos" type="button">Imprimir</button>
     <button id="toggleFav" class="toggle-btn" aria-expanded="true" type="button">Minimizar</button>
   </div>
-  <div id="favWrap" class="wrap">
+  <div id="favWrap" class="wrap" style="height:280px;">
     <table id="favTable">
       <thead><tr id="favHeaderRow"></tr></thead>
       <tbody></tbody>
     </table>
   </div>
-  <div id="favResizer" class="resizer" title="Arraste para redimensionar. Duplo clique volta ao automático."></div>
 </section>
 
 <section id="generalPanel" class="panel">
@@ -183,37 +141,27 @@
   </div>
 </section>
 
-<div id="dbgWrap">
-  <h3>Debug</h3>
-  <pre id="dbg"></pre>
-</div>
-
-<div id="chartPopover" style="display:none;">
-  <header>
+<div id="chartPopover" style="display:none; position:fixed; z-index:9998; background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px; padding:10px; box-shadow:0 10px 30px rgba(0,0,0,.6);">
+  <header style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
     <span id="chartTitle">Histórico</span>
-    <button class="close" id="chartClose" aria-label="Fechar" type="button">×</button>
+    <button class="btn" id="chartClose" type="button" style="background:#222;">×</button>
   </header>
   <canvas id="spark" width="220" height="180"></canvas>
-  <div id="chartMsg" class="msg" style="display:none;"></div>
+  <div id="chartMsg" class="msg" style="display:none; font-size:12px; color:#9aa0a6;"></div>
 </div>
 
 <script>
-/* ========= Build Version ========= */
-const BUILD_VERSION = '2025-09-29 16:40 BRT'; // atualize a cada deploy
+/* ========= Build ========= */
+const BUILD_VERSION = '2025-09-30 17:20 BRT';
 const qBuild = new URLSearchParams(location.search).get('build');
 
 /* ========= Debug ========= */
-const dbgWrap = document.getElementById('dbgWrap');
-const dbg = document.getElementById('dbg');
-function dlog(o){ try{ dbg.textContent += (typeof o==='string' ? o : JSON.stringify(o,null,2)) + "\\n"; dbg.scrollTop = dbg.scrollHeight; }catch{} }
-addEventListener('keydown', (e)=>{ if (e.ctrlKey && e.altKey && (e.key==='d'||e.key==='D')) dbgWrap.style.display = (dbgWrap.style.display==='none'||!dbgWrap.style.display)?'block':'none'; });
+function dlog(o){ try{ const el=document.getElementById('status'); if(el){ el.textContent=(typeof o==='string'?o:JSON.stringify(o)); } }catch{} }
 
 /* ========= Erros ========= */
 const errEl = document.getElementById('err');
-function showErr(msg){ errEl.style.display='block'; errEl.textContent=msg; dlog({error:msg}); }
+function showErr(msg){ errEl.style.display='block'; errEl.textContent=msg; }
 function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
-addEventListener('error', e => showErr('Erro JS: '+e.message));
-addEventListener('unhandledrejection', e => showErr('Erro assíncrono: '+(e.reason?.message||e.reason)));
 
 /* ========= Supabase ========= */
 const CFG = window.CONFIG || {};
@@ -221,7 +169,6 @@ if(!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY){ showErr('CONFIG ausente (config
 const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth:{ persistSession:true, autoRefreshToken:true, detectSessionInUrl:true }});
 
 /* ========= Elementos ========= */
-const statusEl = document.getElementById('status');
 const buildChip = document.getElementById('buildChip');
 const planChip  = document.getElementById('planChip');
 const userChip  = document.getElementById('userChip');
@@ -229,61 +176,63 @@ const btnSair   = document.getElementById('btnSair');
 const btnReload = document.getElementById('btnReload');
 const eanFilter = document.getElementById('eanFilter');
 const descFilter= document.getElementById('descFilter');
+const scopeGroup= document.getElementById('scopeGroup');
 
-const favWrap  = document.getElementById('favWrap');
-const favBody  = document.querySelector('#favTable tbody');
-const favHeaderRow = document.getElementById('favHeaderRow');
-const favResizer  = document.getElementById('favResizer');
-
+const loadBar     = document.getElementById('loadBar');
 const generalWrap = document.getElementById('generalWrap');
 const generalBody = document.querySelector('#produtosTable tbody');
 const generalHeaderRow = document.getElementById('generalHeaderRow');
 const endMarker   = document.getElementById('endMarker');
+
+const favBody  = document.querySelector('#favTable tbody');
+const favHeaderRow = document.getElementById('favHeaderRow');
 const countShown  = document.getElementById('countShown');
 const countTotal  = document.getElementById('countTotal');
 const countFavs   = document.getElementById('countFavs');
-const scopeGroup  = document.getElementById('scopeGroup');
-const loadBar     = document.getElementById('loadBar');
-
-const pop=document.getElementById('chartPopover'),
-      popTitle=document.getElementById('chartTitle'),
-      popClose=document.getElementById('chartClose'),
-      popMsg=document.getElementById('chartMsg');
-const spark=document.getElementById('spark'), sparkCtx=spark.getContext('2d');
 
 /* ========= Estado ========= */
 const DEFAULT_PLAN_SITE_LIMIT = { trial:2, basico:4, intermediario:6, premium:8 };
-const VIEW = 'latest_prices';
+const VIEW_TABLE    = 'latest_prices_view';   // <- AQUI: lê a VIEW com descrição
+const HISTORY_TABLE = 'latest_prices';        // <- gráfico busca no histórico simples
 const PAGE_SIZE = 200, RENDER_CHUNK = 60;
 const OUTLIER_TOL = 0.50;
 
-/* Escala de preço (corrige “valores multiplicados por mil”) */
+/* Escala (se banco veio x1000) */
+const qs = new URLSearchParams(location.search);
 const PRICE_DIVISOR = (()=>{
-  const qd = new URLSearchParams(location.search).get('div');
-  const v = Number(qd ?? CFG.PRICE_DIVISOR ?? 1000); // por padrão divide por 1000
+  const qd = Number(qs.get('div'));
+  const v = Number.isFinite(qd) ? qd : Number(CFG.PRICE_DIVISOR ?? 1000);
   return (Number.isFinite(v) && v>0) ? v : 1;
 })();
 function scale(n){ return (typeof n==='number' && Number.isFinite(n)) ? (n/PRICE_DIVISOR) : n; }
 
+/* Limite de linhas totais */
+const MAX_ROWS = (()=>{
+  const qm = Number(qs.get('max'));
+  const v = Number.isFinite(qm) ? qm : Number(CFG.MAX_ROWS ?? 1500);
+  return (Number.isFinite(v) && v>0) ? v : 1500;
+})();
+
 let sessionUserId = null;
 let chosen=[], unlocked=new Set(), locked=new Set();
+
 let produtosMap=new Map(), produtosList=[];
 let serverOffset=0, serverExhausted=false, fetching=false;
 let totalEstimated = null;
+
 let generalView=[], itemsRendered=0;
-let favSet = new Set(); /* carregaremos de localStorage + servidor */
-let loadingMore=false; const generalChkMap=new Map();
-let favHeightUser = Number(localStorage.getItem('mm_fav_height')) || null, favFirstAutoRenderDone=false;
+let favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
 let currentEanQ='', currentDescQ='', searchScope='both';
 let sortStateGeneral = { key:'desc', dir:'asc' };
 let sortStateFav     = { key:'desc', dir:'asc' };
 let columnOrder = [];
 const COL_ORDER_KEY = 'mm_col_order';
+const generalChkMap=new Map();
 
 /* ========= Utils ========= */
-function setStatus(t){ statusEl.textContent = t||''; }
+function setStatus(t){ const el=document.getElementById('status'); if(el) el.textContent = t||''; }
 function debounce(fn,ms=500){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); } }
-function favSaveLocal(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet])); }
+function favSave(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet])); }
 function isFav(sku){ return favSet.has(String(sku)); }
 function formatBRL(n){ try{ return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) }catch{ return String(n) } }
 function toNumberFromAny(v){
@@ -297,7 +246,6 @@ function toNumberFromAny(v){
   const n = Number(s);
   return Number.isFinite(n) ? n : null;
 }
-/* Busca/descrição */
 function normTokens(s){
   const cleaned = (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
   return cleaned ? cleaned.split(/\s+/) : [];
@@ -310,7 +258,7 @@ function ensureDescIndex(item){
   item._tokNeeds = false;
 }
 
-/* ========= Cabeçalhos / colunas ========= */
+/* ========= Cabeçalhos ========= */
 function computeDefaultColumnOrder(){ return ['sku','desc','meu_preco', ...chosen.map(c => 'site:' + c.label)]; }
 function loadColumnOrder(){
   const saved = (()=>{ try{ return JSON.parse(localStorage.getItem(COL_ORDER_KEY) || '[]'); }catch{ return []; }})();
@@ -359,12 +307,6 @@ function buildHeaders(){
     if (key==='sku') th.classList.add('col-sku');
     if (key==='desc') th.classList.add('col-desc');
     if (key==='meu_preco') th.classList.add('col-param');
-    if (key.startsWith('site:')){
-      const label=key.slice(5);
-      const info=siteInfoByLabel(label);
-      th.dataset.siteid = String(info.site_id||'');
-      th.setAttribute('data-locked', info.locked ? 'true' : 'false');
-    }
     th.textContent = titleForKey(key);
     favHeaderRow.appendChild(th);
   }
@@ -373,253 +315,6 @@ function buildHeaders(){
   setupSortableHeaders(favHeaderRow, 'fav');
   setupReorderableHeaders(generalHeaderRow);
   setupReorderableHeaders(favHeaderRow);
-
-  if (sortStateGeneral.key) applySortIndicators(generalHeaderRow, sortStateGeneral.key, sortStateGeneral.dir);
-  if (sortStateFav.key)     applySortIndicators(favHeaderRow,     sortStateFav.key,     sortStateFav.dir);
-}
-
-/* ========= Plano / sites ========= */
-async function getSitesLimitForPlan(planKey){
-  const k=(planKey||'').toLowerCase();
-  try{
-    const { data, error } = await sb.from('billing_plans').select('sites_limit, max_sites').eq('plan_key', k).maybeSingle();
-    if (!error){
-      const v = Number(data?.sites_limit ?? data?.max_sites);
-      if (Number.isFinite(v) && v>0) return v;
-    }
-  }catch(e){ dlog({warn:'fallback site limit', plan:k}); }
-  return DEFAULT_PLAN_SITE_LIMIT[k] ?? 2;
-}
-
-async function loadUserSelection(userId, planKey){
-  dlog({step:'loadUserSelection.start', userId, planKey});
-
-  const rs = await sb.from('user_sites').select('site_id, created_at').eq('user_id', userId);
-  if (rs.error){ showErr('Falha ao ler user_sites: '+rs.error.message+' (code: '+rs.error.code+')'); throw rs.error; }
-  const rows = rs.data || [];
-  rows.sort((a,b)=>{
-    const ca=a.created_at?new Date(a.created_at).getTime():0; const cb=b.created_at?new Date(b.created_at).getTime():0;
-    return ca-cb;
-  });
-
-  const siteIdsText = rows.map(r=>String(r.site_id||'')).filter(x=>x.length>0);
-  if (!siteIdsText.length){
-    chosen=[]; unlocked=new Set(); locked=new Set();
-    loadColumnOrder(); buildHeaders();
-    setStatus('Nenhum site selecionado em Meus Dados.');
-    dlog({step:'loadUserSelection.none'});
-    return;
-  }
-
-  const siteIds = siteIdsText.map(v => Number(v));
-  const rsSites = await sb.from('sites').select('id, nome, url_pesquisa').in('id', siteIds);
-  if (rsSites.error){ showErr('Falha ao ler sites: '+rsSites.error.message+' (code: '+rsSites.error.code+')'); throw rsSites.error; }
-  const sites = rsSites.data || [];
-  const byId=new Map(sites.map(s=>[s.id,s]));
-  const ordered=[]; for (const id of siteIds){ const s=byId.get(id); if(s && !ordered.includes(s)) ordered.push(s); }
-  if (!ordered.length){ showErr('Sites não encontrados para os IDs do usuário.'); throw new Error('sites missing'); }
-
-  chosen = ordered.map(s=>({ site_id:s.id, label:(s.nome||('Site '+s.id)).toString().trim(), url:(s.url_pesquisa||'').toString() }));
-
-  const lim = await getSitesLimitForPlan(planKey);
-  unlocked=new Set(chosen.slice(0,lim).map(c=>c.site_id));
-  locked=new Set(chosen.slice(lim).map(c=>c.site_id));
-
-  loadColumnOrder();
-  buildHeaders();
-  setStatus('Sites: '+chosen.map(c=>c.label).join(' · '));
-  dlog({step:'loadUserSelection.done', chosen, unlocked:[...unlocked], locked:[...locked], columnOrder});
-}
-
-/* ========= Outliers / filtros / render ========= */
-function analyzeAllItemsOutliers(){
-  for (const item of produtosList){
-    const nums = [];
-    const entries = Object.values(item.sites||{});
-    for (const s of entries){
-      let v = Number.isFinite(s.precoNum) ? s.precoNum : toNumberFromAny(s.precoRaw);
-      if (Number.isFinite(v)) nums.push(scale(v));
-    }
-    if (nums.length >= 2){
-      const mean = nums.reduce((a,b)=>a+b,0)/nums.length;
-      const lo = mean*(1-OUTLIER_TOL), hi = mean*(1+OUTLIER_TOL);
-      item.analysis = { mean, lo, hi, n:nums.length };
-      for (const s of entries){
-        let v = Number.isFinite(s.precoNum) ? s.precoNum : toNumberFromAny(s.precoRaw);
-        v = Number.isFinite(v) ? scale(v) : NaN;
-        s.valid = Number.isFinite(v) && (v >= lo && v <= hi);
-      }
-    } else {
-      item.analysis = { mean: null, lo: null, hi: null, n: nums.length };
-      for (const s of entries){
-        let v = Number.isFinite(s.precoNum) ? s.precoNum : toNumberFromAny(s.precoRaw);
-        s.valid = Number.isFinite(v);
-      }
-    }
-  }
-}
-function upsertRowsIntoProdutos(rows){
-  const allowedById = new Map(chosen.map(c=>[c.site_id, c.label]));
-  for (const r of rows){
-    if (!allowedById.has(r.site_id)) continue;
-    const ean = String(r.ean||'');
-    if (!produtosMap.has(ean)) produtosMap.set(ean, { sku:ean, desc:'', meu_preco:null, sites:{} });
-    const item = produtosMap.get(ean);
-    const label = allowedById.get(r.site_id);
-    const prev=item.sites[label];
-    if (!prev || new Date(r.data) > new Date(prev.data)){
-      item.sites[label] = { precoRaw:r.preco, precoNum:r.preco_num, data:r.data, site_id:r.site_id, site_nome:r.site_nome, valid:true };
-    }
-    item._tokNeeds = true;
-  }
-  produtosList = Array.from(produtosMap.values());
-  for (const it of produtosList){ ensureDescIndex(it); }
-  analyzeAllItemsOutliers();
-}
-
-function matchesFilters(item){
-  const qE = (currentEanQ||'').trim();
-  if (qE && !String(item.sku||'').includes(qE)) return false;
-  const qTokens = normTokens(currentDescQ);
-  if (qTokens.length){
-    ensureDescIndex(item);
-    const words = item._tok || [];
-    for (const qt of qTokens){
-      let ok = false;
-      for (const w of words){ if (w.indexOf(qt) !== -1){ ok = true; break; } }
-      if (!ok) return false;
-    }
-  }
-  return true;
-}
-
-/* ========= URL por site ========= */
-function buildSearchUrlByLabel(label, ean){
-  const c = chosen.find(x => x.label === label);
-  if (!c || !c.url) return null;
-  const tpl = String(c.url);
-  const enc = encodeURIComponent(String(ean||''));
-  return tpl.replace(/{ean}/gi, enc);
-}
-
-/* ========= Células ========= */
-function chartButtonSVG(){ return '<svg class="chart-icon" viewBox="0 0 24 24" aria-hidden="true">'
-  +'<rect x="3" y="11" width="3" height="7" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>'
-  +'<rect x="9" y="8"  width="3" height="10" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>'
-  +'<rect x="15" y="5" width="3" height="13" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>'
-  +'<path d="M3,18 L7,14 L12,15 L17,8 L21,10" fill="none" stroke="#00d084" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>'
-  +'</svg>'; }
-
-function computeMinMaxForRow(item){
-  let min={label:null,val:Infinity}, max={label:null,val:-Infinity};
-  for (const c of chosen){
-    if (locked.has(c.site_id)) continue;
-    const d=item.sites[c.label];
-    if (!d || !d.valid) continue;
-    let v = Number.isFinite(d.precoNum) ? d.precoNum : toNumberFromAny(d.precoRaw);
-    if (!Number.isFinite(v)) continue;
-    v = scale(v);
-    if (v<min.val) min={label:c.label,val:v};
-    if (v>max.val) max={label:c.label,val:v};
-  }
-  return { min:min.label, max:max.label };
-}
-
-function createPriceCell(item, label, isLocked, minLabel, maxLabel){
-  const td=document.createElement('td'); if (isLocked) td.classList.add('locked-cell'); const d=item.sites[label];
-
-  if (!d){ td.innerHTML='<span class="muted">—</span>'; return td; }
-
-  const dtStr=d.data?new Date(d.data).toLocaleString('pt-BR'):'';
-  const url = buildSearchUrlByLabel(label, item.sku);
-
-  if (!d.valid){
-    const span=document.createElement('span');
-    span.className='price';
-    span.title = (item.analysis?.mean!=null)
-      ? `Filtrado por discrepância (>±${Math.round(OUTLIER_TOL*100)}% da média ${formatBRL(item.analysis.mean)})`
-      : 'Preço indisponível';
-    span.textContent='—';
-    td.appendChild(span);
-    return td;
-  }
-
-  let valueNum = Number.isFinite(d.precoNum) ? d.precoNum : toNumberFromAny(d.precoRaw);
-  if (Number.isFinite(valueNum)) valueNum = scale(valueNum);
-
-  const cls = (!isLocked&&label===minLabel?'min':(!isLocked&&label===maxLabel?'max':'')) || '';
-  const priceSpan=document.createElement('span'); priceSpan.className='price '+cls;
-  priceSpan.title=isLocked?'Excedeu o limite do plano':(dtStr?('Atualizado em '+dtStr):'');
-
-  if (Number.isFinite(valueNum)){
-    priceSpan.textContent = formatBRL(valueNum);
-  } else {
-    priceSpan.textContent = (d.precoRaw ?? '—').toString();
-  }
-
-  if (!isLocked && url){
-    const a=document.createElement('a');
-    a.href=url; a.target="_blank"; a.rel="noopener noreferrer"; a.className='price-link';
-    a.title='Abrir no site';
-    a.appendChild(priceSpan);
-    td.appendChild(a);
-  } else {
-    td.appendChild(priceSpan);
-  }
-
-  const b=document.createElement('button'); b.className='chart-btn'; b.type='button'; b.title=isLocked?'Disponível no upgrade':'Ver histórico'; b.innerHTML=chartButtonSVG();
-  const c=chosen.find(x=>x.label===label); b.addEventListener('click',(ev)=>{ if(isLocked){location.href='planos.html';return;} openChartFor(ev,item.sku,label,c?.site_id); }); td.appendChild(b);
-  if (isLocked){ const up=document.createElement('button'); up.className='unlock'; up.type='button'; up.textContent='Ver planos'; up.addEventListener('click',()=>location.href='planos.html'); td.appendChild(up); }
-
-  return td;
-}
-
-function createParamCell(item){
-  const td=document.createElement('td'); td.className='col-param';
-  const n=(typeof item.meu_preco==='number')?item.meu_preco:null;
-  if (n!=null && Number.isFinite(n)){ const span=document.createElement('span'); span.className='price param'; span.title='Meu preço'; span.textContent=formatBRL(n); td.appendChild(span); }
-  else { td.innerHTML='<span class="muted">—</span>'; }
-  return td;
-}
-
-/* ========= Ordenação ========= */
-function getValueForKey(item, key){
-  if (key==='sku') return item.sku || '';
-  if (key==='desc') return item.desc || '';
-  if (key==='meu_preco') return (typeof item.meu_preco==='number') ? item.meu_preco : null;
-  if (key.startsWith('site:')){
-    const label = key.slice(5);
-    const d = item.sites?.[label];
-    let v = d ? (Number.isFinite(d.precoNum) ? d.precoNum : toNumberFromAny(d.precoRaw)) : null;
-    v = Number.isFinite(v) ? scale(v) : null;
-    return v;
-  }
-  return null;
-}
-function makeComparator(key, dir){
-  const mul = (dir==='desc') ? -1 : 1;
-  const coll = new Intl.Collator('pt-BR',{numeric:true,sensitivity:'base'});
-  return (a,b)=>{
-    const va = getValueForKey(a, key);
-    const vb = getValueForKey(b, key);
-    const aNull = (va===null || va===undefined || va==='');
-    const bNull = (vb===null || vb===undefined || vb==='');
-    if (aNull && bNull) return 0;
-    if (aNull) return 1 * mul;
-    if (bNull) return -1 * mul;
-    if (typeof va === 'number' && typeof vb === 'number'){
-      if (va===vb) return 0; return (va<vb ? -1 : 1) * mul;
-    }
-    const sa = String(va), sb = String(vb);
-    if (sa===sb) return 0;
-    return coll.compare(sa,sb) * mul;
-  };
-}
-function applySortIndicators(rowEl, activeKey, dir){
-  Array.from(rowEl.children).forEach(th=>{ const ind = th.querySelector('.sort-ind'); if (ind) ind.remove(); });
-  const th = rowEl.querySelector(`th[data-sortkey="${CSS.escape(activeKey)}"]`);
-  if (!th) return;
-  const span = document.createElement('span'); span.className = 'sort-ind'; span.textContent = dir==='asc' ? '▲' : '▼'; th.appendChild(span);
 }
 function setupSortableHeaders(headerRow, tableKind){
   const ths = Array.from(headerRow.children);
@@ -643,8 +338,6 @@ function setupSortableHeaders(headerRow, tableKind){
     });
   });
 }
-
-/* ========= Reordenar colunas ========= */
 function setupReorderableHeaders(headerRow){
   const ths = Array.from(headerRow.children);
   ths.forEach((th, idx)=>{
@@ -687,6 +380,220 @@ function setupReorderableHeaders(headerRow){
     });
   });
 }
+function applySortIndicators(rowEl, activeKey, dir){
+  Array.from(rowEl.children).forEach(th=>{ const ind = th.querySelector('.sort-ind'); if (ind) ind.remove(); });
+  const th = rowEl.querySelector(`th[data-sortkey="${CSS.escape(activeKey)}"]`);
+  if (!th) return;
+  const span = document.createElement('span'); span.className = 'sort-ind'; span.textContent = dir==='asc' ? '▲' : '▼'; th.appendChild(span);
+}
+
+/* ========= Plano / sites ========= */
+async function getSitesLimitForPlan(planKey){
+  const k=(planKey||'').toLowerCase();
+  try{
+    const { data, error } = await sb.from('billing_plans').select('sites_limit, max_sites').eq('plan_key', k).maybeSingle();
+    if (!error){
+      const v = Number(data?.sites_limit ?? data?.max_sites);
+      if (Number.isFinite(v) && v>0) return v;
+    }
+  }catch(_){}
+  return DEFAULT_PLAN_SITE_LIMIT[k] ?? 2;
+}
+async function loadUserSelection(userId, planKey){
+  dlog({step:'loadUserSelection.start', userId, planKey});
+
+  const rs = await sb.from('user_sites').select('site_id, created_at').eq('user_id', userId);
+  if (rs.error){ showErr('Falha ao ler user_sites: '+rs.error.message); throw rs.error; }
+  const rows = rs.data || [];
+  rows.sort((a,b)=>{
+    const ca=a.created_at?new Date(a.created_at).getTime():0; const cb=b.created_at?new Date(b.created_at).getTime():0;
+    return ca-cb;
+  });
+
+  const siteIdsText = rows.map(r=>String(r.site_id||'')).filter(x=>x.length>0);
+  if (!siteIdsText.length){
+    chosen=[]; unlocked=new Set(); locked=new Set();
+    loadColumnOrder(); buildHeaders();
+    setStatus('Nenhum site selecionado em Meus Dados.');
+    dlog({step:'loadUserSelection.none'});
+    return;
+  }
+
+  const siteIds = siteIdsText.map(v => Number(v));
+  const rsSites = await sb.from('sites').select('id, nome, url_pesquisa').in('id', siteIds);
+  if (rsSites.error){ showErr('Falha ao ler sites: '+rsSites.error.message); throw rsSites.error; }
+  const sites = rsSites.data || [];
+  const byId=new Map(sites.map(s=>[s.id,s]));
+  const ordered=[]; for (const id of siteIds){ const s=byId.get(id); if(s && !ordered.includes(s)) ordered.push(s); }
+  if (!ordered.length){ showErr('Sites não encontrados para os IDs do usuário.'); throw new Error('sites missing'); }
+
+  chosen = ordered.map(s=>({ site_id:s.id, label:(s.nome||('Site '+s.id)).toString().trim(), url:(s.url_pesquisa||'').toString() }));
+
+  const lim = await getSitesLimitForPlan(planKey);
+  unlocked=new Set(chosen.slice(0,lim).map(c=>c.site_id));
+  locked=new Set(chosen.slice(lim).map(c=>c.site_id));
+
+  loadColumnOrder();
+  buildHeaders();
+  setStatus('Sites: '+chosen.map(c=>c.label).join(' · '));
+  dlog({step:'loadUserSelection.done', chosen, unlocked:[...unlocked], locked:[...locked], columnOrder});
+}
+
+/* ========= Outliers / filtros ========= */
+function analyzeAllItemsOutliers(){
+  for (const item of produtosList){
+    const nums = [];
+    const entries = Object.values(item.sites||{});
+    for (const s of entries){
+      let v = Number.isFinite(s.precoNum) ? s.precoNum : toNumberFromAny(s.precoRaw);
+      if (Number.isFinite(v)) nums.push(scale(v));
+    }
+    if (nums.length >= 2){
+      const mean = nums.reduce((a,b)=>a+b,0)/nums.length;
+      const lo = mean*(1-OUTLIER_TOL), hi = mean*(1+OUTLIER_TOL);
+      item.analysis = { mean, lo, hi, n:nums.length };
+      for (const s of entries){
+        let v = Number.isFinite(s.precoNum) ? s.precoNum : toNumberFromAny(s.precoRaw);
+        v = Number.isFinite(v) ? scale(v) : NaN;
+        s.valid = Number.isFinite(v) && (v >= lo && v <= hi);
+      }
+    } else {
+      item.analysis = { mean: null, lo: null, hi: null, n: nums.length };
+      for (const s of entries){
+        let v = Number.isFinite(s.precoNum) ? s.precoNum : toNumberFromAny(s.precoRaw);
+        s.valid = Number.isFinite(v);
+      }
+    }
+  }
+}
+function upsertRowsIntoProdutos(rows){
+  const allowedById = new Map(chosen.map(c=>[c.site_id, c.label]));
+  for (const r of rows){
+    if (!allowedById.has(r.site_id)) continue;
+    const ean = String(r.ean||'');
+    if (!produtosMap.has(ean)) produtosMap.set(ean, { sku:ean, desc:'', meu_preco:null, sites:{} });
+    const item = produtosMap.get(ean);
+    // Descrição da própria VIEW
+    if (!item.desc && r.descricao){ item.desc = String(r.descricao); item._tokNeeds = true; }
+    const label = allowedById.get(r.site_id);
+    const prev=item.sites[label];
+    if (!prev || new Date(r.data) > new Date(prev.data)){
+      item.sites[label] = { precoRaw:r.preco, precoNum:r.preco_num, data:r.data, site_id:r.site_id, site_nome:r.site_nome, valid:true };
+    }
+  }
+  produtosList = Array.from(produtosMap.values());
+  for (const it of produtosList){ ensureDescIndex(it); }
+  analyzeAllItemsOutliers();
+}
+function matchesFilters(item){
+  const qE = (currentEanQ||'').trim();
+  if (qE && !String(item.sku||'').includes(qE)) return false;
+  const qTokens = normTokens(currentDescQ);
+  if (qTokens.length){
+    ensureDescIndex(item);
+    const words = item._tok || [];
+    for (const qt of qTokens){
+      let ok = false;
+      for (const w of words){ if (w.indexOf(qt) !== -1){ ok = true; break; } }
+      if (!ok) return false;
+    }
+  }
+  return true;
+}
+
+/* ========= URL por site ========= */
+function buildSearchUrlByLabel(label, ean){
+  const c = chosen.find(x => x.label === label);
+  if (!c || !c.url) return null;
+  const tpl = String(c.url);
+  const enc = encodeURIComponent(String(ean||''));
+  return tpl.replace(/{ean}/gi, enc);
+}
+
+/* ========= Células ========= */
+function chartButtonSVG(){ return '<svg class="chart-icon" viewBox="0 0 24 24" aria-hidden="true">'
+  +'<rect x="3" y="11" width="3" height="7" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>'
+  +'<rect x="9" y="8"  width="3" height="10" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>'
+  +'<rect x="15" y="5" width="3" height="13" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>'
+  +'<path d="M3,18 L7,14 L12,15 L17,8 L21,10" fill="none" stroke="#00d084" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>'
+  +'</svg>'; }
+function computeMinMaxForRow(item){
+  let min={label:null,val:Infinity}, max={label:null,val:-Infinity};
+  for (const c of chosen){
+    if (locked.has(c.site_id)) continue;
+    const d=item.sites[c.label];
+    if (!d || !d.valid) continue;
+    let v = Number.isFinite(d.precoNum) ? d.precoNum : toNumberFromAny(d.precoRaw);
+    if (!Number.isFinite(v)) continue;
+    v = scale(v);
+    if (v<min.val) min={label:c.label,val:v};
+    if (v>max.val) max={label:c.label,val:v};
+  }
+  return { min:min.label, max:max.label };
+}
+function createPriceCell(item, label, isLocked, minLabel, maxLabel){
+  const td=document.createElement('td'); if (isLocked) td.classList.add('locked-cell'); const d=item.sites[label];
+  if (!d){ td.innerHTML='<span class="muted">—</span>'; return td; }
+  const dtStr=d.data?new Date(d.data).toLocaleString('pt-BR'):'';
+  const url = buildSearchUrlByLabel(label, item.sku);
+  if (!d.valid){ td.innerHTML='<span class="price" title="Fora de faixa">—</span>'; return td; }
+  let valueNum = Number.isFinite(d.precoNum) ? d.precoNum : toNumberFromAny(d.precoRaw);
+  if (Number.isFinite(valueNum)) valueNum = scale(valueNum);
+  const cls = (!isLocked&&label===minLabel?'min':(!isLocked&&label===maxLabel?'max':'')) || '';
+  const priceSpan=document.createElement('span'); priceSpan.className='price '+cls;
+  priceSpan.title=isLocked?'Excedeu o limite do plano':(dtStr?('Atualizado em '+dtStr):'');
+  priceSpan.textContent = Number.isFinite(valueNum) ? formatBRL(valueNum) : String(d.precoRaw ?? '—');
+  if (!isLocked && url){ const a=document.createElement('a'); a.href=url; a.target="_blank"; a.rel="noopener noreferrer"; a.className='price-link'; a.title='Abrir no site'; a.appendChild(priceSpan); td.appendChild(a); }
+  else td.appendChild(priceSpan);
+  const b=document.createElement('button'); b.className='chart-btn'; b.type='button'; b.title=isLocked?'Disponível no upgrade':'Ver histórico'; b.innerHTML=chartButtonSVG();
+  const c=chosen.find(x=>x.label===label); b.addEventListener('click',(ev)=>{ if(isLocked){location.href='planos.html';return;} openChartFor(ev,item.sku,label,c?.site_id); }); td.appendChild(b);
+  if (isLocked){ const up=document.createElement('button'); up.className='unlock'; up.type='button'; up.textContent='Ver planos'; up.addEventListener('click',()=>location.href='planos.html'); td.appendChild(up); }
+  return td;
+}
+function createParamCell(item){
+  const td=document.createElement('td'); td.className='col-param';
+  const n=(typeof item.meu_preco==='number')?item.meu_preco:null;
+  if (n!=null && Number.isFinite(n)){ const span=document.createElement('span'); span.className='price param'; span.title='Meu preço'; span.textContent=formatBRL(n); td.appendChild(span); }
+  else { td.innerHTML='<span class="muted">—</span>'; }
+  return td;
+}
+
+/* ========= Ordenação ========= */
+function getValueForKey(item, key){
+  if (key==='sku') return item.sku || '';
+  if (key==='desc') return item.desc || '';
+  if (key==='meu_preco') return (typeof item.meu_preco==='number') ? item.meu_preco : null;
+  if (key.startsWith('site:')){
+    const label = key.slice(5);
+    const d = item.sites?.[label];
+    let v = d ? (Number.isFinite(d.precoNum) ? d.precoNum : toNumberFromAny(d.precoRaw)) : null;
+    v = Number.isFinite(v) ? scale(v) : null;
+    return v;
+  }
+  return null;
+}
+function makeComparator(key, dir){
+  const mul = (dir==='desc') ? -1 : 1;
+  const coll = new Intl.Collator('pt-BR',{numeric:true,sensitivity:'base'});
+  return (a,b)=>{
+    const va = getValueForKey(a, key);
+    const vb = getValueForKey(b, key);
+    const aNull = (va==null || va==='');
+    const bNull = (vb==null || vb==='');
+    if (aNull && bNull) return 0;
+    if (aNull) return 1 * mul;
+    if (bNull) return -1 * mul;
+    if (typeof va === 'number' && typeof vb === 'number') return (va===vb?0: (va<vb?-1:1)) * mul;
+    return coll.compare(String(va), String(vb)) * mul;
+  };
+}
+function applySortGeneral(){ if (sortStateGeneral.key){ generalView.sort(makeComparator(sortStateGeneral.key, sortStateGeneral.dir)); } resetGeneralDom(); renderGeneralChunk(); }
+function applySortIndicators(rowEl, activeKey, dir){
+  Array.from(rowEl.children).forEach(th=>{ const ind = th.querySelector('.sort-ind'); if (ind) ind.remove(); });
+  const th = rowEl.querySelector(`th[data-sortkey="${CSS.escape(activeKey)}"]`);
+  if (!th) return;
+  const span = document.createElement('span'); span.className = 'sort-ind'; span.textContent = dir==='asc' ? '▲' : '▼'; th.appendChild(span);
+}
 
 /* ========= View (Geral) ========= */
 function recomputeGeneralView(){
@@ -709,30 +616,27 @@ function renderGeneralChunk(){
   endMarker.textContent=(serverExhausted && itemsRendered>=generalView.length)?'Fim da lista':'';
   updateCounts();
 }
-function resetGeneralDom(){ generalBody.innerHTML=''; generalChkMap.clear(); itemsRendered=0; endMarker.textContent=''; }
-function applySortGeneral(){ if (sortStateGeneral.key){ generalView.sort(makeComparator(sortStateGeneral.key, sortStateGeneral.dir)); } resetGeneralDom(); renderGeneralChunk(); }
+function resetGeneralDom(){ generalBody.innerHTML=''; itemsRendered=0; endMarker.textContent=''; }
 
-/* ========= Scroll / Paginação ========= */
-function onGeneralScroll(){
-  if (loadingMore) return;
+/* ========= Scroll / Paginação/limite ========= */
+generalWrap.addEventListener('scroll', ()=>{
   const nearBottom = generalWrap.scrollTop + generalWrap.clientHeight >= generalWrap.scrollHeight - 100;
-  if (nearBottom && itemsRendered < generalView.length){ loadingMore=true; setTimeout(()=>{ renderGeneralChunk(); loadingMore=false; },30); return; }
+  if (nearBottom && itemsRendered < generalView.length){ renderGeneralChunk(); }
   if (nearBottom && !serverExhausted && !fetching){ fetchNextPage(); }
-}
-generalWrap.addEventListener('scroll', onGeneralScroll);
+});
 
 /* ========= Linhas ========= */
 function renderRowIntoGeneral(tr,item){
   const tdFav=document.createElement('td'); tdFav.className='col-fav';
   const chk=document.createElement('input'); chk.type='checkbox'; chk.checked=isFav(item.sku);
-  chk.addEventListener('change',()=>{ if(chk.checked){ favSet.add(item.sku); saveFavServer(item.sku,true); } else { favSet.delete(item.sku); saveFavServer(item.sku,false); } favSaveLocal(); renderFavs(); updateFavHeight(); updateCounts(); });
+  chk.addEventListener('change',()=>{ if(chk.checked){ favSet.add(item.sku); } else { favSet.delete(item.sku); } favSave(); renderFavs(); updateCounts(); });
   tdFav.appendChild(chk); tr.appendChild(tdFav); generalChkMap.set(item.sku, chk);
 
   const {min,max}=computeMinMaxForRow(item);
 
   for (const key of columnOrder){
     if (key==='sku'){ const td=document.createElement('td'); td.className='col-sku'; td.textContent=item.sku; tr.appendChild(td); continue; }
-    if (key==='desc'){ const td=document.createElement('td'); td.className='col-desc'; td.innerHTML=(item.desc||'').replace(/</g,'&lt;'); tr.appendChild(td); continue; }
+    if (key==='desc'){ const td=document.createElement('td'); td.className='col-desc'; td.textContent=item.desc || '—'; tr.appendChild(td); continue; }
     if (key==='meu_preco'){ tr.appendChild(createParamCell(item)); continue; }
     if (key.startsWith('site:')){
       const label=key.slice(5);
@@ -750,13 +654,13 @@ function renderFavs(){
   for (const item of favList){
     const tr=document.createElement('tr');
     const tdAct=document.createElement('td'); tdAct.className='col-fav';
-    const btn=document.createElement('button'); btn.title='Remover'; btn.innerHTML='🗑️'; btn.type='button';
-    btn.addEventListener('click',()=>{ favSet.delete(item.sku); favSaveLocal(); saveFavServer(item.sku,false); const chk=generalChkMap.get(item.sku); if(chk){ chk.checked=false; } renderFavs(); updateFavHeight(); updateCounts(); });
+    const btn=document.createElement('button'); btn.title='Remover'; btn.textContent='🗑️'; btn.type='button';
+    btn.addEventListener('click',()=>{ favSet.delete(item.sku); favSave(); const chk=generalChkMap.get(item.sku); if(chk){ chk.checked=false; } renderFavs(); updateCounts(); });
     tdAct.appendChild(btn); tr.appendChild(tdAct);
     const {min,max}=computeMinMaxForRow(item);
     for (const key of columnOrder){
       if (key==='sku'){ const td=document.createElement('td'); td.className='col-sku'; td.textContent=item.sku; tr.appendChild(td); continue; }
-      if (key==='desc'){ const td=document.createElement('td'); td.className='col-desc'; td.innerHTML=(item.desc||'').replace(/</g,'&lt;'); tr.appendChild(td); continue; }
+      if (key==='desc'){ const td=document.createElement('td'); td.className='col-desc'; td.textContent=item.desc || '—'; tr.appendChild(td); continue; }
       if (key==='meu_preco'){ tr.appendChild(createParamCell(item)); continue; }
       if (key.startsWith('site:')){
         const label=key.slice(5);
@@ -771,23 +675,15 @@ function renderFavs(){
 
 /* ========= Contadores & Progresso ========= */
 function updateCounts(){
-  countShown.textContent = 'Exibindo ' + itemsRendered + ' de ' + generalView.length + ' no Geral';
   const loaded = produtosList.length;
-  if (serverExhausted){
-    countTotal.textContent = 'Total carregado: ' + loaded;
-    loadBar.style.width = '100%';
-    loadBar.classList.add('done');
-  } else {
+  countShown.textContent = 'Exibindo ' + itemsRendered + ' de ' + generalView.length + ' no Geral';
+  if (serverExhausted){ countTotal.textContent = 'Total carregado: ' + loaded; loadBar.style.width = '100%'; loadBar.classList.add('done'); }
+  else {
     if (typeof totalEstimated === 'number' && totalEstimated > 0){
-      const pct = Math.min(1, loaded / totalEstimated);
-      loadBar.style.width = (pct*100).toFixed(1) + '%';
-      loadBar.classList.remove('done');
-      countTotal.textContent  = 'Carregando… (' + loaded + ' de ~' + totalEstimated + ')';
-    } else {
-      loadBar.style.width = '35%';
-      loadBar.classList.remove('done');
-      countTotal.textContent  = 'Carregando… (' + loaded + '+ )';
-    }
+      const pct = Math.min(1, loaded / Math.max(totalEstimated, MAX_ROWS));
+      loadBar.style.width = (pct*100).toFixed(1) + '%'; loadBar.classList.remove('done');
+      countTotal.textContent  = 'Carregando… (' + loaded + ' de ~' + Math.min(totalEstimated, MAX_ROWS) + ')';
+    } else { loadBar.style.width = '35%'; loadBar.classList.remove('done'); countTotal.textContent  = 'Carregando… (' + loaded + '+ )'; }
   }
   countFavs.textContent  = 'Favoritos: ' + favSet.size;
 }
@@ -795,157 +691,20 @@ function updateCounts(){
 /* ========= Query / paginação ========= */
 function buildQuery(){
   const SITE_IDS = chosen.map(c=>c.site_id);
-  return sb.from(VIEW).select('ean, site_id, site_nome, preco, data, preco_num', { count:'estimated' })
+  return sb.from(VIEW_TABLE).select('ean, site_id, site_nome, preco, data, preco_num, descricao', { count:'estimated' })
            .in('site_id', SITE_IDS.length ? SITE_IDS : [-1])
            .order('ean', { ascending:true });
-}
-
-/* ======== Descrições (duas fontes): via CONFIG e fallback heurístico ======== */
-let descHydrating = false;
-const descTriedEans = new Set();
-
-async function ensureDescriptions(){
-  if (descHydrating) return;
-  const missing = produtosList.filter(it=>!it.desc).map(it=>it.sku).filter(e=>!descTriedEans.has(e));
-  if (!missing.length) return;
-
-  descHydrating = true;
-  const batch = missing.slice(0, 1000);
-  batch.forEach(e=>descTriedEans.add(e));
-  dlog({step:'desc.hydrate.start', count:batch.length});
-
-  try{
-    // 1) fontes explícitas no config.js
-    const mapCfg = await fetchDescriptionsFromConfiguredSources(batch);
-    // 2) fallback (varre tabelas comuns)
-    const mapFb  = await fetchDescriptionsFromHeuristic(batch);
-    const merged = new Map([...mapFb, ...mapCfg]); // prioridade ao cliente (config) — sobrescreve fallback
-
-    let changed=0;
-    for (const [ean,desc] of merged){
-      const it = produtosMap.get(ean);
-      if (it && !it.desc && desc){ it.desc = desc; it._tokNeeds = true; changed++; }
-    }
-    if (changed>0){
-      produtosList = Array.from(produtosMap.values());
-      recomputeGeneralView();
-      renderFavs();
-    }
-    dlog({step:'desc.hydrate.done', changed});
-  }catch(e){
-    dlog({warn:'desc.hydrate.error', detail:String(e)});
-  } finally {
-    descHydrating = false;
-  }
-}
-
-async function fetchDescriptionsFromConfiguredSources(eans){
-  const out = new Map();
-  const SRC = Array.isArray(CFG.DESC_SOURCES) ? CFG.DESC_SOURCES : [];
-  for (const src of SRC){
-    try{
-      const eCol = src.ean || 'ean', dCol = src.desc || 'descricao';
-      const userCol = src.userField || null;
-      const fields = [`ean:${eCol}`, `desc:${dCol}`].concat(userCol ? [userCol] : []);
-      const { data, error } = await sb.from(src.table).select(fields.join(',')).in(eCol, eans);
-      if (error || !Array.isArray(data)) continue;
-      for (const row of data){
-        const e = row.ean != null ? String(row.ean) : null;
-        const d = row.desc != null ? String(row.desc).trim() : null;
-        if (!e || !d) continue;
-        if (src.userScoped && userCol && sessionUserId && row[userCol] && row[userCol] !== sessionUserId) continue;
-        if (!out.has(e)) out.set(e, d);
-      }
-    }catch(_){}
-  }
-  return out;
-}
-
-async function fetchDescriptionsFromHeuristic(eans){
-  const out = new Map();
-  const SOURCES = [
-    { table:'itens_cliente'     },
-    { table:'produtos_cliente'  },
-    { table:'cliente_itens'     },
-    { table:'itens'             },
-    { table:'produtos'          },
-    { table:'catalogo_itens'    },
-  ];
-  const COL_EAN_CAND = ['ean','gtin','codigo_ean','codigo','cod_barras','codigo_barras','sku'];
-  async function tryTable(table){
-    for (const col of COL_EAN_CAND){
-      try{
-        const { data, error } = await sb.from(table).select(`*, ${col}`).in(col, eans).limit(2000);
-        if (error) continue;
-        if (Array.isArray(data) && data.length){
-          for (const row of data){
-            const ean = pickEan(row);
-            const desc = pickDesc(row);
-            const ownerId = row.user_id || row.usuario_id || row.owner_id || null;
-            if (('user_id' in row || 'usuario_id' in row || 'owner_id' in row) && sessionUserId && ownerId && ownerId !== sessionUserId) continue;
-            if (ean && desc && !out.has(ean)){ out.set(ean, desc); }
-          }
-          return;
-        }
-      }catch(_){}
-    }
-  }
-  function pickEan(row){
-    for (const k of Object.keys(row)){
-      if (['ean','gtin','codigo_ean','codigo','cod_barras','codigo_barras','sku'].includes(k)){
-        const v = row[k]; if (v!=null) return String(v);
-      }
-    }
-    for (const k of Object.keys(row)){
-      const v=row[k];
-      if (typeof v==='string' && /^[0-9]{8,14}$/.test(v)) return v;
-    }
-    return null;
-  }
-  function pickDesc(row){
-    let key = Object.keys(row).find(k=>/descri|desc/i.test(k));
-    if (!key) key = Object.keys(row).find(k=>/^nome/i.test(k));
-    const v = key ? row[key] : null;
-    if (v==null) return null;
-    const s = String(v).trim();
-    return s || null;
-  }
-
-  for (const src of SOURCES){ try{ await tryTable(src.table); }catch(_){ } }
-  return out;
-}
-
-/* ========= FAVORITOS: localStorage + (opcional) tabela user_favorites ========= */
-async function loadFavorites(){
-  try{
-    favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
-  }catch{ favSet = new Set(); }
-  try{
-    if (!sessionUserId) return;
-    const { data, error } = await sb.from('user_favorites').select('ean').eq('user_id', sessionUserId);
-    if (!error && Array.isArray(data)){
-      for (const r of data){ if (r && r.ean!=null) favSet.add(String(r.ean)); }
-      favSaveLocal();
-    }
-  }catch(_){}
-}
-async function saveFavServer(ean, isFav){
-  try{
-    if (!sessionUserId) return;
-    if (isFav){
-      await sb.from('user_favorites').upsert({ user_id: sessionUserId, ean: String(ean) }, { onConflict: 'user_id,ean' });
-    } else {
-      await sb.from('user_favorites').delete().eq('user_id', sessionUserId).eq('ean', String(ean));
-    }
-  }catch(_){}
 }
 
 /* ========= Fetch ========= */
 async function fetchNextPage(){
   if (fetching || serverExhausted) return; fetching = true; hideErr();
-  setStatus('Carregando… (offset ' + serverOffset + ')'); dlog({step:'fetch', offset:serverOffset});
+  setStatus('Carregando… (offset ' + serverOffset + ')');
   try{
-    const from=serverOffset, to=serverOffset+PAGE_SIZE-1;
+    // respeita o limite máximo
+    if (serverOffset >= MAX_ROWS){ serverExhausted = true; setStatus('Limite de itens atingido ('+MAX_ROWS+').'); updateCounts(); return; }
+
+    const from=serverOffset, to=Math.min(serverOffset+PAGE_SIZE-1, MAX_ROWS-1);
     const { data, error, status, count } = await buildQuery().range(from,to);
     if (typeof count === 'number' && count >= 0 && totalEstimated == null){ totalEstimated = count; }
 
@@ -962,14 +721,10 @@ async function fetchNextPage(){
       if (itemsRendered >= generalView.length) endMarker.textContent = 'Fim da lista';
     } else {
       upsertRowsIntoProdutos(data);
-
-      // Hidrata descrições para os EANs sem descrição
-      await ensureDescriptions();
-
       recomputeGeneralView();
       renderFavs();
-      if (!favFirstAutoRenderDone){ updateFavHeight(); favFirstAutoRenderDone=true; }
-      serverOffset += PAGE_SIZE; setStatus('Carregados (parcial): ' + produtosList.length + ' SKUs');
+      serverOffset += (to-from+1);
+      setStatus('Carregados (parcial): ' + produtosList.length + ' SKUs');
     }
   }catch(e){
     showErr('Falha ao carregar dados: '+(e.message||String(e)));
@@ -979,69 +734,16 @@ async function fetchNextPage(){
 
 /* ========= Reset ========= */
 function resetAndQuery(){
-  dlog({step:'resetAndQuery'});
-  produtosMap.clear(); produtosList=[]; serverOffset=0; serverExhausted=false; favFirstAutoRenderDone=false;
-  totalEstimated=null;
-  generalView=[]; resetGeneralDom(); renderFavs(); updateFavHeight(); updateCounts(); fetchNextPage();
+  produtosMap.clear(); produtosList=[]; serverOffset=0; serverExhausted=false;
+  totalEstimated=null; generalView=[]; generalBody.innerHTML=''; endMarker.textContent='';
+  renderFavs(); updateCounts(); fetchNextPage();
 }
 
-/* ========= LOG DE PESQUISA ========= */
-const logSearchDebounced = debounce(doLogSearch, 1200);
-async function doLogSearch(){
-  try{
-    const { data:{ session } } = await sb.auth.getSession();
-    if (!session || !session.user) return;
-    const eanQ  = (currentEanQ||'').trim();
-    const descQ = (currentDescQ||'').trim();
-    const scope = searchScope;
-    const isEanOk  = eanQ.replace(/\D/g,'').length >= 8;
-    const isDescOk = descQ.length >= 3;
-    if (!isEanOk && !isDescOk) return;
-    await sb.from('search_logs').insert({
-      user_id: session.user.id,
-      email:   session.user.email || null,
-      ean_query: isEanOk  ? eanQ  : null,
-      desc_query:isDescOk ? descQ : null,
-      scope,
-      results_count: generalView?.length ?? null,
-      source: 'dashboard',
-      user_agent: navigator.userAgent || null
-    });
-  }catch(err){ dlog({warn:'search_log.insert', detail: String(err)}); }
-}
-
-/* ========= Impressão ========= */
-function buildPrintHTMLFromFav() {
-  const favHeaderRow = document.getElementById('favHeaderRow');
-  const headers = Array.from(favHeaderRow?.children || []).map((th,i) => i===0 ? null : th.textContent.trim()).filter(Boolean);
-  const favBody = document.querySelector('#favTable tbody'); const rows = Array.from(favBody?.rows || []);
-  const thead = '<thead><tr>' + headers.map(h => '<th>'+h+'</th>').join('') + '</tr></thead>';
-  let tbody = '';
-  for (const tr of rows) {
-    const cells = Array.from(tr.cells).slice(1).map(td => { const txt = (td.textContent || '').replace(/\s+/g, ' ').trim(); return '<td>'+(txt || '—')+'</td>'; });
-    tbody += '<tr>'+cells.join('')+'</tr>';
-  }
-  const css = '*{box-sizing:border-box;} body{font-family:Arial,sans-serif;color:#000;background:#fff;padding:24px;} h1{margin:0 0 4px 0;font-size:18px;} .meta{color:#444;font-size:12px;margin-bottom:14px;} table{width:100%;border-collapse:collapse;} thead th{text-align:left;font-weight:700;padding:6px 0;} tbody td{padding:4px 0;} @media print{body{padding:0;}}';
-  const now=new Date(); const meta = now.toLocaleDateString('pt-BR')+' '+now.toLocaleTimeString('pt-BR');
-  return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório — Favoritos</title><style>'+css+'</style></head><body><h1>Relatório — Favoritos</h1><div class="meta">Gerado em '+meta+'</div><table>'+thead+'<tbody>'+tbody+'</tbody></table></body></html>';
-}
-function printFavReport(){
-  const iframe = document.createElement('iframe');
-  iframe.style.position='fixed'; iframe.style.right='0'; iframe.style.bottom='0';
-  iframe.style.width='0'; iframe.style.height='0'; iframe.style.border='0'; iframe.style.visibility='hidden';
-  document.body.appendChild(iframe);
-  const doc = iframe.contentWindow || iframe.contentDocument;
-  const html = buildPrintHTMLFromFav();
-  (doc.document || doc).open();
-  (doc.document || doc).write(html + '<script>window.onload=function(){setTimeout(function(){window.focus();window.print();},10)}<\/script>');
-  (doc.document || doc).close();
-  setTimeout(()=>{ try{ document.body.removeChild(iframe); }catch{} }, 2000);
-}
-
-/* ========= Chart ========= */
+/* ========= Gráfico ========= */
+const spark=document.getElementById('spark'), sparkCtx=spark.getContext('2d');
 document.getElementById('chartClose').addEventListener('click', ()=> document.getElementById('chartPopover').style.display='none');
 addEventListener('click', (ev)=>{ const pop=document.getElementById('chartPopover'); if(pop.style.display!=='none' && !pop.contains(ev.target) && !ev.target.closest('.chart-btn')) pop.style.display='none'; });
-function drawSparkFull(points){
+function drawSpark(points){
   const ctx=sparkCtx,W=spark.width,H=spark.height; ctx.clearRect(0,0,W,H);
   if(!points || points.length<3){ document.getElementById('chartMsg').style.display='block'; document.getElementById('chartMsg').textContent='Histórico insuficiente (≥3 pontos).'; return; }
   document.getElementById('chartMsg').style.display='none';
@@ -1060,41 +762,43 @@ function drawSparkFull(points){
 async function fetchHistory(ean, siteId){
   let pts=[];
   try{
-    const { data, error } = await sb.from(VIEW).select('data, preco_num').eq('ean', ean).eq('site_id', siteId).not('preco_num','is',null).order('data',{ascending:true}).limit(180);
-    if (!error && data && data.length){ pts = data.map(r=>({ x:new Date(r.data), y: scale(Number(r.preco_num)) })).filter(p=>Number.isFinite(p.y)); }
-  }catch(e){ dlog({error:'fetchHistory.view', detail:String(e)}); }
+    const { data } = await sb.from(HISTORY_TABLE).select('data, preco_num').eq('ean', ean).eq('site_id', siteId).not('preco_num','is',null).order('data',{ascending:true}).limit(180);
+    if (data && data.length){ pts = data.map(r=>({ x:new Date(r.data), y: scale(Number(r.preco_num)) })).filter(p=>Number.isFinite(p.y)); }
+  }catch(_){}
   const byTs = new Map(pts.map(p=>[p.x.getTime(), p])); return Array.from(byTs.values()).sort((a,b)=>a.x-b.x);
 }
 async function openChartFor(ev, ean, label, siteId){
   const pop=document.getElementById('chartPopover');
-  const x = ev.clientX || (ev.touches && ev.touches[0]?.clientX) || 120, y = ev.clientY || (ev.touches && ev.touches[0]?.clientY) || 80;
+  const x = ev.clientX || 120, y = ev.clientY || 80;
   pop.style.left = Math.max(12, x - 260) + 'px'; pop.style.top  = Math.max(12, y - 200) + 'px';
   document.getElementById('chartTitle').textContent = 'Histórico — ' + label + ' • EAN ' + ean; pop.style.display='block'; document.getElementById('chartMsg').style.display='none';
-  const points = await fetchHistory(String(ean), Number(siteId)); drawSparkFull(points);
+  const points = await fetchHistory(String(ean), Number(siteId)); drawSpark(points);
 }
 
-/* ========= Escopo ========= */
+/* ========= Filtros / escopo ========= */
 function initScopeRadios(){
-  localStorage.setItem('mm_scope','both'); searchScope='both';
   const radios=scopeGroup.querySelectorAll('input[name="scope"]');
   radios.forEach(r=>{
-    r.checked=(r.value===searchScope);
     r.addEventListener('change', ()=>{
       if(!r.checked) return;
-      searchScope=r.value; localStorage.setItem('mm_scope',searchScope);
-      recomputeGeneralView(); renderFavs(); updateFavHeight(); updateCounts();
-      dlog({step:'scopeChange', scope:searchScope});
-      logSearchDebounced();
+      searchScope=r.value; recomputeGeneralView(); renderFavs(); updateCounts();
     });
   });
 }
+const onFilterInput = debounce(()=>{
+  currentEanQ = (eanFilter.value||'').trim();
+  currentDescQ = (descFilter.value||'').trim();
+  recomputeGeneralView(); renderFavs(); updateCounts();
+}, 300);
+eanFilter.addEventListener('input', onFilterInput);
+descFilter.addEventListener('input', onFilterInput);
 
-/* ========= INIT ========= */
+/* ========= Sessão ========= */
 async function initUserAndSites(){
   const { data:{ session } } = await sb.auth.getSession();
   if (!session){ location.href = CFG.SITE_URL || 'index.html'; return; }
   sessionUserId = session.user?.id || null;
-  document.getElementById('userChip').textContent = session.user?.email || 'Logado';
+  userChip.textContent = session.user?.email || 'Logado';
   buildChip.textContent = 'Build: ' + (qBuild || BUILD_VERSION);
 
   let planKey='basico';
@@ -1105,42 +809,14 @@ async function initUserAndSites(){
       planKey = raw.toLowerCase();
       planChip.textContent = 'Plano: ' + (raw.charAt(0).toUpperCase()+raw.slice(1));
     }
-  }catch(e){ dlog({warn:'profiles.select', detail:String(e)}); }
+  }catch(_){}
 
-  await loadFavorites();         // carrega favoritos (local + servidor, se houver)
   await loadUserSelection(session.user.id, planKey);
 }
 
-const onFilterInput = debounce(()=>{
-  currentEanQ = (eanFilter.value||'').trim();
-  currentDescQ = (descFilter.value||'').trim();
-  recomputeGeneralView(); renderFavs(); updateFavHeight(); updateCounts();
-  dlog({step:'filter', ean:currentEanQ, desc:currentDescQ});
-  logSearchDebounced();
-}, 350);
-eanFilter.addEventListener('input', onFilterInput);
-descFilter.addEventListener('input', onFilterInput);
-
 /* ========= UI ========= */
-document.getElementById('btnSair').addEventListener('click', async ()=>{ try{ await sb.auth.signOut(); } finally{ localStorage.removeItem('mm_login_date'); location.href = CFG.SITE_URL || 'index.html'; }});
-document.getElementById('btnReload').addEventListener('click', async ()=>{
-  dlog({step:'manualReload.start'});
-  await initUserAndSites();
-  resetAndQuery();
-  dlog({step:'manualReload.end'});
-});
-
-/* ========= Favoritos: resizer ========= */
-function measureRowHeight(){ const row=document.querySelector('#favTable tbody tr'); if(!row) return 44; const h=Math.round(row.getBoundingClientRect().height); return Math.max(36, h||44); }
-function measureHeadHeight(){ const head=document.querySelector('#favTable thead'); if(!head) return 40; const h=Math.round(head.getBoundingClientRect().height); return Math.max(32, h||40); }
-function applyFavHeight(px){ if(!px||!Number.isFinite(px)) return; const maxPx=Math.round(window.innerHeight*0.85); const clamped=Math.max(120, Math.min(px, maxPx)); favWrap.style.height=clamped+'px'; }
-function updateFavHeight(){ const rowsLen=favBody.children.length; const rows=Math.min(rowsLen,20); const rowH=measureRowHeight(); const headH=measureHeadHeight(); const pad=8; const target=headH + rows*rowH + pad; applyFavHeight(target); }
-(function initResizer(){ let startY=0, startH=0;
-  function onMove(ev){ const dy=ev.clientY-startY; const favHeightUser=startH+dy; localStorage.setItem('mm_fav_height', String(favHeightUser)); applyFavHeight(favHeightUser); }
-  function stop(){ removeEventListener('mousemove', onMove); removeEventListener('mouseup', stop); document.body.classList.remove('resizing'); }
-  favResizer.addEventListener('mousedown', (ev)=>{ startY=ev.clientY; startH=favWrap.offsetHeight; document.body.classList.add('resizing'); addEventListener('mousemove', onMove); addEventListener('mouseup', stop); });
-  favResizer.addEventListener('dblclick', ()=>{ localStorage.removeItem('mm_fav_height'); updateFavHeight(); });
-})();
+btnSair.addEventListener('click', async ()=>{ try{ await sb.auth.signOut(); } finally{ localStorage.removeItem('mm_login_date'); location.href = CFG.SITE_URL || 'index.html'; }});
+btnReload.addEventListener('click', async ()=>{ await initUserAndSites(); resetAndQuery(); });
 
 /* ========= Start ========= */
 (async function init(){
@@ -1148,27 +824,8 @@ function updateFavHeight(){ const rowsLen=favBody.children.length; const rows=Ma
     await initUserAndSites();
     initScopeRadios();
     loadColumnOrder(); buildHeaders();
-
-    // Constrói cabeçalhos de Favoritos
-    (function buildFavHeaders(){
-      favHeaderRow.innerHTML='';
-      const thAcao = document.createElement('th'); thAcao.className='col-fav'; thAcao.textContent='Ação';
-      favHeaderRow.appendChild(thAcao);
-      for (const key of columnOrder){
-        const th=document.createElement('th');
-        th.setAttribute('data-sortkey', key);
-        th.classList.add('sortable','reorderable');
-        if (key==='sku') th.className='col-sku';
-        if (key==='desc') th.className='col-desc';
-        if (key==='meu_preco') th.className='col-param';
-        th.textContent = titleForKey(key);
-        favHeaderRow.appendChild(th);
-      }
-    })();
-
     resetAndQuery();
-    generalWrap.dispatchEvent(new Event('scroll'));
-  }catch(e){ showErr('Falha na inicialização'); dlog({error:'init', detail:String(e)}); }
+  }catch(e){ showErr('Falha na inicialização'); }
 })();
 </script>
 </body>
