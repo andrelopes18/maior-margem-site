@@ -186,7 +186,7 @@
 
 <script>
 /* ========= Build ========= */
-const BUILD_VERSION = '2025-09-30 21:10 BRT'; // atualize em cada deploy
+const BUILD_VERSION = '2025-09-30 22:40 BRT'; // atualize a cada deploy
 const qBuild = new URLSearchParams(location.search).get('build');
 
 /* ========= Debug ========= */
@@ -217,6 +217,7 @@ const btnSairDropdown = document.getElementById('ddSair');
 const btnMeusDados = document.getElementById('ddMeusDados');
 const btnPlanos    = document.getElementById('ddPlanos');
 const btnReload = document.getElementById('btnReload');
+const btnPrintFav = document.getElementById('btnPrintFav');
 const eanFilter = document.getElementById('eanFilter');
 const descFilter= document.getElementById('descFilter');
 const scopeGroup= document.getElementById('scopeGroup');
@@ -235,27 +236,24 @@ const loadBar     = document.getElementById('loadBar');
 
 /* ========= Estado ========= */
 const DEFAULT_PLAN_SITE_LIMIT = { trial:2, basico:4, intermediario:6, premium:8 };
-const VIEW_TABLE    = 'latest_prices_view';   // <- view com descrição
-const HISTORY_TABLE = 'latest_prices';        // <- histórico puro para o gráfico
+const VIEW_TABLE    = 'latest_prices_unified'; // <- usa a VIEW unificada
+const HISTORY_TABLE = 'latest_prices';         // <- histórico puro para o gráfico
 const PAGE_SIZE = 200, RENDER_CHUNK = 60;
 const OUTLIER_TOL = 0.50;
 
-/* Correção de escala — por padrão divide por 1000 para consertar preços “milhados” */
+/* ESCALA — por padrão divide por 100 (corrige “centavos” em latest_prices) */
 const qs = new URLSearchParams(location.search);
 const PRICE_DIVISOR = (()=>{
   const fromQS = Number(qs.get('div'));
   if (Number.isFinite(fromQS) && fromQS>0) return fromQS;
-  const fromCfg = Number(CFG.PRICE_DIVISOR ?? 1000);
-  return Number.isFinite(fromCfg) && fromCfg>0 ? fromCfg : 1;
+  const fromCfg = Number(CFG.PRICE_DIVISOR ?? 100);
+  return Number.isFinite(fromCfg) && fromCfg>0 ? fromCfg : 100;
 })();
-function applyScaleMaybe(n){
-  // Se preco_num já estiver em reais, mantenha; se vier “milhado”, divide.
-  // Critério: valores > 50.000 sugerem milhado; caso contrário usa divisor configurado.
-  if (typeof n==='number' && Number.isFinite(n)){
-    if (n > 50000) return n/1000;
-    return n / PRICE_DIVISOR;
-  }
-  return n;
+function scaleBySource(num, src){
+  if (!Number.isFinite(num)) return NaN;
+  // Fonte 'lp' costuma estar em centavos -> divide por PRICE_DIVISOR (padrão 100).
+  // Fonte 'precos' já vem do texto parseado: usa como está.
+  return (src === 'lp') ? (num / PRICE_DIVISOR) : num;
 }
 
 let sessionUserId = null;
@@ -306,7 +304,7 @@ userChip.addEventListener('click', (e)=>{ e.stopPropagation(); userDropdown.clas
 document.addEventListener('click', ()=> userDropdown.classList.remove('open'));
 btnMeusDados.addEventListener('click', ()=> { location.href = 'meus-dados.html'; });
 btnPlanos.addEventListener('click', ()=> { location.href = 'planos.html'; });
-btnSairDropdown.addEventListener('click', async ()=>{ try{ await sb.auth.signOut(); } finally{ localStorage.removeItem('mm_login_date'); location.href = CFG.SITE_URL || 'index.html'; }});
+document.getElementById('ddSair').addEventListener('click', async ()=>{ try{ await sb.auth.signOut(); } finally{ localStorage.removeItem('mm_login_date'); location.href = CFG.SITE_URL || 'index.html'; }});
 
 /* ========= Cabeçalhos ========= */
 function computeDefaultColumnOrder(){ return ['sku','desc','meu_preco', ...chosen.map(c => 'site:' + c.label)]; }
@@ -427,8 +425,8 @@ function setupReorderableHeaders(headerRow){
       columnOrder = arr;
       saveColumnOrder();
 
-      buildHeaders(); // feedback imediato nos headers
-      recomputeGeneralView(); // re-render linhas com nova ordem
+      buildHeaders(); // feedback imediato
+      recomputeGeneralView(); // re-render linhas
       renderFavs();
     });
   });
@@ -499,7 +497,7 @@ function analyzeAllItemsOutliers(){
     const entries = Object.values(item.sites||{});
     for (const s of entries){
       let v = Number.isFinite(s.precoNum) ? s.precoNum : toNumberFromAny(s.precoRaw);
-      if (Number.isFinite(v)) nums.push(applyScaleMaybe(v));
+      if (Number.isFinite(v)) nums.push(scaleBySource(v, s.src));
     }
     if (nums.length >= 2){
       const mean = nums.reduce((a,b)=>a+b,0)/nums.length;
@@ -507,7 +505,7 @@ function analyzeAllItemsOutliers(){
       item.analysis = { mean, lo, hi, n:nums.length };
       for (const s of entries){
         let v = Number.isFinite(s.precoNum) ? s.precoNum : toNumberFromAny(s.precoRaw);
-        v = Number.isFinite(v) ? applyScaleMaybe(v) : NaN;
+        v = Number.isFinite(v) ? scaleBySource(v, s.src) : NaN;
         s.valid = Number.isFinite(v) && (v >= lo && v <= hi);
       }
     } else {
@@ -530,7 +528,10 @@ function upsertRowsIntoProdutos(rows){
     const label = allowedById.get(r.site_id);
     const prev=item.sites[label];
     if (!prev || new Date(r.data) > new Date(prev.data)){
-      item.sites[label] = { precoRaw:r.preco, precoNum:r.preco_num, data:r.data, site_id:r.site_id, site_nome:r.site_nome, valid:true };
+      item.sites[label] = {
+        precoRaw:r.preco, precoNum:r.preco_num, data:r.data, site_id:r.site_id, site_nome:r.site_nome,
+        src: r.src || 'lp', valid:true
+      };
     }
   }
   produtosList = Array.from(produtosMap.values());
@@ -578,7 +579,7 @@ function computeMinMaxForRow(item){
     if (!d || !d.valid) continue;
     let v = Number.isFinite(d.precoNum) ? d.precoNum : toNumberFromAny(d.precoRaw);
     if (!Number.isFinite(v)) continue;
-    v = applyScaleMaybe(v);
+    v = scaleBySource(v, d.src);
     if (v<min.val) min={label:c.label,val:v};
     if (v>max.val) max={label:c.label,val:v};
   }
@@ -595,7 +596,7 @@ function createPriceCell(item, label, isLocked, minLabel, maxLabel){
   if (!d.valid){ td.innerHTML='<span class="price" title="Fora de faixa">—</span>'; return td; }
 
   let valueNum = Number.isFinite(d.precoNum) ? d.precoNum : toNumberFromAny(d.precoRaw);
-  if (Number.isFinite(valueNum)) valueNum = applyScaleMaybe(valueNum);
+  if (Number.isFinite(valueNum)) valueNum = scaleBySource(valueNum, d.src);
 
   const cls = (!isLocked&&label===minLabel?'min':(!isLocked&&label===maxLabel?'max':'')) || '';
   const priceSpan=document.createElement('span'); priceSpan.className='price '+cls;
@@ -637,7 +638,7 @@ function getValueForKey(item, key){
     const label = key.slice(5);
     const d = item.sites?.[label];
     let v = d ? (Number.isFinite(d.precoNum) ? d.precoNum : toNumberFromAny(d.precoRaw)) : null;
-    v = Number.isFinite(v) ? applyScaleMaybe(v) : null;
+    v = Number.isFinite(v) ? scaleBySource(v, d?.src) : null;
     return v;
   }
   return null;
@@ -766,7 +767,7 @@ function updateCounts(){
 /* ========= Query / paginação ========= */
 function buildQuery(){
   const SITE_IDS = chosen.map(c=>c.site_id);
-  return sb.from(VIEW_TABLE).select('ean, site_id, site_nome, preco, data, preco_num, descricao', { count:'estimated' })
+  return sb.from(VIEW_TABLE).select('src, ean, site_id, site_nome, preco, data, preco_num, descricao', { count:'estimated' })
            .in('site_id', SITE_IDS.length ? SITE_IDS : [-1])
            .order('ean', { ascending:true });
 }
@@ -833,8 +834,10 @@ function drawSpark(points){
 async function fetchHistory(ean, siteId){
   let pts=[];
   try{
-    const { data } = await sb.from(HISTORY_TABLE).select('data, preco_num').eq('ean', ean).eq('site_id', siteId).not('preco_num','is',null).order('data',{ascending:true}).limit(180);
-    if (data && data.length){ pts = data.map(r=>({ x:new Date(r.data), y: applyScaleMaybe(Number(r.preco_num)) })).filter(p=>Number.isFinite(p.y)); }
+    const { data } = await sb.from(HISTORY_TABLE).select('data, preco_num')
+      .eq('ean', ean).eq('site_id', siteId)
+      .not('preco_num','is',null).order('data',{ascending:true}).limit(180);
+    if (data && data.length){ pts = data.map(r=>({ x:new Date(r.data), y: (Number.isFinite(Number(r.preco_num)) ? Number(r.preco_num)/PRICE_DIVISOR : NaN) })).filter(p=>Number.isFinite(p.y)); }
   }catch(_){}
   const byTs = new Map(pts.map(p=>[p.x.getTime(), p])); return Array.from(byTs.values()).sort((a,b)=>a.x-b.x);
 }
@@ -865,6 +868,21 @@ const onFilterInput = debounce(()=>{
 }, 300);
 eanFilter.addEventListener('input', onFilterInput);
 descFilter.addEventListener('input', onFilterInput);
+
+/* ========= Controles extras ========= */
+document.getElementById('toggleFav').addEventListener('click', ()=>{
+  const wrap=document.getElementById('favWrap'); const btn=document.getElementById('toggleFav');
+  const open = wrap.style.display !== 'none';
+  wrap.style.display = open ? 'none' : 'block';
+  btn.textContent = open ? 'Maximizar' : 'Minimizar';
+});
+document.getElementById('toggleGen').addEventListener('click', ()=>{
+  const wrap=document.getElementById('generalWrap'); const btn=document.getElementById('toggleGen');
+  const open = wrap.style.display !== 'none';
+  wrap.style.display = open ? 'none' : 'block';
+  btn.textContent = open ? 'Maximizar' : 'Minimizar';
+});
+btnPrintFav.addEventListener('click', ()=> window.print());
 
 /* ========= Sessão ========= */
 async function initUserAndSites(){
