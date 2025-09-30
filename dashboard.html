@@ -9,9 +9,10 @@
   body { margin:0; font-family: Arial, sans-serif; background:#121212; color:#fff; padding:20px; }
   header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; gap:12px; flex-wrap:wrap; }
   h1 { color:#00b140; margin:0; }
-  .userbox { display:flex; gap:12px; align-items:center; position: relative; }
+  .userbox { display:flex; gap:12px; align-items:center; position: relative; flex-wrap:wrap; }
   .chip { font-size:12px; background:#1e1e1e; border:1px solid #333; padding:6px 10px; border-radius:999px; cursor:default; }
   .chip.plan { color:#bfffc1; border-color:#2f5a2f; background:#132313; }
+  .chip.build { color:#bfe3ff; border-color:#2a3b5a; background:#101522; }
   .btn { background:#00b140; color:#fff; border:none; padding:8px 14px; border-radius:6px; cursor:pointer; }
   .btn:hover { background:#009b38; }
   .userChipWrap { position: relative; display:inline-block; }
@@ -130,6 +131,8 @@
 <header>
   <h1>MaiorMargem — Dashboard</h1>
   <div class="userbox">
+    <!-- NOVO: chip de versão de build -->
+    <span id="buildChip" class="chip build" title="Versão do build">Build: —</span>
     <span id="planChip" class="chip plan">Plano: —</span>
     <div class="userChipWrap">
       <span id="userChip" class="chip">Usuário</span>
@@ -216,6 +219,11 @@
 </div>
 
 <script>
+/* ========= Build Version ========= */
+/* Hardcode da versão para identificar o build no topo. 
+   Ajuste o valor abaixo quando fizer um novo deploy. */
+const BUILD_VERSION = '2025-09-29 00:00 BRT';
+
 /* ========= Debug ========= */
 const dbgWrap = document.getElementById('dbgWrap');
 const dbg = document.getElementById('dbg');
@@ -236,6 +244,7 @@ const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth
 
 /* ========= Elementos ========= */
 const statusEl = document.getElementById('status');
+const buildChip = document.getElementById('buildChip');
 const planChip  = document.getElementById('planChip');
 const userChip  = document.getElementById('userChip');
 const ddMeusDados = document.getElementById('ddMeusDados');
@@ -271,14 +280,17 @@ const spark=document.getElementById('spark'), sparkCtx=spark.getContext('2d');
 
 /* ========= Estado ========= */
 const DEFAULT_PLAN_SITE_LIMIT = { trial:2, basico:4, intermediario:6, premium:8 };
-const VIEW = 'vw_precos_dinamica';
+
+/* ALTERADO: agora usamos a tabela materializada rápida */
+const VIEW = 'latest_prices';
+
 const PAGE_SIZE = 200, RENDER_CHUNK = 60;
 const OUTLIER_TOL = 0.50;
 
 let chosen=[], unlocked=new Set(), locked=new Set();
 let produtosMap=new Map(), produtosList=[];
 let serverOffset=0, serverExhausted=false, fetching=false;
-let totalEstimated = null; // novo: total estimado (para progresso)
+let totalEstimated = null; // total estimado (para progresso)
 
 let generalView=[], itemsRendered=0;
 let favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
@@ -310,7 +322,7 @@ function normTokens(s){
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g,'')
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g,' ')
+    .replace(/[^a-z0-9]+/g, ' ')
     .trim();
   return cleaned ? cleaned.split(/\s+/) : [];
 }
@@ -568,7 +580,7 @@ function createLoadingCell(){
 function createPriceCell(item, label, isLocked, minLabel, maxLabel){
   const td=document.createElement('td'); if (isLocked) td.classList.add('locked-cell'); const d=item.sites[label];
 
-  // NOVO: enquanto estiver carregando mais páginas e a célula ainda não tem dado daquele site, mostrar spinner
+  // Enquanto estiver carregando mais páginas e a célula ainda não tem dado daquele site, mostrar spinner
   if (!d){
     if (!serverExhausted){ td.appendChild(createLoadingCell()); }
     else { td.innerHTML='<span class="muted">—</span>'; }
@@ -628,7 +640,6 @@ function createParamCell(item){
   const n=(typeof item.meu_preco==='number')?item.meu_preco:null;
   if (n!=null && Number.isFinite(n)){ const span=document.createElement('span'); span.className='price param'; span.title='Meu preço'; span.textContent=formatBRL(n); td.appendChild(span); }
   else {
-    // Mesmo comportamento: meu preço não vem de outras páginas, então não há “carregando…”
     td.innerHTML='<span class="muted">—</span>';
   }
   return td;
@@ -865,19 +876,21 @@ function updateCounts(){
 }
 
 /* ========= Query / paginação ========= */
+/* ALTERADO: seleciona diretamente da tabela latest_prices */
 function buildQuery(){
   return sb.from(VIEW).select(
-    'ean, site_id, site_nome, preco, data, descricao, preco_num, meu_preco, descricao_cliente',
+    'ean, site_id, site_nome, preco, data, preco_num',
     { count:'estimated' }
-  ).order('data', { ascending:false });
+  )
+  .order('ean', { ascending:true });
 }
+
 async function fetchNextPage(){
   if (fetching || serverExhausted) return; fetching = true; hideErr();
   setStatus('Carregando… (offset ' + serverOffset + ')'); dlog({step:'fetch', offset:serverOffset});
   try{
     const from=serverOffset, to=serverOffset+PAGE_SIZE-1;
     const { data, error, status, count } = await buildQuery().range(from,to);
-    // captura o total estimado na primeira resposta útil
     if (typeof count === 'number' && count >= 0 && totalEstimated == null){ totalEstimated = count; }
 
     if (error){
@@ -902,7 +915,7 @@ async function fetchNextPage(){
       serverOffset += PAGE_SIZE; setStatus('Carregados (parcial): ' + produtosList.length + ' SKUs');
     }
   }catch(e){
-    showErr('Falha ao carregar view: '+(e.message||String(e)));
+    showErr('Falha ao carregar dados: '+(e.message||String(e)));
     serverExhausted = true;
   } finally { fetching=false; updateCounts(); }
 }
@@ -949,7 +962,7 @@ async function doLogSearch(){
   }
 }
 
-/* ========= Impressão (via iframe oculto, sem pop-up) ========= */
+/* ========= Impressão ========= */
 function buildPrintHTMLFromFav() {
   const favHeaderRow = document.getElementById('favHeaderRow');
   const headers = Array.from(favHeaderRow?.children || []).map((th,i) => i===0 ? null : th.textContent.trim()).filter(Boolean);
@@ -1033,6 +1046,9 @@ async function initUserAndSites(){
   if (!session){ location.href = CFG.SITE_URL || 'index.html'; return; }
   userChip.textContent = session.user?.email || 'Logado';
   dlog({step:'session', user:session.user?.id, email:session.user?.email});
+
+  // Mostrar versão do build
+  buildChip.textContent = 'Build: ' + BUILD_VERSION;
 
   // Ler somente 'plan'
   let planKey='basico';
