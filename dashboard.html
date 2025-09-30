@@ -64,7 +64,6 @@
   .end-marker { text-align:center; padding:10px; color:#9aa0a6; }
   .counts { margin-top:10px; font-size:12px; color:#9aa0a6; display:flex; gap:12px; flex-wrap:wrap; }
 
-  /* Colunas travadas por plano */
   th[data-locked="true"] { position: relative; color: #aaa; }
   th[data-locked="true"]::after { content:"🔒"; margin-left:6px; opacity:.8; font-size:14px; }
   td.locked-cell { position: relative; }
@@ -77,7 +76,6 @@
   }
   td.locked-cell:hover .unlock { opacity:1; pointer-events:auto; }
 
-  /* Ordenação e reordenação */
   th.sortable { cursor:pointer; user-select:none; }
   th.reorderable { cursor:move; }
   th.drop-left::before, th.drop-right::after { content:""; position:absolute; top:0; bottom:0; width:3px; background:#00b140; }
@@ -88,13 +86,10 @@
   a.price-link { text-decoration:none; }
   a.price-link:hover .price { text-decoration: underline; }
 
-  /* Debug popover */
-  #dbgWrap { display:none; position:fixed; right:16px; bottom:16px; width:520px; max-height:60vh; z-index:9999;
-             background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px; padding:10px; box-shadow:0 10px 30px rgba(0,0,0,.6); }
+  #dbgWrap { display:none; position:fixed; right:16px; bottom:16px; width:520px; max-height:60vh; z-index:9999; background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px; padding:10px; box-shadow:0 10px 30px rgba(0,0,0,.6); }
   #dbgWrap h3 { margin:0 0 8px 0; font-size:14px; color:#bfe3ff; }
   #dbg { white-space:pre-wrap; font-family: ui-monospace,Consolas,monospace; font-size:12px; color:#bfe3ff; max-height:48vh; overflow:auto; }
 
-  /* Chart popover */
   #chartPopover { position:fixed; z-index:9998; background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px; padding:10px; box-shadow:0 10px 30px rgba(0,0,0,.6); display:none; }
   #chartPopover header { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
   #chartPopover .msg { font-size:12px; color:#9aa0a6; }
@@ -186,7 +181,7 @@
 
 <script>
 /* ========= Build ========= */
-const BUILD_VERSION = '2025-09-30 22:40 BRT'; // atualize a cada deploy
+const BUILD_VERSION = '2025-09-30 23:50 BRT'; // atualize a cada deploy
 const qBuild = new URLSearchParams(location.search).get('build');
 
 /* ========= Debug ========= */
@@ -236,25 +231,10 @@ const loadBar     = document.getElementById('loadBar');
 
 /* ========= Estado ========= */
 const DEFAULT_PLAN_SITE_LIMIT = { trial:2, basico:4, intermediario:6, premium:8 };
-const VIEW_TABLE    = 'latest_prices_unified'; // <- usa a VIEW unificada
-const HISTORY_TABLE = 'latest_prices';         // <- histórico puro para o gráfico
+const VIEW_TABLE    = 'latest_prices_unified'; // <- nova view
+const HISTORY_TABLE = 'latest_prices';         // <- histórico puro p/ gráfico
 const PAGE_SIZE = 200, RENDER_CHUNK = 60;
 const OUTLIER_TOL = 0.50;
-
-/* ESCALA — por padrão divide por 100 (corrige “centavos” em latest_prices) */
-const qs = new URLSearchParams(location.search);
-const PRICE_DIVISOR = (()=>{
-  const fromQS = Number(qs.get('div'));
-  if (Number.isFinite(fromQS) && fromQS>0) return fromQS;
-  const fromCfg = Number(CFG.PRICE_DIVISOR ?? 100);
-  return Number.isFinite(fromCfg) && fromCfg>0 ? fromCfg : 100;
-})();
-function scaleBySource(num, src){
-  if (!Number.isFinite(num)) return NaN;
-  // Fonte 'lp' costuma estar em centavos -> divide por PRICE_DIVISOR (padrão 100).
-  // Fonte 'precos' já vem do texto parseado: usa como está.
-  return (src === 'lp') ? (num / PRICE_DIVISOR) : num;
-}
 
 let sessionUserId = null;
 let chosen=[], unlocked=new Set(), locked=new Set();
@@ -425,8 +405,8 @@ function setupReorderableHeaders(headerRow){
       columnOrder = arr;
       saveColumnOrder();
 
-      buildHeaders(); // feedback imediato
-      recomputeGeneralView(); // re-render linhas
+      buildHeaders();
+      recomputeGeneralView();
       renderFavs();
     });
   });
@@ -497,7 +477,7 @@ function analyzeAllItemsOutliers(){
     const entries = Object.values(item.sites||{});
     for (const s of entries){
       let v = Number.isFinite(s.precoNum) ? s.precoNum : toNumberFromAny(s.precoRaw);
-      if (Number.isFinite(v)) nums.push(scaleBySource(v, s.src));
+      if (Number.isFinite(v)) nums.push(v);
     }
     if (nums.length >= 2){
       const mean = nums.reduce((a,b)=>a+b,0)/nums.length;
@@ -505,7 +485,6 @@ function analyzeAllItemsOutliers(){
       item.analysis = { mean, lo, hi, n:nums.length };
       for (const s of entries){
         let v = Number.isFinite(s.precoNum) ? s.precoNum : toNumberFromAny(s.precoRaw);
-        v = Number.isFinite(v) ? scaleBySource(v, s.src) : NaN;
         s.valid = Number.isFinite(v) && (v >= lo && v <= hi);
       }
     } else {
@@ -525,13 +504,14 @@ function upsertRowsIntoProdutos(rows){
     if (!produtosMap.has(ean)) produtosMap.set(ean, { sku:ean, desc:'', meu_preco:null, sites:{} });
     const item = produtosMap.get(ean);
     if (!item.desc && r.descricao){ item.desc = String(r.descricao); item._tokNeeds = true; }
+    if (typeof r.meu_preco_num === 'number' || r.meu_preco_num !== null){
+      const np = Number(r.meu_preco_num);
+      if (Number.isFinite(np)) item.meu_preco = np;
+    }
     const label = allowedById.get(r.site_id);
     const prev=item.sites[label];
     if (!prev || new Date(r.data) > new Date(prev.data)){
-      item.sites[label] = {
-        precoRaw:r.preco, precoNum:r.preco_num, data:r.data, site_id:r.site_id, site_nome:r.site_nome,
-        src: r.src || 'lp', valid:true
-      };
+      item.sites[label] = { precoRaw:r.preco, precoNum:r.preco_num, data:r.data, site_id:r.site_id, site_nome:r.site_nome, valid:true };
     }
   }
   produtosList = Array.from(produtosMap.values());
@@ -579,7 +559,6 @@ function computeMinMaxForRow(item){
     if (!d || !d.valid) continue;
     let v = Number.isFinite(d.precoNum) ? d.precoNum : toNumberFromAny(d.precoRaw);
     if (!Number.isFinite(v)) continue;
-    v = scaleBySource(v, d.src);
     if (v<min.val) min={label:c.label,val:v};
     if (v>max.val) max={label:c.label,val:v};
   }
@@ -596,7 +575,6 @@ function createPriceCell(item, label, isLocked, minLabel, maxLabel){
   if (!d.valid){ td.innerHTML='<span class="price" title="Fora de faixa">—</span>'; return td; }
 
   let valueNum = Number.isFinite(d.precoNum) ? d.precoNum : toNumberFromAny(d.precoRaw);
-  if (Number.isFinite(valueNum)) valueNum = scaleBySource(valueNum, d.src);
 
   const cls = (!isLocked&&label===minLabel?'min':(!isLocked&&label===maxLabel?'max':'')) || '';
   const priceSpan=document.createElement('span'); priceSpan.className='price '+cls;
@@ -638,8 +616,7 @@ function getValueForKey(item, key){
     const label = key.slice(5);
     const d = item.sites?.[label];
     let v = d ? (Number.isFinite(d.precoNum) ? d.precoNum : toNumberFromAny(d.precoRaw)) : null;
-    v = Number.isFinite(v) ? scaleBySource(v, d?.src) : null;
-    return v;
+    return Number.isFinite(v) ? v : null;
   }
   return null;
 }
@@ -690,6 +667,7 @@ function renderGeneralChunk(){
 function resetGeneralDom(){ generalBody.innerHTML=''; itemsRendered=0; endMarker.textContent=''; }
 
 /* ========= Scroll / Paginação ========= */
+const qs = new URLSearchParams(location.search);
 const MAX_ROWS = (()=>{
   const qm = Number(qs.get('max'));
   const v = Number.isFinite(qm) ? qm : Number(CFG.MAX_ROWS ?? 1500);
@@ -767,7 +745,7 @@ function updateCounts(){
 /* ========= Query / paginação ========= */
 function buildQuery(){
   const SITE_IDS = chosen.map(c=>c.site_id);
-  return sb.from(VIEW_TABLE).select('src, ean, site_id, site_nome, preco, data, preco_num, descricao', { count:'estimated' })
+  return sb.from(VIEW_TABLE).select('src, ean, site_id, site_nome, preco, data, preco_num, descricao, meu_preco_num', { count:'estimated' })
            .in('site_id', SITE_IDS.length ? SITE_IDS : [-1])
            .order('ean', { ascending:true });
 }
@@ -837,7 +815,7 @@ async function fetchHistory(ean, siteId){
     const { data } = await sb.from(HISTORY_TABLE).select('data, preco_num')
       .eq('ean', ean).eq('site_id', siteId)
       .not('preco_num','is',null).order('data',{ascending:true}).limit(180);
-    if (data && data.length){ pts = data.map(r=>({ x:new Date(r.data), y: (Number.isFinite(Number(r.preco_num)) ? Number(r.preco_num)/PRICE_DIVISOR : NaN) })).filter(p=>Number.isFinite(p.y)); }
+    if (data && data.length){ pts = data.map(r=>({ x:new Date(r.data), y: Number(r.preco_num) })).filter(p=>Number.isFinite(p.y)); }
   }catch(_){}
   const byTs = new Map(pts.map(p=>[p.x.getTime(), p])); return Array.from(byTs.values()).sort((a,b)=>a.x-b.x);
 }
