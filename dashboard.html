@@ -39,14 +39,8 @@
   .wrap { overflow:auto; border:1px solid #2a2a2a; border-radius:10px; position: relative; }
   #generalWrap { height:55vh; }
 
-  /* Barra de progresso de carregamento */
-  .loadbar {
-    position: sticky; top:0; left:0; right:0; height:4px; background:#121212; z-index:5;
-  }
-  .loadbar .bar {
-    height:100%; width:0%; background: linear-gradient(90deg,#00b140,#00d084);
-    transition: width .25s ease;
-  }
+  .loadbar { position: sticky; top:0; left:0; right:0; height:4px; background:#121212; z-index:5; }
+  .loadbar .bar { height:100%; width:0%; background: linear-gradient(90deg,#00b140,#00d084); transition: width .25s ease; }
   .loadbar .bar.done { background:#2f2f2f; }
 
   table { width:100%; border-collapse:separate; border-spacing:0; }
@@ -66,14 +60,8 @@
   .price.max { color:#00d084; }
   .price.param { color:#ffd54f; }
 
-  /* Spinner/placeholder por célula */
-  .cell-loading {
-    display:inline-flex; align-items:center; gap:8px; color:#9aa0a6; font-size:13px;
-  }
-  .spinner {
-    width:14px; height:14px; border-radius:50%;
-    border:2px solid #2a2a2a; border-top-color:#00b140; animation: spin .8s linear infinite;
-  }
+  .cell-loading { display:inline-flex; align-items:center; gap:8px; color:#9aa0a6; font-size:13px; }
+  .spinner { width:14px; height:14px; border-radius:50%; border:2px solid #2a2a2a; border-top-color:#00b140; animation: spin .8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
   .muted { color:#666; }
@@ -131,7 +119,6 @@
 <header>
   <h1>MaiorMargem — Dashboard</h1>
   <div class="userbox">
-    <!-- NOVO: chip de versão de build -->
     <span id="buildChip" class="chip build" title="Versão do build">Build: —</span>
     <span id="planChip" class="chip plan">Plano: —</span>
     <div class="userChipWrap">
@@ -145,7 +132,6 @@
   </div>
 </header>
 
-<!-- FILTROS + ESCOPO -->
 <div class="panel">
   <div class="filters">
     <input id="eanFilter" placeholder="Filtrar por EAN/GTIN…" />
@@ -162,7 +148,6 @@
   <div id="err" class="err"></div>
 </div>
 
-<!-- FAVORITOS -->
 <section id="favPanel" class="panel">
   <div class="panel-header">
     <h2>Favoritos</h2>
@@ -178,16 +163,12 @@
   <div id="favResizer" class="resizer" title="Arraste para redimensionar. Duplo clique volta ao automático."></div>
 </section>
 
-<!-- GERAL -->
 <section id="generalPanel" class="panel">
   <div class="panel-header">
     <h2>Geral</h2>
     <button id="toggleGen" class="toggle-btn" aria-expanded="true" type="button">Minimizar</button>
   </div>
-
-  <!-- Barra de progresso colada ao topo da tabela -->
   <div class="loadbar"><div id="loadBar" class="bar"></div></div>
-
   <div id="generalWrap" class="wrap">
     <table id="produtosTable">
       <thead><tr id="generalHeaderRow"></tr></thead>
@@ -202,13 +183,11 @@
   </div>
 </section>
 
-<!-- DEBUG -->
 <div id="dbgWrap">
   <h3>Debug</h3>
   <pre id="dbg"></pre>
 </div>
 
-<!-- CHART POPOVER -->
 <div id="chartPopover" style="display:none;">
   <header>
     <span id="chartTitle">Histórico</span>
@@ -220,9 +199,8 @@
 
 <script>
 /* ========= Build Version ========= */
-/* Hardcode da versão para identificar o build no topo. 
-   Ajuste o valor abaixo quando fizer um novo deploy. */
-const BUILD_VERSION = '2025-09-29 00:00 BRT';
+const BUILD_VERSION = '2025-09-29 11:30 BRT'; // atualize a cada deploy
+const qBuild = new URLSearchParams(location.search).get('build');
 
 /* ========= Debug ========= */
 const dbgWrap = document.getElementById('dbgWrap');
@@ -280,18 +258,14 @@ const spark=document.getElementById('spark'), sparkCtx=spark.getContext('2d');
 
 /* ========= Estado ========= */
 const DEFAULT_PLAN_SITE_LIMIT = { trial:2, basico:4, intermediario:6, premium:8 };
-
-/* ALTERADO: agora usamos a tabela materializada rápida */
 const VIEW = 'latest_prices';
-
 const PAGE_SIZE = 200, RENDER_CHUNK = 60;
-const OUTLIER_TOL = 0.50;
+const OUTLIER_TOL = 0.50; /* << única declaração */
 
 let chosen=[], unlocked=new Set(), locked=new Set();
 let produtosMap=new Map(), produtosList=[];
 let serverOffset=0, serverExhausted=false, fetching=false;
-let totalEstimated = null; // total estimado (para progresso)
-
+let totalEstimated = null;
 let generalView=[], itemsRendered=0;
 let favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
 let loadingMore=false; const generalChkMap=new Map();
@@ -308,22 +282,8 @@ function debounce(fn,ms=500){ let t; return (...a)=>{ clearTimeout(t); t=setTime
 function favSave(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet])); }
 function isFav(sku){ return favSet.has(String(sku)); }
 function formatBRL(n){ try{ return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) }catch{ return String(n) } }
-
-/* Mantida: normalização agressiva (sem espaços) */
-function norm(s){
-  return (s||'').toString()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g,'')
-    .replace(/[^a-zA-Z0-9]/g,'')
-    .toLowerCase();
-}
 function normTokens(s){
-  const cleaned = (s||'').toString()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g,'')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
+  const cleaned = (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   return cleaned ? cleaned.split(/\s+/) : [];
 }
 function ensureDescIndex(item){
@@ -454,9 +414,7 @@ async function loadUserSelection(userId, planKey){
     return;
   }
 
-  if (!siteIdsText.every(v => /^[0-9]+$/.test(v))){ showErr('IDs de site inválidos em user_sites.'); throw new Error('user_sites.site_id not numeric'); }
   const siteIds = siteIdsText.map(v => Number(v));
-
   const rsSites = await sb.from('sites').select('id, nome, url_pesquisa').in('id', siteIds);
   if (rsSites.error){ showErr('Falha ao ler sites: '+rsSites.error.message+' (code: '+rsSites.error.code+')'); throw rsSites.error; }
   const sites = rsSites.data || [];
@@ -501,10 +459,8 @@ function upsertRowsIntoProdutos(rows){
   for (const r of rows){
     if (!allowedById.has(r.site_id)) continue;
     const ean = String(r.ean||'');
-    if (!produtosMap.has(ean)) produtosMap.set(ean, { sku:ean, desc:(r.descricao_cliente||r.descricao||''), meu_preco:null, sites:{} });
+    if (!produtosMap.has(ean)) produtosMap.set(ean, { sku:ean, desc:'', meu_preco:null, sites:{} });
     const item = produtosMap.get(ean);
-    if (!item.desc) item.desc = r.descricao_cliente || r.descricao || '';
-    if (item.meu_preco == null && r.meu_preco != null){ const n=Number(r.meu_preco); if (Number.isFinite(n)) item.meu_preco=n; }
     const label = allowedById.get(r.site_id);
     const prev=item.sites[label];
     if (!prev || new Date(r.data) > new Date(prev.data)){
@@ -517,7 +473,6 @@ function upsertRowsIntoProdutos(rows){
   analyzeAllItemsOutliers();
 }
 
-/* ========= Busca robusta ========= */
 function matchesFilters(item){
   const qE = (currentEanQ||'').trim();
   if (qE && !String(item.sku||'').includes(qE)) return false;
@@ -527,16 +482,14 @@ function matchesFilters(item){
     const words = item._tok || [];
     for (const qt of qTokens){
       let ok = false;
-      for (const w of words){
-        if (w.indexOf(qt) !== -1){ ok = true; break; }
-      }
+      for (const w of words){ if (w.indexOf(qt) !== -1){ ok = true; break; } }
       if (!ok) return false;
     }
   }
   return true;
 }
 
-/* ========= URL pesquisa por site ========= */
+/* ========= URL por site ========= */
 function buildSearchUrlByLabel(label, ean){
   const c = chosen.find(x => x.label === label);
   if (!c || !c.url) return null;
@@ -580,7 +533,6 @@ function createLoadingCell(){
 function createPriceCell(item, label, isLocked, minLabel, maxLabel){
   const td=document.createElement('td'); if (isLocked) td.classList.add('locked-cell'); const d=item.sites[label];
 
-  // Enquanto estiver carregando mais páginas e a célula ainda não tem dado daquele site, mostrar spinner
   if (!d){
     if (!serverExhausted){ td.appendChild(createLoadingCell()); }
     else { td.innerHTML='<span class="muted">—</span>'; }
@@ -639,9 +591,7 @@ function createParamCell(item){
   const td=document.createElement('td'); td.className='col-param';
   const n=(typeof item.meu_preco==='number')?item.meu_preco:null;
   if (n!=null && Number.isFinite(n)){ const span=document.createElement('span'); span.className='price param'; span.title='Meu preço'; span.textContent=formatBRL(n); td.appendChild(span); }
-  else {
-    td.innerHTML='<span class="muted">—</span>';
-  }
+  else { td.innerHTML='<span class="muted">—</span>'; }
   return td;
 }
 
@@ -677,16 +627,10 @@ function makeComparator(key, dir){
   };
 }
 function applySortIndicators(rowEl, activeKey, dir){
-  Array.from(rowEl.children).forEach(th=>{
-    const ind = th.querySelector('.sort-ind');
-    if (ind) ind.remove();
-  });
+  Array.from(rowEl.children).forEach(th=>{ const ind = th.querySelector('.sort-ind'); if (ind) ind.remove(); });
   const th = rowEl.querySelector(`th[data-sortkey="${CSS.escape(activeKey)}"]`);
   if (!th) return;
-  const span = document.createElement('span');
-  span.className = 'sort-ind';
-  span.textContent = dir==='asc' ? '▲' : '▼';
-  th.appendChild(span);
+  const span = document.createElement('span'); span.className = 'sort-ind'; span.textContent = dir==='asc' ? '▲' : '▼'; th.appendChild(span);
 }
 function setupSortableHeaders(headerRow, tableKind){
   const ths = Array.from(headerRow.children);
@@ -758,9 +702,7 @@ function setupReorderableHeaders(headerRow){
 /* ========= View (Geral) ========= */
 function recomputeGeneralView(){
   generalView = (searchScope==='both' || searchScope==='general') ? produtosList.filter(matchesFilters) : produtosList.slice();
-  if (sortStateGeneral.key){
-    generalView.sort(makeComparator(sortStateGeneral.key, sortStateGeneral.dir));
-  }
+  if (sortStateGeneral.key){ generalView.sort(makeComparator(sortStateGeneral.key, sortStateGeneral.dir)); }
   resetGeneralDom();
   renderGeneralChunk();
 }
@@ -779,13 +721,7 @@ function renderGeneralChunk(){
   updateCounts();
 }
 function resetGeneralDom(){ generalBody.innerHTML=''; generalChkMap.clear(); itemsRendered=0; endMarker.textContent=''; }
-function applySortGeneral(){
-  if (sortStateGeneral.key){
-    generalView.sort(makeComparator(sortStateGeneral.key, sortStateGeneral.dir));
-  }
-  resetGeneralDom();
-  renderGeneralChunk();
-}
+function applySortGeneral(){ if (sortStateGeneral.key){ generalView.sort(makeComparator(sortStateGeneral.key, sortStateGeneral.dir)); } resetGeneralDom(); renderGeneralChunk(); }
 
 /* ========= Scroll / Paginação ========= */
 function onGeneralScroll(){
@@ -820,22 +756,15 @@ function itemMatchesFavScope(item){ if (!(searchScope==='both' || searchScope===
 function renderFavs(){
   favBody.innerHTML='';
   let favList = produtosList.filter(p=>isFav(p.sku)).filter(itemMatchesFavScope);
-
-  if (sortStateFav.key){
-    favList.sort(makeComparator(sortStateFav.key, sortStateFav.dir));
-  }
-
+  if (sortStateFav.key){ favList.sort(makeComparator(sortStateFav.key, sortStateFav.dir)); }
   const frag=document.createDocumentFragment();
   for (const item of favList){
     const tr=document.createElement('tr');
-
     const tdAct=document.createElement('td'); tdAct.className='col-fav';
     const btn=document.createElement('button'); btn.title='Remover'; btn.innerHTML='🗑️'; btn.type='button';
     btn.addEventListener('click',()=>{ favSet.delete(item.sku); favSave(); const chk=generalChkMap.get(item.sku); if(chk){ chk.checked=false; } renderFavs(); updateFavHeight(); updateCounts(); });
     tdAct.appendChild(btn); tr.appendChild(tdAct);
-
     const {min,max}=computeMinMaxForRow(item);
-
     for (const key of columnOrder){
       if (key==='sku'){ const td=document.createElement('td'); td.className='col-sku'; td.textContent=item.sku; tr.appendChild(td); continue; }
       if (key==='desc'){ const td=document.createElement('td'); td.className='col-desc'; td.innerHTML=(item.desc||'').replace(/</g,'&lt;'); tr.appendChild(td); continue; }
@@ -846,7 +775,6 @@ function renderFavs(){
         tr.appendChild(createPriceCell(item, label, c?locked.has(c.site_id):false, min, max));
       }
     }
-
     frag.appendChild(tr);
   }
   favBody.appendChild(frag);
@@ -867,7 +795,7 @@ function updateCounts(){
       loadBar.classList.remove('done');
       countTotal.textContent  = 'Carregando… (' + loaded + ' de ~' + totalEstimated + ')';
     } else {
-      loadBar.style.width = '35%'; // fallback visual
+      loadBar.style.width = '35%';
       loadBar.classList.remove('done');
       countTotal.textContent  = 'Carregando… (' + loaded + '+ )';
     }
@@ -876,13 +804,11 @@ function updateCounts(){
 }
 
 /* ========= Query / paginação ========= */
-/* ALTERADO: seleciona diretamente da tabela latest_prices */
 function buildQuery(){
-  return sb.from(VIEW).select(
-    'ean, site_id, site_nome, preco, data, preco_num',
-    { count:'estimated' }
-  )
-  .order('ean', { ascending:true });
+  const SITE_IDS = chosen.map(c=>c.site_id);
+  return sb.from(VIEW).select('ean, site_id, site_nome, preco, data, preco_num', { count:'estimated' })
+           .in('site_id', SITE_IDS.length ? SITE_IDS : [-1])
+           .order('ean', { ascending:true });
 }
 
 async function fetchNextPage(){
@@ -894,15 +820,12 @@ async function fetchNextPage(){
     if (typeof count === 'number' && count >= 0 && totalEstimated == null){ totalEstimated = count; }
 
     if (error){
-      // Trata 416 "Requested range not satisfiable"
       if ((status===416) || /Requested range not satisfiable/i.test(error.message||'')) {
-        serverExhausted = true;
-        setStatus('Todos os dados carregados.');
-        endMarker.textContent = 'Fim da lista';
-        updateCounts();
-        return;
+        serverExhausted = true; setStatus('Todos os dados carregados.'); endMarker.textContent='Fim da lista'; updateCounts(); return;
       }
-      throw error;
+      showErr('Falha ao carregar dados: '+(error.message||String(error))+' [code: '+(error.code||status||'?')+']');
+      serverExhausted = true;
+      return;
     }
     if (!data || data.length===0){
       serverExhausted = true; setStatus('Todos os dados carregados.');
@@ -928,38 +851,29 @@ function resetAndQuery(){
   generalView=[]; resetGeneralDom(); renderFavs(); updateFavHeight(); updateCounts(); fetchNextPage();
 }
 
-/* ========= LOG DE PESQUISA (sem localização) ========= */
+/* ========= LOG DE PESQUISA ========= */
 const logSearchDebounced = debounce(doLogSearch, 1200);
 async function doLogSearch(){
   try{
     const { data:{ session } } = await sb.auth.getSession();
     if (!session || !session.user) return;
-
     const eanQ  = (currentEanQ||'').trim();
     const descQ = (currentDescQ||'').trim();
     const scope = searchScope;
-
     const isEanOk  = eanQ.replace(/\D/g,'').length >= 8;
     const isDescOk = descQ.length >= 3;
     if (!isEanOk && !isDescOk) return;
-
-    const payload = {
-      user_id:   session.user.id,
-      email:     session.user.email || null,
+    await sb.from('search_logs').insert({
+      user_id: session.user.id,
+      email:   session.user.email || null,
       ean_query: isEanOk  ? eanQ  : null,
       desc_query:isDescOk ? descQ : null,
-      scope:     scope,
+      scope,
       results_count: generalView?.length ?? null,
-      source:    'dashboard',
+      source: 'dashboard',
       user_agent: navigator.userAgent || null
-    };
-
-    const { error } = await sb.from('search_logs').insert(payload);
-    if (error) { dlog({warn:'search_log.insert.failed', error}); }
-    else { dlog({step:'search_log.insert.ok', eanQ, descQ, scope, results: payload.results_count}); }
-  }catch(err){
-    dlog({warn:'search_log.insert.exception', detail: String(err)});
-  }
+    });
+  }catch(err){ dlog({warn:'search_log.insert', detail: String(err)}); }
 }
 
 /* ========= Impressão ========= */
@@ -991,12 +905,12 @@ function printFavReport(){
 }
 
 /* ========= Chart ========= */
-popClose.addEventListener('click', ()=> pop.style.display='none');
-addEventListener('click', (ev)=>{ if(pop.style.display!=='none' && !pop.contains(ev.target) && !ev.target.closest('.chart-btn')) pop.style.display='none'; });
+document.getElementById('chartClose').addEventListener('click', ()=> document.getElementById('chartPopover').style.display='none');
+addEventListener('click', (ev)=>{ const pop=document.getElementById('chartPopover'); if(pop.style.display!=='none' && !pop.contains(ev.target) && !ev.target.closest('.chart-btn')) pop.style.display='none'; });
 function drawSparkFull(points){
   const ctx=sparkCtx,W=spark.width,H=spark.height; ctx.clearRect(0,0,W,H);
-  if(!points || points.length<3){ popMsg.style.display='block'; popMsg.textContent='Histórico insuficiente (≥3 pontos).'; return; }
-  popMsg.style.display='none';
+  if(!points || points.length<3){ document.getElementById('chartMsg').style.display='block'; document.getElementById('chartMsg').textContent='Histórico insuficiente (≥3 pontos).'; return; }
+  document.getElementById('chartMsg').style.display='none';
   const m={l:40,r:14,t:12,b:28}, xs=points.map(p=>p.x.getTime()), ys=points.map(p=>p.y);
   const xMin=Math.min(...xs), xMax=Math.max(...xs), yMin=Math.min(...ys), yMax=Math.max(...ys);
   const xS=v=>m.l+((v-xMin)/(xMax-xMin||1))*(W-m.l-m.r);
@@ -1010,6 +924,8 @@ function drawSparkFull(points){
   ctx.fillStyle='#9aa0a6'; ctx.font='10px Arial'; ctx.fillText(new Date(xMin).toLocaleDateString('pt-BR'), m.l, H-8); ctx.fillText(new Date(xMax).toLocaleDateString('pt-BR'), W-m.r-64, H-8);
 }
 async function fetchHistory(ean, siteId){
+  // latest_prices guarda só o último por site; gráfico pode ficar curto.
+  // Se quiser histórico "completo", troque a fonte aqui para a tabela Precos.
   let pts=[];
   try{
     const { data, error } = await sb.from(VIEW).select('data, preco_num').eq('ean', ean).eq('site_id', siteId).not('preco_num','is',null).order('data',{ascending:true}).limit(180);
@@ -1018,9 +934,10 @@ async function fetchHistory(ean, siteId){
   const byTs = new Map(pts.map(p=>[p.x.getTime(), p])); return Array.from(byTs.values()).sort((a,b)=>a.x-b.x);
 }
 async function openChartFor(ev, ean, label, siteId){
+  const pop=document.getElementById('chartPopover');
   const x = ev.clientX || (ev.touches && ev.touches[0]?.clientX) || 120, y = ev.clientY || (ev.touches && ev.touches[0]?.clientY) || 80;
   pop.style.left = Math.max(12, x - 260) + 'px'; pop.style.top  = Math.max(12, y - 200) + 'px';
-  popTitle.textContent = 'Histórico — ' + label + ' • EAN ' + ean; pop.style.display='block'; popMsg.style.display='none';
+  document.getElementById('chartTitle').textContent = 'Histórico — ' + label + ' • EAN ' + ean; pop.style.display='block'; document.getElementById('chartMsg').style.display='none';
   const points = await fetchHistory(String(ean), Number(siteId)); drawSparkFull(points);
 }
 
@@ -1040,17 +957,13 @@ function initScopeRadios(){
   });
 }
 
-/* ========= INIT: sessão, plano e sites ========= */
+/* ========= INIT ========= */
 async function initUserAndSites(){
   const { data:{ session } } = await sb.auth.getSession();
   if (!session){ location.href = CFG.SITE_URL || 'index.html'; return; }
-  userChip.textContent = session.user?.email || 'Logado';
-  dlog({step:'session', user:session.user?.id, email:session.user?.email});
+  document.getElementById('userChip').textContent = session.user?.email || 'Logado';
+  buildChip.textContent = 'Build: ' + (qBuild || BUILD_VERSION);
 
-  // Mostrar versão do build
-  buildChip.textContent = 'Build: ' + BUILD_VERSION;
-
-  // Ler somente 'plan'
   let planKey='basico';
   try{
     const rs = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
@@ -1058,29 +971,17 @@ async function initUserAndSites(){
       const raw = (rs.data?.plan ?? 'basico').toString();
       planKey = raw.toLowerCase();
       planChip.textContent = 'Plano: ' + (raw.charAt(0).toUpperCase()+raw.slice(1));
-    }else{
-      dlog({warn:'profiles.select.failed', detail: rs.error});
     }
-  }catch(e){
-    dlog({warn:'profiles.exception', detail:String(e)});
-  }
+  }catch(e){ dlog({warn:'profiles.select', detail:String(e)}); }
 
-  try{
-    await loadUserSelection(session.user.id, planKey);
-  }catch(e){
-    dlog({fatal:'init user_sites/sites failed', raw:String(e)});
-    throw e;
-  }
+  await loadUserSelection(session.user.id, planKey);
 }
 
-/* ========= Busca (EAN + Descrição) ========= */
+/* ========= Filtros ========= */
 const onFilterInput = debounce(()=>{
   currentEanQ = (eanFilter.value||'').trim();
   currentDescQ = (descFilter.value||'').trim();
-  recomputeGeneralView();
-  renderFavs();
-  updateFavHeight();
-  updateCounts();
+  recomputeGeneralView(); renderFavs(); updateFavHeight(); updateCounts();
   dlog({step:'filter', ean:currentEanQ, desc:currentDescQ});
   logSearchDebounced();
 }, 350);
@@ -1088,18 +989,18 @@ eanFilter.addEventListener('input', onFilterInput);
 descFilter.addEventListener('input', onFilterInput);
 
 /* ========= UI ========= */
-ddMeusDados.addEventListener('click', ()=> location.href='meusdados.html');
-ddPlanos.addEventListener('click', ()=> location.href='planos.html');
-btnSair.addEventListener('click', async ()=>{ try{ await sb.auth.signOut(); } finally{ localStorage.removeItem('mm_login_date'); location.href = CFG.SITE_URL || 'index.html'; }});
-btnReload.addEventListener('click', async ()=>{
+document.getElementById('ddMeusDados').addEventListener('click', ()=> location.href='meusdados.html');
+document.getElementById('ddPlanos').addEventListener('click', ()=> location.href='planos.html');
+document.getElementById('btnSair').addEventListener('click', async ()=>{ try{ await sb.auth.signOut(); } finally{ localStorage.removeItem('mm_login_date'); location.href = CFG.SITE_URL || 'index.html'; }});
+document.getElementById('btnReload').addEventListener('click', async ()=>{
   dlog({step:'manualReload.start'});
   await initUserAndSites();
   resetAndQuery();
   dlog({step:'manualReload.end'});
 });
-btnPrintFav.addEventListener('click', printFavReport);
+document.getElementById('btnPrintFav').addEventListener('click', printFavReport);
 
-/* ========= Favoritos: altura/resizer ========= */
+/* ========= Favoritos: resizer ========= */
 function measureRowHeight(){ const row=document.querySelector('#favTable tbody tr'); if(!row) return 44; const h=Math.round(row.getBoundingClientRect().height); return Math.max(36, h||44); }
 function measureHeadHeight(){ const head=document.querySelector('#favTable thead'); if(!head) return 40; const h=Math.round(head.getBoundingClientRect().height); return Math.max(32, h||40); }
 function applyFavHeight(px){ if(!px||!Number.isFinite(px)) return; const maxPx=Math.round(window.innerHeight*0.85); const clamped=Math.max(120, Math.min(px, maxPx)); favWrap.style.height=clamped+'px'; }
@@ -1118,8 +1019,8 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
     initScopeRadios();
     loadColumnOrder(); buildHeaders();
 
-    applyToggle(toggleFavBtn, favWrap, document.getElementById('favResizer'), 'mm_tgl_fav');
-    applyToggle(toggleGenBtn, generalWrap, null, 'mm_tgl_gen');
+    applyToggle(document.getElementById('toggleFav'), favWrap, document.getElementById('favResizer'), 'mm_tgl_fav');
+    applyToggle(document.getElementById('toggleGen'), generalWrap, null, 'mm_tgl_gen');
 
     resetAndQuery();
     generalWrap.dispatchEvent(new Event('scroll'));
