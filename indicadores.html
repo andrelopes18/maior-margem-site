@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MaiorMargem — Indicadores & Tendências</title>
+  <style>
+    :root { color-scheme: dark; }
+    *{ box-sizing: border-box; }
+    body { margin:0; font-family: Arial, sans-serif; background:#121212; color:#fff; }
+    header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:20px; flex-wrap:wrap; }
+    h1 { color:#00b140; margin:0; font-size:22px; }
+    .userbox { display:flex; gap:12px; align-items:center; }
+    .chip { font-size:12px; background:#1e1e1e; border:1px solid #333; padding:6px 10px; border-radius:999px; }
+    .chip.plan { color:#bfffc1; border-color:#2f5a2f; background:#132313; }
+    .btn { background:#00b140; color:#fff; border:none; padding:8px 14px; border-radius:8px; cursor:pointer; }
+    .btn:hover { background:#009b38; }
+
+    main { padding:0 20px 24px; }
+
+    .toolbar { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin: 0 0 14px; }
+    .toolbar .group { display:flex; gap:8px; align-items:center; background:#1a1a1a; border:1px solid #2a2a2a; padding:8px 10px; border-radius:10px; }
+    .toolbar input, .toolbar select { background:#101010; color:#fff; border:1px solid #2a2a2a; border-radius:8px; padding:8px 10px; }
+    .toolbar label { font-size:12px; color:#cfd8dc; }
+
+    .kpis { display:grid; grid-template-columns: repeat(4, minmax(220px, 1fr)); gap:12px; }
+    @media (max-width:1200px){ .kpis{ grid-template-columns: repeat(2, minmax(220px, 1fr)); } }
+    @media (max-width:640px){ .kpis{ grid-template-columns: 1fr; } }
+
+    .card { background:#1a1a1a; border:1px solid #2a2a2a; border-radius:14px; padding:14px; }
+    .card h3 { margin:0; font-size:14px; color:#bfe3ff; font-weight:600; display:flex; align-items:center; gap:8px; }
+    .kpi { display:flex; align-items:flex-end; justify-content:space-between; margin-top:8px; gap:12px; }
+    .kpi .val { font-size:28px; font-weight:800; letter-spacing: .3px; }
+    .muted { color:#9aa0a6; font-size:12px; }
+    .spark { width:100%; height:54px; display:block; }
+
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:12px; }
+    @media (max-width:1200px){ .grid{ grid-template-columns: 1fr; } }
+
+    .panel { background:#1a1a1a; border:1px solid #2a2a2a; border-radius:14px; }
+    .panel header { padding:12px 14px; border-bottom:1px solid #242424; display:flex; align-items:center; justify-content:space-between; }
+    .panel header h2 { margin:0; font-size:16px; color:#d5ffd5; }
+    .panel .content { padding:12px 14px; }
+    .panel .empty { color:#9aa0a6; font-size:13px; }
+
+    .tablewrap { overflow:auto; border:1px solid #2a2a2a; border-radius:10px; }
+    table { width:100%; border-collapse:separate; border-spacing:0; }
+    thead th { position:sticky; top:0; background:#0f0f0f; z-index:1; }
+    th, td { border-bottom:1px solid #2a2a2a; padding:10px; text-align:left; font-size:14px; vertical-align:top; }
+    tbody tr:hover { background:#191919; }
+    .mono { font-family: ui-monospace,Consolas,monospace; }
+    .price { font-weight:700; display:inline-block; }
+    .price.min { color:#00d084; }
+    .price.max { color:#ff5d5d; }
+    .pill { font-size:12px; padding:2px 8px; border-radius:999px; border:1px solid #2a2a2a; background:#141414; color:#ddd; display:inline-block; }
+
+    .hint { font-size:12px; color:#9aa0a6; margin-top:6px; }
+    .status { margin:8px 0; color:#aaa; font-size:12px; }
+    .err { display:none; color:#ff5d5d; margin:8px 0; font-size:13px; }
+
+    .legend { display:flex; gap:8px; flex-wrap:wrap; }
+    .legend .pill { background:#101010; }
+
+    .right { text-align:right; }
+    .center { text-align:center; }
+  </style>
+  <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+  <script src="./config.js"></script>
+</head>
+<body>
+<header>
+  <h1>MaiorMargem — Indicadores & Tendências</h1>
+  <div class="userbox">
+    <span id="planChip" class="chip plan">Plano: —</span>
+    <span id="userChip" class="chip">Usuário</span>
+    <button id="btnSair" class="btn" type="button">Sair</button>
+  </div>
+</header>
+
+<main>
+  <!-- BARRA DE CONTROLES -->
+  <div class="toolbar">
+    <div class="group">
+      <label for="dateFrom">Período:</label>
+      <input id="dateFrom" type="date" />
+      <span class="muted">a</span>
+      <input id="dateTo" type="date" />
+      <select id="quickRange">
+        <option value="7">Últimos 7 dias</option>
+        <option value="30" selected>Últimos 30 dias</option>
+        <option value="90">Últimos 90 dias</option>
+        <option value="365">Últimos 12 meses</option>
+        <option value="custom">Personalizado…</option>
+      </select>
+    </div>
+
+    <div class="group">
+      <label for="topLimit">Top:</label>
+      <select id="topLimit">
+        <option>10</option>
+        <option selected>20</option>
+        <option>50</option>
+        <option>100</option>
+      </select>
+    </div>
+
+    <div class="group">
+      <label>Outliers:</label>
+      <select id="outTol">
+        <option value="0.30">±30%</option>
+        <option value="0.50" selected>±50%</option>
+        <option value="0.80">±80%</option>
+        <option value="1.00">±100%</option>
+      </select>
+    </div>
+
+    <button id="btnRecarregar" class="btn" type="button">Recarregar</button>
+    <div id="status" class="status"></div>
+  </div>
+
+  <!-- KPIs -->
+  <section class="kpis">
+    <div class="card">
+      <h3>Nº de produtos monitorados</h3>
+      <div class="kpi">
+        <div class="val" id="kpiProdutos">—</div>
+        <canvas id="sparkProdutos" class="spark" width="300" height="54" aria-hidden="true"></canvas>
+      </div>
+      <div class="muted" id="kpiProdutosHint">Amostra do período</div>
+    </div>
+    <div class="card">
+      <h3>Nº de sites</h3>
+      <div class="kpi">
+        <div class="val" id="kpiSites">—</div>
+        <canvas id="sparkSites" class="spark" width="300" height="54" aria-hidden="true"></canvas>
+      </div>
+      <div class="muted" id="kpiSitesHint">Sites ativos no período</div>
+    </div>
+    <div class="card">
+      <h3>Economia estimada (baseado em vendas)</h3>
+      <div class="kpi">
+        <div class="val" id="kpiEconomia">—</div>
+      </div>
+      <div class="muted">Conecte vendas para estimativa real</div>
+    </div>
+    <div class="card">
+      <h3>Variação média de preços</h3>
+      <div class="kpi">
+        <div class="val" id="kpiVariacao">—</div>
+        <canvas id="sparkVariacao" class="spark" width="300" height="54" aria-hidden="true"></canvas>
+      </div>
+      <div class="muted">Δ médio diário (amostra)</div>
+    </div>
+  </section>
+
+  <!-- OPORTUNIDADES -->
+  <section class="grid" style="margin-top:12px;">
+    <div class="panel">
+      <header><h2>Oportunidades — Produtos mais baratos</h2><div class="legend"><span class="pill">Melhor preço</span><span class="pill">Δ vs média</span></div></header>
+      <div class="content">
+        <div class="tablewrap">
+          <table id="tblMaisBaratos">
+            <thead>
+              <tr>
+                <th>EAN</th>
+                <th>Descrição</th>
+                <th>Site</th>
+                <th class="right">Preço</th>
+                <th class="right">Média</th>
+                <th class="right">Δ</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="hint">Critério: menor preço do período por EAN (filtrando outliers).</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <header><h2>Oportunidades — Produtos mais caros</h2><div class="legend"><span class="pill">Pior preço</span><span class="pill">Δ vs média</span></div></header>
+      <div class="content">
+        <div class="tablewrap">
+          <table id="tblMaisCaros">
+            <thead>
+              <tr>
+                <th>EAN</th>
+                <th>Descrição</th>
+                <th>Site</th>
+                <th class="right">Preço</th>
+                <th class="right">Média</th>
+                <th class="right">Δ</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="hint">Critério: maior preço do período por EAN (filtrando outliers).</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="grid">
+    <div class="panel">
+      <header><h2>Produtos abaixo do preço de custo</h2></header>
+      <div class="content" id="blocoAbaixoCusto">
+        <div class="empty">Para ativar, disponibilize uma view com <span class="pill">ean</span>, <span class="pill">meu_custo</span>, <span class="pill">meu_preco</span> ou inclua <span class="pill">custo_cliente</span> na <code>vw_precos_dinamica</code>. Neste layout, a lista aparecerá automaticamente.</div>
+        <div class="tablewrap" style="margin-top:10px; display:none;">
+          <table id="tblAbaixoCusto">
+            <thead>
+              <tr>
+                <th>EAN</th>
+                <th>Descrição</th>
+                <th class="right">Custo</th>
+                <th class="right">Meu preço</th>
+                <th class="right">Δ</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <header><h2>Maiores alterações de preço</h2></header>
+      <div class="content">
+        <div class="tablewrap">
+          <table id="tblMaioresAlt">
+            <thead>
+              <tr>
+                <th>EAN</th>
+                <th>Descrição</th>
+                <th>Site</th>
+                <th class="right">Preço Ant.</th>
+                <th class="right">Preço Atual</th>
+                <th class="right">Δ Abs.</th>
+                <th class="right">Δ %</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="hint">Compara o primeiro e o último preço do período por (EAN, Site).</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="grid">
+    <div class="panel">
+      <header><h2>Produtos mais pesquisados</h2></header>
+      <div class="content">
+        <div class="tablewrap">
+          <table id="tblMaisPesq">
+            <thead>
+              <tr>
+                <th>EAN</th>
+                <th>Descrição (última vista)</th>
+                <th class="center">Pesquisas</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="hint">Fonte: <code>search_logs</code> (escopo dashboard), agregação por EAN no período.</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <header><h2>Produtos menos pesquisados</h2></header>
+      <div class="content">
+        <div class="tablewrap">
+          <table id="tblMenosPesq">
+            <thead>
+              <tr>
+                <th>EAN</th>
+                <th>Descrição (última vista)</th>
+                <th class="center">Pesquisas</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="hint">Itens com 1 consulta ou raros no período.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="grid">
+    <div class="panel">
+      <header><h2>Preços por região</h2></header>
+      <div class="content" id="blocoRegiao">
+        <div class="empty">Inclua <span class="pill">regiao</span> na tabela <code>sites</code> (ou crie view <code>vw_preco_regiao</code> com <em>regiao, preco_num</em>). O gráfico aparece aqui automaticamente.</div>
+        <canvas id="chartRegiao" width="640" height="240" style="display:none;"></canvas>
+      </div>
+    </div>
+
+    <div class="panel">
+      <header><h2>Ranking de fornecedores</h2></header>
+      <div class="content" id="blocoFornecedor">
+        <div class="empty">Inclua <span class="pill">fornecedor</span> em <code>sites</code> (ou view com <em>fornecedor, preco_num</em>). Dois rankings serão exibidos: “melhores preços” e “mais itens”.</div>
+        <div class="grid" style="grid-template-columns: 1fr 1fr; margin-top:10px;">
+          <div>
+            <h3 class="muted" style="margin:0 0 8px;">Melhores preços (média)</h3>
+            <div class="tablewrap">
+              <table id="tblRankFornecedorPreco">
+                <thead><tr><th>Fornecedor</th><th class="right">Média R$</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+          <div>
+            <h3 class="muted" style="margin:0 0 8px;">Mais itens</h3>
+            <div class="tablewrap">
+              <table id="tblRankFornecedorQtd">
+                <thead><tr><th>Fornecedor</th><th class="right">Qtd Itens</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <div id="err" class="err"></div>
+</main>
+
+<script>
+/* ========= Config / Supabase ========= */
+const CFG = window.CONFIG || {};
+if(!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY){ alert('CONFIG ausente (config.js)'); throw new Error('CONFIG ausente'); }
+const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth:{ persistSession:true, autoRefreshToken:true, detectSessionInUrl:true }});
+const VIEW = 'vw_precos_dinamica'; // mesma view usada no dashboard principal
+
+/* ========= Util ========= */
+const NA = '---';
+const planChip = document.getElementById('planChip');
+const userChip = document.getElementById('userChip');
+const btnSair  = document.getElementById('btnSair');
+const statusEl = document.getElementById('status');
+const errEl    = document.getElementById('err');
+
+function setStatus(t){ statusEl.textContent = t||''; }
+function showErr(msg){ errEl.style.display='block'; errEl.textContent=msg; console.error(msg); }
+function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
+function formatBRL(n){ try { return Number(n).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); } catch { return String(n); } }
+function pct(a,b){ if(!isFinite(a)||!isFinite(b)||b===0) return NA; const p=((a-b)/b)*100; return (p>=0?'+':'')+p.toFixed(1)+'%'; }
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+
+/* ========= Controles ========= */
+const dateFrom = document.getElementById('dateFrom');
+const dateTo   = document.getElementById('dateTo');
+const quickRange = document.getElementById('quickRange');
+const topLimit = document.getElementById('topLimit');
+const outTol   = document.getElementById('outTol');
+document.getElementById('btnRecarregar').addEventListener('click', reloadAll);
+
+quickRange.addEventListener('change', ()=>{
+  const v = quickRange.value;
+  if (v==='custom') return; // mantém datas
+  const today = new Date();
+  const from = new Date(today.getTime() - Number(v)*24*3600*1000);
+  dateTo.value   = today.toISOString().slice(0,10);
+  dateFrom.value = from.toISOString().slice(0,10);
+});
+
+btnSair.addEventListener('click', async ()=>{
+  try{ await sb.auth.signOut(); } finally { localStorage.removeItem('mm_login_date'); location.href = CFG.SITE_URL || 'index.html'; }
+});
+
+/* ========= KPIs ========= */
+const kpiProdutos = document.getElementById('kpiProdutos');
+const kpiSites    = document.getElementById('kpiSites');
+const kpiEconomia = document.getElementById('kpiEconomia');
+const kpiVariacao = document.getElementById('kpiVariacao');
+
+const sparkProdutos = document.getElementById('sparkProdutos').getContext('2d');
+const sparkSites    = document.getElementById('sparkSites').getContext('2d');
+const sparkVariacao = document.getElementById('sparkVariacao').getContext('2d');
+
+function drawSpark(ctx, points){ // points: number[]
+  const W = ctx.canvas.width, H = ctx.canvas.height;
+  ctx.clearRect(0,0,W,H);
+  if(!points || points.length<2){ ctx.fillStyle='#9aa0a6'; ctx.fillText('—', 8, H-10); return; }
+  const min = Math.min(...points), max = Math.max(...points);
+  const sx = (i)=> (i/(points.length-1))*(W-8-8)+8;
+  const sy = (v)=> H-8 - ((v-min)/(max-min||1))*(H-16);
+  ctx.strokeStyle='#00d084'; ctx.lineWidth=2;
+  ctx.beginPath();
+  points.forEach((v,i)=>{ const x=sx(i), y=sy(v); if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); });
+  ctx.stroke();
+}
+
+/* ========= Tabelas ========= */
+const tblMaisBaratos = document.querySelector('#tblMaisBaratos tbody');
+const tblMaisCaros   = document.querySelector('#tblMaisCaros tbody');
+const tblMaioresAlt  = document.querySelector('#tblMaioresAlt tbody');
+const tblMaisPesq    = document.querySelector('#tblMaisPesq tbody');
+const tblMenosPesq   = document.querySelector('#tblMenosPesq tbody');
+
+/* ========= INIT ========= */
+(async function init(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if (!session){ location.href = CFG.SITE_URL || 'index.html'; return; }
+  userChip.textContent = session.user?.email || 'Logado';
+
+  // Plano
+  try{
+    const rs = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
+    const raw = (rs.data?.plan ?? 'básico').toString();
+    planChip.textContent = 'Plano: ' + raw.charAt(0).toUpperCase()+raw.slice(1);
+  }catch{}
+
+  // Período padrão (30 dias)
+  const today = new Date(); const from = new Date(today.getTime() - 30*24*3600*1000);
+  dateTo.value   = today.toISOString().slice(0,10);
+  dateFrom.value = from.toISOString().slice(0,10);
+
+  // Primeira carga
+  await reloadAll();
+})();
+
+/* ========= Carregamento principal ========= */
+async function reloadAll(){
+  hideErr();
+  try{
+    setStatus('Carregando KPIs…');
+    await Promise.all([
+      loadKpis(),
+      loadMaisBaratos(),
+      loadMaisCaros(),
+      loadMaioresAlt(),
+      loadPesquisas()
+    ]);
+    setStatus('Pronto.');
+  }catch(e){
+    console.error(e);
+    showErr('Falha ao carregar indicadores: '+(e.message||e));
+  }
+}
+
+/* ========= Helpers de período ========= */
+function getPeriod(){
+  const f = dateFrom.value ? new Date(dateFrom.value+'T00:00:00') : null;
+  const t = dateTo.value   ? new Date(dateTo.value  +'T23:59:59') : null;
+  return { from: f, to: t };
+}
+function applyDateFilter(q){
+  const {from,to} = getPeriod();
+  if (from) q = q.gte('data', from.toISOString());
+  if (to)   q = q.lte('data', to.toISOString());
+  return q;
+}
+
+/* ========= Consultas ========= */
+// Contadores via HEAD: true para count exato
+async function countDistinct(field){
+  const q = applyDateFilter( sb.from(VIEW).select(field, { count:'exact', head:true }) );
+  // Dica: em PostgREST, count+head conta linhas do select. Use .select('distinct field') se tiver view com colunas amplas.
+  const { count, error } = await q;
+  if (error) throw error;
+  return count ?? 0;
+}
+
+// Para KPIs de séries (sparks), geramos buckets diários
+async function seriesCountByDay(distinctField){
+  const {from,to} = getPeriod();
+  const days =  Math.max(1, Math.ceil((to - from)/(24*3600*1000)));
+  const map = new Map(); // key=YYYY-MM-DD -> Set or counter
+  for (let i=0;i<=days;i++){
+    const d = new Date(from.getTime() + i*24*3600*1000);
+    map.set(d.toISOString().slice(0,10), new Set());
+  }
+  // Busca amostra (limite para perf). Ajuste conforme volume:
+  const { data, error } = await applyDateFilter(
+    sb.from(VIEW).select('data,'+distinctField).not(''+distinctField,'is',null).order('data',{ascending:true}).limit(5000)
+  );
+  if (error) throw error;
+  for (const r of (data||[])){
+    const day = new Date(r.data).toISOString().slice(0,10);
+    if (map.has(day)) map.get(day).add(r[distinctField]);
+  }
+  return Array.from(map.values()).map(set=>set.size);
+}
+
+function isFiniteNum(n){ return typeof n === 'number' && isFinite(n); }
+
+function computeStatsByEan(rows){
+  // rows: [{ean, preco_num, site_id, site_nome, data, descricao}]
+  // agrega preços válidos por EAN e calcula média
+  const byEan = new Map();
+  for (const r of rows){
+    const pn = Number(r.preco_num);
+    if (!isFinite(pn)) continue;
+    const key = String(r.ean);
+    if (!byEan.has(key)) byEan.set(key, { ean:key, desc:r.descricao||'', items:[] });
+    byEan.get(key).items.push({ site:r.site_nome||r.site_id, preco:pn, data:r.data });
+  }
+  const list = [];
+  for (const [ean, obj] of byEan){
+    const arr = obj.items;
+    if (!arr.length) continue;
+    const mean = arr.reduce((a,b)=>a+b.preco,0)/arr.length;
+    arr.sort((a,b)=>a.preco-b.preco);
+    list.push({ ean, desc:obj.desc, mean, min:arr[0], max:arr[arr.length-1] });
+  }
+  return list;
+}
+
+/* ========= KPIs ========= */
+async function loadKpis(){
+  // Nº produtos (distintos EAN no período)
+  const totalProdutos = await countDistinct('ean');
+  kpiProdutos.textContent = totalProdutos.toLocaleString('pt-BR');
+
+  // Nº sites (distintos site_id no período)
+  const totalSites = await countDistinct('site_id');
+  kpiSites.textContent = totalSites.toLocaleString('pt-BR');
+
+  // Sparks simples (amostras diárias)
+  try{
+    const s1 = await seriesCountByDay('ean');  drawSpark(sparkProdutos, s1);
+    const s2 = await seriesCountByDay('site_id'); drawSpark(sparkSites, s2);
+  }catch{ /* ignora spark em erros de amostra */ }
+
+  // Variação média (amostra): pegamos últimos e primeiros preços por (ean, site)
+  const {from,to} = getPeriod();
+  const { data, error } = await applyDateFilter(
+    sb.from(VIEW).select('ean, site_id, preco_num, data').not('preco_num','is',null).order('data',{ascending:true}).limit(8000)
+  );
+  if (!error && data && data.length){
+    const key = (r)=> String(r.ean)+'|'+String(r.site_id);
+    const first = new Map(), last = new Map();
+    for (const r of data){
+      const k=key(r), pn=Number(r.preco_num); if(!isFinite(pn)) continue;
+      if (!first.has(k)) first.set(k, pn);
+      last.set(k, pn);
+    }
+    let sum=0, cnt=0, series=[];
+    for (const [k, fa] of first){
+      const la = last.get(k); if(isFiniteNum(la)){ sum += (la-fa)/Math.max(1e-9, fa); cnt++; series.push(Math.abs((la-fa)/Math.max(1e-9, fa))); }
+    }
+    const avg = cnt ? (sum/cnt)*100 : 0;
+    kpiVariacao.textContent = (avg>=0?'+':'')+avg.toFixed(1)+'%';
+    drawSpark(sparkVariacao, series.slice(-30));
+  }else{
+    kpiVariacao.textContent = '—';
+  }
+
+  // Economia (placeholder): precisa integrar vendas e “meu_preco”
+  kpiEconomia.textContent = '—';
+}
+
+/* ========= Mais baratos / Mais caros ========= */
+async function fetchPricesSample(limit){
+  // Amostra do período para calcular mean/min/max por EAN de forma client-side
+  const { data, error } = await applyDateFilter(
+    sb.from(VIEW).select('ean, descricao, site_id, site_nome, preco_num, data')
+      .not('preco_num','is',null)
+      .order('data',{ascending:false})
+      .limit(12000) // ajuste conforme volume
+  );
+  if (error) throw error;
+  const tol = Number(outTol.value || '0.50');
+  // calcula estatísticas por ean
+  const stats = computeStatsByEan(data||[]);
+  // aplica filtro de outlier no momento de montar “mais baratos”/“mais caros”
+  const baratos=[], caros=[];
+  for (const s of stats){
+    const lo = s.mean*(1-tol), hi = s.mean*(1+tol);
+    if (isFiniteNum(s.min.preco) && s.min.preco>=lo && s.min.preco<=hi){
+      baratos.push({ ean:s.ean, desc:s.desc, site:s.min.site, preco:s.min.preco, mean:s.mean });
+    }
+    if (isFiniteNum(s.max.preco) && s.max.preco>=lo && s.max.preco<=hi){
+      caros.push({ ean:s.ean, desc:s.desc, site:s.max.site, preco:s.max.preco, mean:s.mean });
+    }
+  }
+  baratos.sort((a,b)=>a.preco-b.preco);
+  caros.sort((a,b)=>b.preco-a.preco);
+  return {
+    baratos: baratos.slice(0, limit),
+    caros:   caros.slice(0, limit)
+  };
+}
+
+async function loadMaisBaratos(){
+  const lim = Number(topLimit.value||20);
+  const { baratos } = await fetchPricesSample(lim);
+  const tb = tblMaisBaratos; tb.innerHTML='';
+  for (const r of baratos){
+    const tr=document.createElement('tr');
+    tr.innerHTML = `
+      <td class="mono">${r.ean}</td>
+      <td>${(r.desc||'').replace(/</g,'&lt;')}</td>
+      <td>${r.site||NA}</td>
+      <td class="right"><span class="price min">${formatBRL(r.preco)}</span></td>
+      <td class="right">${formatBRL(r.mean)}</td>
+      <td class="right">${pct(r.preco, r.mean)}</td>
+    `;
+    tb.appendChild(tr);
+  }
+}
+
+async function loadMaisCaros(){
+  const lim = Number(topLimit.value||20);
+  const { caros } = await fetchPricesSample(lim);
+  const tb = tblMaisCaros; tb.innerHTML='';
+  for (const r of caros){
+    const tr=document.createElement('tr');
+    tr.innerHTML = `
+      <td class="mono">${r.ean}</td>
+      <td>${(r.desc||'').replace(/</g,'&lt;')}</td>
+      <td>${r.site||NA}</td>
+      <td class="right"><span class="price max">${formatBRL(r.preco)}</span></td>
+      <td class="right">${formatBRL(r.mean)}</td>
+      <td class="right">${pct(r.preco, r.mean)}</td>
+    `;
+    tb.appendChild(tr);
+  }
+}
+
+/* ========= Maiores alterações de preço ========= */
+async function loadMaioresAlt(){
+  const lim = Number(topLimit.value||20);
+  const { data, error } = await applyDateFilter(
+    sb.from(VIEW).select('ean, descricao, site_id, site_nome, preco_num, data')
+      .not('preco_num','is',null)
+      .order('data',{ascending:true})
+      .limit(12000)
+  );
+  if (error) throw error;
+
+  const key = (r)=> String(r.ean)+'|'+String(r.site_id);
+  const first = new Map(), last = new Map(), descBy = new Map(), siteBy = new Map();
+  for (const r of (data||[])){
+    const k=key(r), pn=Number(r.preco_num); if(!isFinite(pn)) continue;
+    if (!first.has(k)) first.set(k, pn);
+    last.set(k, pn);
+    descBy.set(String(r.ean), r.descricao||'');
+    siteBy.set(String(r.site_id), r.site_nome||r.site_id);
+  }
+  const arr=[];
+  for (const [k, fa] of first){
+    const la = last.get(k);
+    if (!isFiniteNum(la)) continue;
+    const [ean, site_id] = k.split('|');
+    const delta = la - fa;
+    const perc  = fa ? (delta/fa)*100 : 0;
+    arr.push({
+      ean, site: siteBy.get(site_id)||site_id, desc: descBy.get(ean)||'',
+      prev: fa, curr: la, delta, perc
+    });
+  }
+  arr.sort((a,b)=> Math.abs(b.perc) - Math.abs(a.perc));
+  const tb = tblMaioresAlt; tb.innerHTML='';
+  arr.slice(0, lim).forEach(r=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = `
+      <td class="mono">${r.ean}</td>
+      <td>${(r.desc||'').replace(/</g,'&lt;')}</td>
+      <td>${r.site||NA}</td>
+      <td class="right">${formatBRL(r.prev)}</td>
+      <td class="right">${formatBRL(r.curr)}</td>
+      <td class="right">${formatBRL(r.delta)}</td>
+      <td class="right">${(r.perc>=0?'+':'')+r.perc.toFixed(1)}%</td>
+    `;
+    tb.appendChild(tr);
+  });
+}
+
+/* ========= Pesquisas (search_logs) ========= */
+async function loadPesquisas(){
+  const lim = Number(topLimit.value||20);
+  const {from,to} = getPeriod();
+  // Traz logs brutos do período (apenas os que têm EAN)
+  const { data, error } = await sb.from('search_logs')
+    .select('ean_query, created_at')
+    .not('ean_query','is',null)
+    .gte('created_at', from.toISOString())
+    .lte('created_at', to.toISOString())
+    .order('created_at',{ascending:false})
+    .limit(5000);
+  if (error){ console.warn('search_logs', error); }
+
+  const count = new Map();
+  for (const r of (data||[])){
+    const ean = String(r.ean_query||'').replace(/\D/g,'');
+    if (ean.length<8) continue;
+    count.set(ean, (count.get(ean)||0)+1);
+  }
+  // recuperar última descrição vista na view, para apresentação
+  const eans = Array.from(count.keys()).slice(0, 500);
+  let descMap = new Map();
+  if (eans.length){
+    const { data:descRows } = await applyDateFilter(
+      sb.from(VIEW).select('ean, descricao').in('ean', eans).order('data',{ascending:false}).limit(5000)
+    );
+    (descRows||[]).forEach(r=>{
+      const k=String(r.ean);
+      if (!descMap.has(k)) descMap.set(k, r.descricao||'');
+    });
+  }
+  const list = Array.from(count.entries()).map(([ean, q])=>({ ean, qnt:q, desc: descMap.get(ean)||'' }));
+  const mais = list.slice().sort((a,b)=>b.qnt-a.qnt).slice(0, lim);
+  const menos = list.slice().sort((a,b)=>a.qnt-b.qnt).filter(x=>x.qnt<=2).slice(0, lim);
+
+  // Render
+  const tb1 = tblMaisPesq; tb1.innerHTML='';
+  for (const r of mais){
+    const tr=document.createElement('tr');
+    tr.innerHTML = `<td class="mono">${r.ean}</td><td>${(r.desc||'').replace(/</g,'&lt;')}</td><td class="center">${r.qnt}</td>`;
+    tb1.appendChild(tr);
+  }
+  const tb2 = tblMenosPesq; tb2.innerHTML='';
+  for (const r of menos){
+    const tr=document.createElement('tr');
+    tr.innerHTML = `<td class="mono">${r.ean}</td><td>${(r.desc||'').replace(/</g,'&lt;')}</td><td class="center">${r.qnt}</td>`;
+    tb2.appendChild(tr);
+  }
+}
+
+/* ========= Placeholders Regionais / Fornecedor / Abaixo Custo =========
+   Basta popular as colunas mencionadas e remover o "empty". Exemplo de auto-ativação:
+*/
+(async function watchOptionalBlocks(){
+  // Região (sites.regiao ou view própria)
+  try{
+    const {from,to} = getPeriod();
+    const { data: rs } = await sb.from('sites').select('id, regiao').limit(1);
+    if (rs && rs.length && rs[0].regiao){
+      // Exemplo mínimo: média por regiao no período (client-side)
+      const { data } = await sb.from(VIEW).select('preco_num, site_id, data').gte('data',from.toISOString()).lte('data',to.toISOString()).not('preco_num','is',null).limit(10000);
+      const mapReg = new Map(); // regiao -> [precos]
+      // buscar mapa site_id->regiao
+      const { data: allSites } = await sb.from('sites').select('id, regiao').not('regiao','is',null);
+      const m = new Map((allSites||[]).map(s=>[Number(s.id), String(s.regiao)]));
+      (data||[]).forEach(r=>{
+        const reg = m.get(Number(r.site_id)); if(!reg) return;
+        const pn = Number(r.preco_num); if(!isFinite(pn)) return;
+        if(!mapReg.has(reg)) mapReg.set(reg, []); mapReg.get(reg).push(pn);
+      });
+      const pares = Array.from(mapReg.entries()).map(([reg, arr])=>[reg, arr.reduce((a,b)=>a+b,0)/arr.length]);
+      // desenha gráfico simples de barras
+      const canvas = document.getElementById('chartRegiao');
+      const ctx = canvas.getContext('2d');
+      document.querySelector('#blocoRegiao .empty').style.display='none';
+      canvas.style.display='block';
+      const W=canvas.width, H=canvas.height, pad=30;
+      ctx.clearRect(0,0,W,H);
+      const max = Math.max(...pares.map(p=>p[1]));
+      const bw = (W - pad*2)/Math.max(1,pares.length);
+      ctx.fillStyle='#00b140';
+      pares.forEach((p,i)=>{
+        const h = (p[1]/(max||1))*(H-pad*2);
+        ctx.fillRect(pad + i*bw + 6, H-pad - h, bw-12, h);
+        ctx.fillStyle='#9aa0a6'; ctx.font='12px Arial';
+        ctx.fillText(p[0], pad + i*bw + 6, H-pad+14);
+        ctx.fillStyle='#00b140';
+      });
+    }
+  }catch{}
+
+  // Fornecedor (sites.fornecedor)
+  try{
+    const { data: rs } = await sb.from('sites').select('id, fornecedor').limit(1);
+    if (rs && rs.length && rs[0].fornecedor){
+      document.querySelector('#blocoFornecedor .empty').style.display='none';
+      const {from,to} = getPeriod();
+      const { data } = await sb.from(VIEW).select('preco_num, site_id, data').gte('data',from.toISOString()).lte('data',to.toISOString()).not('preco_num','is',null).limit(10000);
+      const { data: allSites } = await sb.from('sites').select('id, fornecedor').not('fornecedor','is',null);
+      const m = new Map((allSites||[]).map(s=>[Number(s.id), String(s.fornecedor)]));
+      const agg = new Map(); // fornecedor -> {sum, cnt}
+      (data||[]).forEach(r=>{
+        const f = m.get(Number(r.site_id)); if(!f) return;
+        const pn = Number(r.preco_num); if(!isFinite(pn)) return;
+        if(!agg.has(f)) agg.set(f, {sum:0,cnt:0}); const o=agg.get(f); o.sum+=pn; o.cnt++;
+      });
+      const arr = Array.from(agg.entries()).map(([f,o])=>({ fornecedor:f, media: o.sum/o.cnt, qtd:o.cnt }));
+      // Render ranking preço (menor melhor)
+      const tbP = document.querySelector('#tblRankFornecedorPreco tbody'); tbP.innerHTML='';
+      arr.slice().sort((a,b)=>a.media-b.media).slice(0,20).forEach(r=>{
+        const tr=document.createElement('tr'); tr.innerHTML=`<td>${r.fornecedor}</td><td class="right">${formatBRL(r.media)}</td>`; tbP.appendChild(tr);
+      });
+      // Render ranking qtd
+      const tbQ = document.querySelector('#tblRankFornecedorQtd tbody'); tbQ.innerHTML='';
+      arr.slice().sort((a,b)=>b.qtd-a.qtd).slice(0,20).forEach(r=>{
+        const tr=document.createElement('tr'); tr.innerHTML=`<td>${r.fornecedor}</td><td class="right">${r.qtd}</td>`; tbQ.appendChild(tr);
+      });
+    }
+  }catch{}
+
+  // Abaixo do custo (meu_custo / custo_cliente)
+  try{
+    const { data: probe } = await sb.from(VIEW).select('ean, meu_custo, meu_preco').limit(1);
+    if (probe && probe.length && (probe[0].meu_custo!=null || probe[0].meu_preco!=null)){
+      const {from,to} = getPeriod();
+      const { data } = await sb.from(VIEW).select('ean, descricao, meu_custo, meu_preco, data')
+        .gte('data',from.toISOString()).lte('data',to.toISOString()).limit(10000);
+      const rows = (data||[]).filter(r=>isFiniteNum(r.meu_custo)&&isFiniteNum(r.meu_preco)&&r.meu_preco<r.meu_custo);
+      const wrap = document.querySelector('#blocoAbaixoCusto .tablewrap');
+      document.querySelector('#blocoAbaixoCusto .empty').style.display='none';
+      wrap.style.display='block';
+      const tb = document.querySelector('#tblAbaixoCusto tbody'); tb.innerHTML='';
+      rows.slice(0, Number(topLimit.value||20)).forEach(r=>{
+        const tr=document.createElement('tr');
+        const delta = Number(r.meu_preco) - Number(r.meu_custo);
+        tr.innerHTML = `
+          <td class="mono">${r.ean}</td>
+          <td>${(r.descricao||'').replace(/</g,'&lt;')}</td>
+          <td class="right">${formatBRL(r.meu_custo)}</td>
+          <td class="right">${formatBRL(r.meu_preco)}</td>
+          <td class="right">${formatBRL(delta)}</td>
+        `;
+        tb.appendChild(tr);
+      });
+    }
+  }catch{}
+})();
+
+/* ========= Ideias de insights futuros (para guiá-lo):
+   - Elasticidade de preço: correlação entre variação de preço e volume de pesquisa.
+   - “Ganho perdido”: quando meu_preco > menor concorrente por X%, estimar perda potencial.
+   - “Preço alvo”: sugerir preço competitivo (p.ex., P25 do mercado).
+   - Alertas: disparar quando Δ% diário > X ou quando concorrente fica abaixo do meu custo.
+   - Sazonalidade: heatmap de variações por dia da semana e mês.
+   - Cobertura: % de SKUs com preço válido por site (qualidade de scraping).
+*/
+</script>
+</body>
+</html>
