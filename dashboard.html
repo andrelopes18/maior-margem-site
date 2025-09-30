@@ -199,7 +199,7 @@
 
 <script>
 /* ========= Build Version ========= */
-const BUILD_VERSION = '2025-09-29 15:10 BRT'; // atualize a cada deploy
+const BUILD_VERSION = '2025-09-29 16:40 BRT'; // atualize a cada deploy
 const qBuild = new URLSearchParams(location.search).get('build');
 
 /* ========= Debug ========= */
@@ -225,30 +225,25 @@ const statusEl = document.getElementById('status');
 const buildChip = document.getElementById('buildChip');
 const planChip  = document.getElementById('planChip');
 const userChip  = document.getElementById('userChip');
-const ddMeusDados = document.getElementById('ddMeusDados');
-const ddPlanos    = document.getElementById('ddPlanos');
-const btnSair     = document.getElementById('btnSair');
-const btnReload   = document.getElementById('btnReload');
-const eanFilter   = document.getElementById('eanFilter');
-const descFilter  = document.getElementById('descFilter');
+const btnSair   = document.getElementById('btnSair');
+const btnReload = document.getElementById('btnReload');
+const eanFilter = document.getElementById('eanFilter');
+const descFilter= document.getElementById('descFilter');
 
 const favWrap  = document.getElementById('favWrap');
 const favBody  = document.querySelector('#favTable tbody');
 const favHeaderRow = document.getElementById('favHeaderRow');
 const favResizer  = document.getElementById('favResizer');
-const toggleFavBtn = document.getElementById('toggleFav');
-const btnPrintFav  = document.getElementById('btnPrintFav');
 
 const generalWrap = document.getElementById('generalWrap');
 const generalBody = document.querySelector('#produtosTable tbody');
 const generalHeaderRow = document.getElementById('generalHeaderRow');
 const endMarker   = document.getElementById('endMarker');
-const toggleGenBtn = document.getElementById('toggleGen');
 const countShown  = document.getElementById('countShown');
 const countTotal  = document.getElementById('countTotal');
 const countFavs   = document.getElementById('countFavs');
-const scopeGroup = document.getElementById('scopeGroup');
-const loadBar = document.getElementById('loadBar');
+const scopeGroup  = document.getElementById('scopeGroup');
+const loadBar     = document.getElementById('loadBar');
 
 const pop=document.getElementById('chartPopover'),
       popTitle=document.getElementById('chartTitle'),
@@ -262,14 +257,21 @@ const VIEW = 'latest_prices';
 const PAGE_SIZE = 200, RENDER_CHUNK = 60;
 const OUTLIER_TOL = 0.50;
 
-let sessionUserId = null;
+/* Escala de preço (corrige “valores multiplicados por mil”) */
+const PRICE_DIVISOR = (()=>{
+  const qd = new URLSearchParams(location.search).get('div');
+  const v = Number(qd ?? CFG.PRICE_DIVISOR ?? 1000); // por padrão divide por 1000
+  return (Number.isFinite(v) && v>0) ? v : 1;
+})();
+function scale(n){ return (typeof n==='number' && Number.isFinite(n)) ? (n/PRICE_DIVISOR) : n; }
 
+let sessionUserId = null;
 let chosen=[], unlocked=new Set(), locked=new Set();
 let produtosMap=new Map(), produtosList=[];
 let serverOffset=0, serverExhausted=false, fetching=false;
 let totalEstimated = null;
 let generalView=[], itemsRendered=0;
-let favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
+let favSet = new Set(); /* carregaremos de localStorage + servidor */
 let loadingMore=false; const generalChkMap=new Map();
 let favHeightUser = Number(localStorage.getItem('mm_fav_height')) || null, favFirstAutoRenderDone=false;
 let currentEanQ='', currentDescQ='', searchScope='both';
@@ -281,61 +283,31 @@ const COL_ORDER_KEY = 'mm_col_order';
 /* ========= Utils ========= */
 function setStatus(t){ statusEl.textContent = t||''; }
 function debounce(fn,ms=500){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); } }
-function favSave(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet])); }
+function favSaveLocal(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet])); }
 function isFav(sku){ return favSet.has(String(sku)); }
 function formatBRL(n){ try{ return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) }catch{ return String(n) } }
-
-/* Tenta converter strings como "1.234,56", "1234.56" etc. em número */
 function toNumberFromAny(v){
   if (typeof v === 'number') return Number.isFinite(v) ? v : null;
   if (v == null) return null;
   let s = String(v).trim();
   if (!s) return null;
-  // remove tudo que não é dígito, ponto, vírgula, ou sinal
   s = s.replace(/[^\d.,-]+/g,'');
   const hasComma = s.includes(',');
-  if (hasComma){
-    // "1.234,56" -> "1234,56" -> "1234.56"
-    s = s.replace(/\./g,'').replace(',','.');
-  }
+  if (hasComma){ s = s.replace(/\./g,'').replace(',','.'); }
   const n = Number(s);
   return Number.isFinite(n) ? n : null;
 }
-
-/* Tokens normalizados (para busca por descrição) */
+/* Busca/descrição */
 function normTokens(s){
-  const cleaned = (s||'').toString()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-    .toLowerCase().replace(/[^a-z0-9]+/g,' ')
-    .trim();
+  const cleaned = (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
   return cleaned ? cleaned.split(/\s+/) : [];
 }
-
-/* Index de descrição por item (evita recomputar sempre) */
 function ensureDescIndex(item){
   if (!item) return;
   if (item._descCached === item.desc && item._tok && !item._tokNeeds) return;
   item._descCached = item.desc || '';
   item._tok = normTokens(item._descCached);
   item._tokNeeds = false;
-}
-
-/* ========= Minimizar/Maximizar ========= */
-function applyToggle(btn, wrap, extraEl, key){
-  const collapsed = localStorage.getItem(key) === '1';
-  function setState(isCollapsed){
-    btn.setAttribute('aria-expanded', String(!isCollapsed));
-    btn.textContent = isCollapsed ? 'Maximizar' : 'Minimizar';
-    wrap.style.display = isCollapsed ? 'none' : 'block';
-    if (extraEl) extraEl.style.display = isCollapsed ? 'none' : '';
-  }
-  setState(collapsed);
-  btn.addEventListener('click', ()=>{
-    const currExpanded = btn.getAttribute('aria-expanded') === 'true';
-    const nextCollapsed = currExpanded;
-    localStorage.setItem(key, nextCollapsed ? '1' : '0');
-    setState(nextCollapsed);
-  });
 }
 
 /* ========= Cabeçalhos / colunas ========= */
@@ -464,9 +436,9 @@ function analyzeAllItemsOutliers(){
   for (const item of produtosList){
     const nums = [];
     const entries = Object.values(item.sites||{});
-    for (const s of entries){ 
+    for (const s of entries){
       let v = Number.isFinite(s.precoNum) ? s.precoNum : toNumberFromAny(s.precoRaw);
-      if (Number.isFinite(v)) nums.push(v);
+      if (Number.isFinite(v)) nums.push(scale(v));
     }
     if (nums.length >= 2){
       const mean = nums.reduce((a,b)=>a+b,0)/nums.length;
@@ -474,14 +446,14 @@ function analyzeAllItemsOutliers(){
       item.analysis = { mean, lo, hi, n:nums.length };
       for (const s of entries){
         let v = Number.isFinite(s.precoNum) ? s.precoNum : toNumberFromAny(s.precoRaw);
-        if (!Number.isFinite(v)){ s.valid = false; continue; }
-        s.valid = (v >= lo && v <= hi);
+        v = Number.isFinite(v) ? scale(v) : NaN;
+        s.valid = Number.isFinite(v) && (v >= lo && v <= hi);
       }
     } else {
       item.analysis = { mean: null, lo: null, hi: null, n: nums.length };
-      for (const s of entries){ 
+      for (const s of entries){
         let v = Number.isFinite(s.precoNum) ? s.precoNum : toNumberFromAny(s.precoRaw);
-        s.valid = Number.isFinite(v); 
+        s.valid = Number.isFinite(v);
       }
     }
   }
@@ -546,6 +518,7 @@ function computeMinMaxForRow(item){
     if (!d || !d.valid) continue;
     let v = Number.isFinite(d.precoNum) ? d.precoNum : toNumberFromAny(d.precoRaw);
     if (!Number.isFinite(v)) continue;
+    v = scale(v);
     if (v<min.val) min={label:c.label,val:v};
     if (v>max.val) max={label:c.label,val:v};
   }
@@ -555,16 +528,11 @@ function computeMinMaxForRow(item){
 function createPriceCell(item, label, isLocked, minLabel, maxLabel){
   const td=document.createElement('td'); if (isLocked) td.classList.add('locked-cell'); const d=item.sites[label];
 
-  // Sem "carregando" por célula — a fonte é estática
-  if (!d){
-    td.innerHTML='<span class="muted">—</span>';
-    return td;
-  }
+  if (!d){ td.innerHTML='<span class="muted">—</span>'; return td; }
 
   const dtStr=d.data?new Date(d.data).toLocaleString('pt-BR'):'';
   const url = buildSearchUrlByLabel(label, item.sku);
 
-  // validação de outlier
   if (!d.valid){
     const span=document.createElement('span');
     span.className='price';
@@ -576,10 +544,11 @@ function createPriceCell(item, label, isLocked, minLabel, maxLabel){
     return td;
   }
 
-  // Preferimos preco_num; se não houver, tentamos parsear precoRaw
   let valueNum = Number.isFinite(d.precoNum) ? d.precoNum : toNumberFromAny(d.precoRaw);
-  const cssCls = (!isLocked&&label===minLabel?'min':(!isLocked&&label===maxLabel?'max':'')) || '';
-  const priceSpan=document.createElement('span'); priceSpan.className='price '+cssCls;
+  if (Number.isFinite(valueNum)) valueNum = scale(valueNum);
+
+  const cls = (!isLocked&&label===minLabel?'min':(!isLocked&&label===maxLabel?'max':'')) || '';
+  const priceSpan=document.createElement('span'); priceSpan.className='price '+cls;
   priceSpan.title=isLocked?'Excedeu o limite do plano':(dtStr?('Atualizado em '+dtStr):'');
 
   if (Number.isFinite(valueNum)){
@@ -622,7 +591,8 @@ function getValueForKey(item, key){
     const label = key.slice(5);
     const d = item.sites?.[label];
     let v = d ? (Number.isFinite(d.precoNum) ? d.precoNum : toNumberFromAny(d.precoRaw)) : null;
-    return Number.isFinite(v) ? v : null;
+    v = Number.isFinite(v) ? scale(v) : null;
+    return v;
   }
   return null;
 }
@@ -755,7 +725,7 @@ generalWrap.addEventListener('scroll', onGeneralScroll);
 function renderRowIntoGeneral(tr,item){
   const tdFav=document.createElement('td'); tdFav.className='col-fav';
   const chk=document.createElement('input'); chk.type='checkbox'; chk.checked=isFav(item.sku);
-  chk.addEventListener('change',()=>{ if(chk.checked) favSet.add(item.sku); else favSet.delete(item.sku); favSave(); renderFavs(); updateFavHeight(); updateCounts(); });
+  chk.addEventListener('change',()=>{ if(chk.checked){ favSet.add(item.sku); saveFavServer(item.sku,true); } else { favSet.delete(item.sku); saveFavServer(item.sku,false); } favSaveLocal(); renderFavs(); updateFavHeight(); updateCounts(); });
   tdFav.appendChild(chk); tr.appendChild(tdFav); generalChkMap.set(item.sku, chk);
 
   const {min,max}=computeMinMaxForRow(item);
@@ -781,7 +751,7 @@ function renderFavs(){
     const tr=document.createElement('tr');
     const tdAct=document.createElement('td'); tdAct.className='col-fav';
     const btn=document.createElement('button'); btn.title='Remover'; btn.innerHTML='🗑️'; btn.type='button';
-    btn.addEventListener('click',()=>{ favSet.delete(item.sku); favSave(); const chk=generalChkMap.get(item.sku); if(chk){ chk.checked=false; } renderFavs(); updateFavHeight(); updateCounts(); });
+    btn.addEventListener('click',()=>{ favSet.delete(item.sku); favSaveLocal(); saveFavServer(item.sku,false); const chk=generalChkMap.get(item.sku); if(chk){ chk.checked=false; } renderFavs(); updateFavHeight(); updateCounts(); });
     tdAct.appendChild(btn); tr.appendChild(tdAct);
     const {min,max}=computeMinMaxForRow(item);
     for (const key of columnOrder){
@@ -830,7 +800,7 @@ function buildQuery(){
            .order('ean', { ascending:true });
 }
 
-/* ======== Descrições: hidratação a partir de múltiplas fontes ======== */
+/* ======== Descrições (duas fontes): via CONFIG e fallback heurístico ======== */
 let descHydrating = false;
 const descTriedEans = new Set();
 
@@ -845,9 +815,14 @@ async function ensureDescriptions(){
   dlog({step:'desc.hydrate.start', count:batch.length});
 
   try{
-    const map = await fetchDescriptionsFromSources(batch);
+    // 1) fontes explícitas no config.js
+    const mapCfg = await fetchDescriptionsFromConfiguredSources(batch);
+    // 2) fallback (varre tabelas comuns)
+    const mapFb  = await fetchDescriptionsFromHeuristic(batch);
+    const merged = new Map([...mapFb, ...mapCfg]); // prioridade ao cliente (config) — sobrescreve fallback
+
     let changed=0;
-    for (const [ean,desc] of map){
+    for (const [ean,desc] of merged){
       const it = produtosMap.get(ean);
       if (it && !it.desc && desc){ it.desc = desc; it._tokNeeds = true; changed++; }
     }
@@ -864,10 +839,30 @@ async function ensureDescriptions(){
   }
 }
 
-async function fetchDescriptionsFromSources(eans){
+async function fetchDescriptionsFromConfiguredSources(eans){
   const out = new Map();
+  const SRC = Array.isArray(CFG.DESC_SOURCES) ? CFG.DESC_SOURCES : [];
+  for (const src of SRC){
+    try{
+      const eCol = src.ean || 'ean', dCol = src.desc || 'descricao';
+      const userCol = src.userField || null;
+      const fields = [`ean:${eCol}`, `desc:${dCol}`].concat(userCol ? [userCol] : []);
+      const { data, error } = await sb.from(src.table).select(fields.join(',')).in(eCol, eans);
+      if (error || !Array.isArray(data)) continue;
+      for (const row of data){
+        const e = row.ean != null ? String(row.ean) : null;
+        const d = row.desc != null ? String(row.desc).trim() : null;
+        if (!e || !d) continue;
+        if (src.userScoped && userCol && sessionUserId && row[userCol] && row[userCol] !== sessionUserId) continue;
+        if (!out.has(e)) out.set(e, d);
+      }
+    }catch(_){}
+  }
+  return out;
+}
 
-  // Ordem de prioridade: fonte do cliente -> fonte geral
+async function fetchDescriptionsFromHeuristic(eans){
+  const out = new Map();
   const SOURCES = [
     { table:'itens_cliente'     },
     { table:'produtos_cliente'  },
@@ -877,7 +872,6 @@ async function fetchDescriptionsFromSources(eans){
     { table:'catalogo_itens'    },
   ];
   const COL_EAN_CAND = ['ean','gtin','codigo_ean','codigo','cod_barras','codigo_barras','sku'];
-  // Coleta de uma fonte
   async function tryTable(table){
     for (const col of COL_EAN_CAND){
       try{
@@ -893,7 +887,7 @@ async function fetchDescriptionsFromSources(eans){
           }
           return;
         }
-      }catch(_){ /* coluna ausente ou RLS bloqueou; segue */ }
+      }catch(_){}
     }
   }
   function pickEan(row){
@@ -917,10 +911,33 @@ async function fetchDescriptionsFromSources(eans){
     return s || null;
   }
 
-  for (const src of SOURCES){
-    try{ await tryTable(src.table); } catch(_){}
-  }
+  for (const src of SOURCES){ try{ await tryTable(src.table); }catch(_){ } }
   return out;
+}
+
+/* ========= FAVORITOS: localStorage + (opcional) tabela user_favorites ========= */
+async function loadFavorites(){
+  try{
+    favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
+  }catch{ favSet = new Set(); }
+  try{
+    if (!sessionUserId) return;
+    const { data, error } = await sb.from('user_favorites').select('ean').eq('user_id', sessionUserId);
+    if (!error && Array.isArray(data)){
+      for (const r of data){ if (r && r.ean!=null) favSet.add(String(r.ean)); }
+      favSaveLocal();
+    }
+  }catch(_){}
+}
+async function saveFavServer(ean, isFav){
+  try{
+    if (!sessionUserId) return;
+    if (isFav){
+      await sb.from('user_favorites').upsert({ user_id: sessionUserId, ean: String(ean) }, { onConflict: 'user_id,ean' });
+    } else {
+      await sb.from('user_favorites').delete().eq('user_id', sessionUserId).eq('ean', String(ean));
+    }
+  }catch(_){}
 }
 
 /* ========= Fetch ========= */
@@ -1044,7 +1061,7 @@ async function fetchHistory(ean, siteId){
   let pts=[];
   try{
     const { data, error } = await sb.from(VIEW).select('data, preco_num').eq('ean', ean).eq('site_id', siteId).not('preco_num','is',null).order('data',{ascending:true}).limit(180);
-    if (!error && data && data.length){ pts = data.map(r=>({ x:new Date(r.data), y:Number(r.preco_num) })).filter(p=>Number.isFinite(p.y)); }
+    if (!error && data && data.length){ pts = data.map(r=>({ x:new Date(r.data), y: scale(Number(r.preco_num)) })).filter(p=>Number.isFinite(p.y)); }
   }catch(e){ dlog({error:'fetchHistory.view', detail:String(e)}); }
   const byTs = new Map(pts.map(p=>[p.x.getTime(), p])); return Array.from(byTs.values()).sort((a,b)=>a.x-b.x);
 }
@@ -1090,10 +1107,10 @@ async function initUserAndSites(){
     }
   }catch(e){ dlog({warn:'profiles.select', detail:String(e)}); }
 
+  await loadFavorites();         // carrega favoritos (local + servidor, se houver)
   await loadUserSelection(session.user.id, planKey);
 }
 
-/* ========= Filtros ========= */
 const onFilterInput = debounce(()=>{
   currentEanQ = (eanFilter.value||'').trim();
   currentDescQ = (descFilter.value||'').trim();
@@ -1105,8 +1122,6 @@ eanFilter.addEventListener('input', onFilterInput);
 descFilter.addEventListener('input', onFilterInput);
 
 /* ========= UI ========= */
-document.getElementById('ddMeusDados').addEventListener('click', ()=> location.href='meusdados.html');
-document.getElementById('ddPlanos').addEventListener('click', ()=> location.href='planos.html');
 document.getElementById('btnSair').addEventListener('click', async ()=>{ try{ await sb.auth.signOut(); } finally{ localStorage.removeItem('mm_login_date'); location.href = CFG.SITE_URL || 'index.html'; }});
 document.getElementById('btnReload').addEventListener('click', async ()=>{
   dlog({step:'manualReload.start'});
@@ -1114,18 +1129,17 @@ document.getElementById('btnReload').addEventListener('click', async ()=>{
   resetAndQuery();
   dlog({step:'manualReload.end'});
 });
-document.getElementById('btnPrintFav').addEventListener('click', printFavReport);
 
 /* ========= Favoritos: resizer ========= */
 function measureRowHeight(){ const row=document.querySelector('#favTable tbody tr'); if(!row) return 44; const h=Math.round(row.getBoundingClientRect().height); return Math.max(36, h||44); }
 function measureHeadHeight(){ const head=document.querySelector('#favTable thead'); if(!head) return 40; const h=Math.round(head.getBoundingClientRect().height); return Math.max(32, h||40); }
 function applyFavHeight(px){ if(!px||!Number.isFinite(px)) return; const maxPx=Math.round(window.innerHeight*0.85); const clamped=Math.max(120, Math.min(px, maxPx)); favWrap.style.height=clamped+'px'; }
-function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); return; } const rowsLen=favBody.children.length; const rows=Math.min(rowsLen,20); const rowH=measureRowHeight(); const headH=measureHeadHeight(); const pad=8; const target=headH + rows*rowH + pad; applyFavHeight(target); }
+function updateFavHeight(){ const rowsLen=favBody.children.length; const rows=Math.min(rowsLen,20); const rowH=measureRowHeight(); const headH=measureHeadHeight(); const pad=8; const target=headH + rows*rowH + pad; applyFavHeight(target); }
 (function initResizer(){ let startY=0, startH=0;
-  function onMove(ev){ const dy=ev.clientY-startY; favHeightUser=startH+dy; localStorage.setItem('mm_fav_height', String(favHeightUser)); applyFavHeight(favHeightUser); }
+  function onMove(ev){ const dy=ev.clientY-startY; const favHeightUser=startH+dy; localStorage.setItem('mm_fav_height', String(favHeightUser)); applyFavHeight(favHeightUser); }
   function stop(){ removeEventListener('mousemove', onMove); removeEventListener('mouseup', stop); document.body.classList.remove('resizing'); }
   favResizer.addEventListener('mousedown', (ev)=>{ startY=ev.clientY; startH=favWrap.offsetHeight; document.body.classList.add('resizing'); addEventListener('mousemove', onMove); addEventListener('mouseup', stop); });
-  favResizer.addEventListener('dblclick', ()=>{ favHeightUser=null; localStorage.removeItem('mm_fav_height'); updateFavHeight(); });
+  favResizer.addEventListener('dblclick', ()=>{ localStorage.removeItem('mm_fav_height'); updateFavHeight(); });
 })();
 
 /* ========= Start ========= */
@@ -1135,8 +1149,22 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
     initScopeRadios();
     loadColumnOrder(); buildHeaders();
 
-    applyToggle(document.getElementById('toggleFav'), favWrap, document.getElementById('favResizer'), 'mm_tgl_fav');
-    applyToggle(document.getElementById('toggleGen'), generalWrap, null, 'mm_tgl_gen');
+    // Constrói cabeçalhos de Favoritos
+    (function buildFavHeaders(){
+      favHeaderRow.innerHTML='';
+      const thAcao = document.createElement('th'); thAcao.className='col-fav'; thAcao.textContent='Ação';
+      favHeaderRow.appendChild(thAcao);
+      for (const key of columnOrder){
+        const th=document.createElement('th');
+        th.setAttribute('data-sortkey', key);
+        th.classList.add('sortable','reorderable');
+        if (key==='sku') th.className='col-sku';
+        if (key==='desc') th.className='col-desc';
+        if (key==='meu_preco') th.className='col-param';
+        th.textContent = titleForKey(key);
+        favHeaderRow.appendChild(th);
+      }
+    })();
 
     resetAndQuery();
     generalWrap.dispatchEvent(new Event('scroll'));
