@@ -199,7 +199,7 @@
 
 <script>
 /* ========= Build Version ========= */
-const BUILD_VERSION = '2025-09-29 14:30 BRT'; // atualize a cada deploy
+const BUILD_VERSION = '2025-09-29 15:10 BRT'; // atualize a cada deploy
 const qBuild = new URLSearchParams(location.search).get('build');
 
 /* ========= Debug ========= */
@@ -300,6 +300,24 @@ function toNumberFromAny(v){
   }
   const n = Number(s);
   return Number.isFinite(n) ? n : null;
+}
+
+/* Tokens normalizados (para busca por descrição) */
+function normTokens(s){
+  const cleaned = (s||'').toString()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .toLowerCase().replace(/[^a-z0-9]+/g,' ')
+    .trim();
+  return cleaned ? cleaned.split(/\s+/) : [];
+}
+
+/* Index de descrição por item (evita recomputar sempre) */
+function ensureDescIndex(item){
+  if (!item) return;
+  if (item._descCached === item.desc && item._tok && !item._tokNeeds) return;
+  item._descCached = item.desc || '';
+  item._tok = normTokens(item._descCached);
+  item._tokNeeds = false;
 }
 
 /* ========= Minimizar/Maximizar ========= */
@@ -446,18 +464,25 @@ function analyzeAllItemsOutliers(){
   for (const item of produtosList){
     const nums = [];
     const entries = Object.values(item.sites||{});
-    for (const s of entries){ if (Number.isFinite(s.precoNum)) nums.push(s.precoNum); }
+    for (const s of entries){ 
+      let v = Number.isFinite(s.precoNum) ? s.precoNum : toNumberFromAny(s.precoRaw);
+      if (Number.isFinite(v)) nums.push(v);
+    }
     if (nums.length >= 2){
       const mean = nums.reduce((a,b)=>a+b,0)/nums.length;
       const lo = mean*(1-OUTLIER_TOL), hi = mean*(1+OUTLIER_TOL);
       item.analysis = { mean, lo, hi, n:nums.length };
       for (const s of entries){
-        if (!Number.isFinite(s.precoNum)){ s.valid = false; continue; }
-        s.valid = (s.precoNum >= lo && s.precoNum <= hi);
+        let v = Number.isFinite(s.precoNum) ? s.precoNum : toNumberFromAny(s.precoRaw);
+        if (!Number.isFinite(v)){ s.valid = false; continue; }
+        s.valid = (v >= lo && v <= hi);
       }
     } else {
       item.analysis = { mean: null, lo: null, hi: null, n: nums.length };
-      for (const s of entries){ s.valid = Number.isFinite(s.precoNum); }
+      for (const s of entries){ 
+        let v = Number.isFinite(s.precoNum) ? s.precoNum : toNumberFromAny(s.precoRaw);
+        s.valid = Number.isFinite(v); 
+      }
     }
   }
 }
@@ -476,17 +501,14 @@ function upsertRowsIntoProdutos(rows){
     item._tokNeeds = true;
   }
   produtosList = Array.from(produtosMap.values());
-  for (const it of produtosList){ if (it._tokNeeds) ensureDescIndex(it); }
+  for (const it of produtosList){ ensureDescIndex(it); }
   analyzeAllItemsOutliers();
 }
 
 function matchesFilters(item){
   const qE = (currentEanQ||'').trim();
   if (qE && !String(item.sku||'').includes(qE)) return false;
-  const qTokens = (function(s){
-    const cleaned = (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-    return cleaned ? cleaned.split(/\s+/) : [];
-  })(currentDescQ);
+  const qTokens = normTokens(currentDescQ);
   if (qTokens.length){
     ensureDescIndex(item);
     const words = item._tok || [];
@@ -521,9 +543,7 @@ function computeMinMaxForRow(item){
   for (const c of chosen){
     if (locked.has(c.site_id)) continue;
     const d=item.sites[c.label];
-    if (!d || !d.valid){
-      continue;
-    }
+    if (!d || !d.valid) continue;
     let v = Number.isFinite(d.precoNum) ? d.precoNum : toNumberFromAny(d.precoRaw);
     if (!Number.isFinite(v)) continue;
     if (v<min.val) min={label:c.label,val:v};
@@ -535,7 +555,7 @@ function computeMinMaxForRow(item){
 function createPriceCell(item, label, isLocked, minLabel, maxLabel){
   const td=document.createElement('td'); if (isLocked) td.classList.add('locked-cell'); const d=item.sites[label];
 
-  // NOVO: sem "carregando" por célula — tabela é estática
+  // Sem "carregando" por célula — a fonte é estática
   if (!d){
     td.innerHTML='<span class="muted">—</span>';
     return td;
@@ -859,7 +879,6 @@ async function fetchDescriptionsFromSources(eans){
   const COL_EAN_CAND = ['ean','gtin','codigo_ean','codigo','cod_barras','codigo_barras','sku'];
   // Coleta de uma fonte
   async function tryTable(table){
-    // tentamos filtrar por uma coluna de EAN conhecida
     for (const col of COL_EAN_CAND){
       try{
         const { data, error } = await sb.from(table).select(`*, ${col}`).in(col, eans).limit(2000);
@@ -869,13 +888,12 @@ async function fetchDescriptionsFromSources(eans){
             const ean = pickEan(row);
             const desc = pickDesc(row);
             const ownerId = row.user_id || row.usuario_id || row.owner_id || null;
-            // se a tabela tiver user_id e não for do usuário atual, ignora
             if (('user_id' in row || 'usuario_id' in row || 'owner_id' in row) && sessionUserId && ownerId && ownerId !== sessionUserId) continue;
             if (ean && desc && !out.has(ean)){ out.set(ean, desc); }
           }
-          return; // conseguimos nesta coluna, não precisa testar as outras
+          return;
         }
-      }catch(_){ /* coluna não existe ou RLS bloqueou; segue */ }
+      }catch(_){ /* coluna ausente ou RLS bloqueou; segue */ }
     }
   }
   function pickEan(row){
@@ -891,7 +909,6 @@ async function fetchDescriptionsFromSources(eans){
     return null;
   }
   function pickDesc(row){
-    // prioriza campos que parecem "descricao"
     let key = Object.keys(row).find(k=>/descri|desc/i.test(k));
     if (!key) key = Object.keys(row).find(k=>/^nome/i.test(k));
     const v = key ? row[key] : null;
