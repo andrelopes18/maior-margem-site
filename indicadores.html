@@ -8,59 +8,61 @@
   <style>
     :root { color-scheme: dark; }
     *{ box-sizing: border-box; }
-    body { margin:0; font-family: Arial, sans-serif; background:#121212; color:#fff; }
+    body { margin:0; font-family: Arial, sans-serif; background:#0a0d10; color:#fff; }
     header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:20px; flex-wrap:wrap; }
     h1 { color:#00b140; margin:0; font-size:22px; }
     .userbox { display:flex; gap:12px; align-items:center; }
-    .chip { font-size:12px; background:#1e1e1e; border:1px solid #333; padding:6px 10px; border-radius:999px; }
-    .chip.plan { color:#bfffc1; border-color:#2f5a2f; background:#132313; }
+    .chip { font-size:12px; background:#0e141b; border:1px solid #263241; padding:6px 10px; border-radius:999px; }
+    .chip.plan { color:#bfffc1; border-color:#2f5a2f; background:#122416; }
     .btn { background:#00b140; color:#fff; border:none; padding:8px 14px; border-radius:8px; cursor:pointer; }
     .btn:hover { background:#009b38; }
 
     main { padding:0 20px 24px; }
 
     .toolbar { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin: 0 0 14px; }
-    .toolbar .group { display:flex; gap:8px; align-items:center; background:#1a1a1a; border:1px solid #2a2a2a; padding:8px 10px; border-radius:10px; }
-    .toolbar input, .toolbar select { background:#101010; color:#fff; border:1px solid #2a2a2a; border-radius:8px; padding:8px 10px; }
+    .toolbar .group { display:flex; gap:8px; align-items:center; background:#0e141b; border:1px solid #263241; padding:8px 10px; border-radius:10px; box-shadow: 0 4px 10px rgba(0,0,0,.25); }
+    .toolbar input, .toolbar select { background:#0a0f14; color:#fff; border:1px solid #263241; border-radius:8px; padding:8px 10px; }
     .toolbar label { font-size:12px; color:#cfd8dc; }
 
-    .kpis { display:grid; grid-template-columns: repeat(4, minmax(220px, 1fr)); gap:12px; }
+    /* Maior contraste nos cartões */
+    .kpis { display:grid; grid-template-columns: repeat(4, minmax(220px, 1fr)); gap:14px; }
     @media (max-width:1200px){ .kpis{ grid-template-columns: repeat(2, minmax(220px, 1fr)); } }
     @media (max-width:640px){ .kpis{ grid-template-columns: 1fr; } }
 
-    .card { background:#1a1a1a; border:1px solid #2a2a2a; border-radius:14px; padding:14px; }
+    .card { background:#111823; border:1px solid #2d3b4a; border-radius:14px; padding:14px; box-shadow: 0 8px 18px rgba(0,0,0,.35); }
     .card h3 { margin:0; font-size:14px; color:#bfe3ff; font-weight:600; display:flex; align-items:center; gap:8px; }
     .kpi { display:flex; align-items:flex-end; justify-content:space-between; margin-top:8px; gap:12px; }
     .kpi .val { font-size:28px; font-weight:800; letter-spacing: .3px; }
     .muted { color:#9aa0a6; font-size:12px; }
     .spark { width:100%; height:54px; display:block; }
 
-    .grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:12px; }
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin-top:14px; }
     @media (max-width:1200px){ .grid{ grid-template-columns: 1fr; } }
 
-    .panel { background:#1a1a1a; border:1px solid #2a2a2a; border-radius:14px; }
-    .panel header { padding:12px 14px; border-bottom:1px solid #242424; display:flex; align-items:center; justify-content:space-between; }
+    /* Maior contraste nos painéis de relatório */
+    .panel { background:#141c27; border:1px solid #314457; border-radius:14px; box-shadow: 0 10px 22px rgba(0,0,0,.40); }
+    .panel header { padding:12px 14px; border-bottom:1px solid #2b3b4b; display:flex; align-items:center; justify-content:space-between; }
     .panel header h2 { margin:0; font-size:16px; color:#d5ffd5; }
     .panel .content { padding:12px 14px; }
     .panel .empty { color:#9aa0a6; font-size:13px; }
 
-    .tablewrap { overflow:auto; border:1px solid #2a2a2a; border-radius:10px; }
+    .tablewrap { overflow:auto; border:1px solid #2d3b4a; border-radius:10px; }
     table { width:100%; border-collapse:separate; border-spacing:0; }
-    thead th { position:sticky; top:0; background:#0f0f0f; z-index:1; }
-    th, td { border-bottom:1px solid #2a2a2a; padding:10px; text-align:left; font-size:14px; vertical-align:top; }
-    tbody tr:hover { background:#191919; }
+    thead th { position:sticky; top:0; background:#0c1218; z-index:1; }
+    th, td { border-bottom:1px solid #243344; padding:10px; text-align:left; font-size:14px; vertical-align:top; }
+    tbody tr:hover { background:#111924; }
+    /* Linhas zebradas para contraste */
+    tbody tr:nth-child(even){ background:#0f1620; }
+
     .mono { font-family: ui-monospace,Consolas,monospace; }
     .price { font-weight:700; display:inline-block; }
     .price.min { color:#00d084; }
     .price.max { color:#ff5d5d; }
-    .pill { font-size:12px; padding:2px 8px; border-radius:999px; border:1px solid #2a2a2a; background:#141414; color:#ddd; display:inline-block; }
+    .pill { font-size:12px; padding:2px 8px; border-radius:999px; border:1px solid #2d3b4a; background:#0f1620; color:#ddd; display:inline-block; }
 
     .hint { font-size:12px; color:#9aa0a6; margin-top:6px; }
     .status { margin:8px 0; color:#aaa; font-size:12px; }
     .err { display:none; color:#ff5d5d; margin:8px 0; font-size:13px; }
-
-    .legend { display:flex; gap:8px; flex-wrap:wrap; }
-    .legend .pill { background:#101010; }
 
     .right { text-align:right; }
     .center { text-align:center; }
@@ -127,7 +129,7 @@
         <div class="val" id="kpiProdutos">—</div>
         <canvas id="sparkProdutos" class="spark" width="300" height="54" aria-hidden="true"></canvas>
       </div>
-      <div class="muted" id="kpiProdutosHint">Amostra do período</div>
+      <div class="muted" id="kpiProdutosHint">Total em <code>cadastro_produtos</code> (amostra de tendência usa a view).</div>
     </div>
     <div class="card">
       <h3>Nº de sites</h3>
@@ -135,7 +137,7 @@
         <div class="val" id="kpiSites">—</div>
         <canvas id="sparkSites" class="spark" width="300" height="54" aria-hidden="true"></canvas>
       </div>
-      <div class="muted" id="kpiSitesHint">Sites ativos no período</div>
+      <div class="muted" id="kpiSitesHint">Total em <code>sites</code> (tendência usa a view).</div>
     </div>
     <div class="card">
       <h3>Economia estimada (baseado em vendas)</h3>
@@ -155,9 +157,12 @@
   </section>
 
   <!-- OPORTUNIDADES -->
-  <section class="grid" style="margin-top:12px;">
+  <section class="grid" style="margin-top:14px;">
     <div class="panel">
-      <header><h2>Oportunidades — Produtos mais baratos</h2><div class="legend"><span class="pill">Melhor preço</span><span class="pill">Δ vs média</span></div></header>
+      <header>
+        <h2>Oportunidades — Produtos mais baratos</h2>
+        <div><span class="pill">Δ &lt; 0 (abaixo da média)</span></div>
+      </header>
       <div class="content">
         <div class="tablewrap">
           <table id="tblMaisBaratos">
@@ -174,12 +179,15 @@
             <tbody></tbody>
           </table>
         </div>
-        <div class="hint">Critério: menor preço do período por EAN (filtrando outliers).</div>
+        <div class="hint">Critério: menor preço do período por EAN, filtrado por outliers e **somente** quando Δ &lt; 0.</div>
       </div>
     </div>
 
     <div class="panel">
-      <header><h2>Oportunidades — Produtos mais caros</h2><div class="legend"><span class="pill">Pior preço</span><span class="pill">Δ vs média</span></div></header>
+      <header>
+        <h2>Oportunidades — Produtos mais caros</h2>
+        <div><span class="pill">Δ &gt; 0 (acima da média)</span></div>
+      </header>
       <div class="content">
         <div class="tablewrap">
           <table id="tblMaisCaros">
@@ -196,7 +204,7 @@
             <tbody></tbody>
           </table>
         </div>
-        <div class="hint">Critério: maior preço do período por EAN (filtrando outliers).</div>
+        <div class="hint">Critério: maior preço do período por EAN, filtrado por outliers e **somente** quando Δ &gt; 0.</div>
       </div>
     </div>
   </section>
@@ -242,47 +250,7 @@
             <tbody></tbody>
           </table>
         </div>
-        <div class="hint">Compara o primeiro e o último preço do período por (EAN, Site).</div>
-      </div>
-    </div>
-  </section>
-
-  <section class="grid">
-    <div class="panel">
-      <header><h2>Produtos mais pesquisados</h2></header>
-      <div class="content">
-        <div class="tablewrap">
-          <table id="tblMaisPesq">
-            <thead>
-              <tr>
-                <th>EAN</th>
-                <th>Descrição (última vista)</th>
-                <th class="center">Pesquisas</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-        <div class="hint">Fonte: <code>search_logs</code> (escopo dashboard), agregação por EAN no período.</div>
-      </div>
-    </div>
-
-    <div class="panel">
-      <header><h2>Produtos menos pesquisados</h2></header>
-      <div class="content">
-        <div class="tablewrap">
-          <table id="tblMenosPesq">
-            <thead>
-              <tr>
-                <th>EAN</th>
-                <th>Descrição (última vista)</th>
-                <th class="center">Pesquisas</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-        <div class="hint">Itens com 1 consulta ou raros no período.</div>
+        <div class="hint">Compara o primeiro e o último preço do período por (EAN, Site). Exibe apenas quando Δ ≠ 0.</div>
       </div>
     </div>
   </section>
@@ -296,32 +264,7 @@
       </div>
     </div>
 
-    <div class="panel">
-      <header><h2>Ranking de fornecedores</h2></header>
-      <div class="content" id="blocoFornecedor">
-        <div class="empty">Inclua <span class="pill">fornecedor</span> em <code>sites</code> (ou view com <em>fornecedor, preco_num</em>). Dois rankings serão exibidos: “melhores preços” e “mais itens”.</div>
-        <div class="grid" style="grid-template-columns: 1fr 1fr; margin-top:10px;">
-          <div>
-            <h3 class="muted" style="margin:0 0 8px;">Melhores preços (média)</h3>
-            <div class="tablewrap">
-              <table id="tblRankFornecedorPreco">
-                <thead><tr><th>Fornecedor</th><th class="right">Média R$</th></tr></thead>
-                <tbody></tbody>
-              </table>
-            </div>
-          </div>
-          <div>
-            <h3 class="muted" style="margin:0 0 8px;">Mais itens</h3>
-            <div class="tablewrap">
-              <table id="tblRankFornecedorQtd">
-                <thead><tr><th>Fornecedor</th><th class="right">Qtd Itens</th></tr></thead>
-                <tbody></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <!-- (Ranking de fornecedor removido, conforme pedido) -->
 
   </section>
 
@@ -348,7 +291,7 @@ function showErr(msg){ errEl.style.display='block'; errEl.textContent=msg; conso
 function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
 function formatBRL(n){ try { return Number(n).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); } catch { return String(n); } }
 function pct(a,b){ if(!isFinite(a)||!isFinite(b)||b===0) return NA; const p=((a-b)/b)*100; return (p>=0?'+':'')+p.toFixed(1)+'%'; }
-function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+function isFiniteNum(n){ return typeof n === 'number' && isFinite(n); }
 
 /* ========= Controles ========= */
 const dateFrom = document.getElementById('dateFrom');
@@ -381,12 +324,12 @@ const sparkProdutos = document.getElementById('sparkProdutos').getContext('2d');
 const sparkSites    = document.getElementById('sparkSites').getContext('2d');
 const sparkVariacao = document.getElementById('sparkVariacao').getContext('2d');
 
-function drawSpark(ctx, points){ // points: number[]
+function drawSpark(ctx, points){
   const W = ctx.canvas.width, H = ctx.canvas.height;
   ctx.clearRect(0,0,W,H);
   if(!points || points.length<2){ ctx.fillStyle='#9aa0a6'; ctx.fillText('—', 8, H-10); return; }
   const min = Math.min(...points), max = Math.max(...points);
-  const sx = (i)=> (i/(points.length-1))*(W-8-8)+8;
+  const sx = (i)=> (i/(points.length-1))*(W-16)+8;
   const sy = (v)=> H-8 - ((v-min)/(max-min||1))*(H-16);
   ctx.strokeStyle='#00d084'; ctx.lineWidth=2;
   ctx.beginPath();
@@ -398,8 +341,6 @@ function drawSpark(ctx, points){ // points: number[]
 const tblMaisBaratos = document.querySelector('#tblMaisBaratos tbody');
 const tblMaisCaros   = document.querySelector('#tblMaisCaros tbody');
 const tblMaioresAlt  = document.querySelector('#tblMaioresAlt tbody');
-const tblMaisPesq    = document.querySelector('#tblMaisPesq tbody');
-const tblMenosPesq   = document.querySelector('#tblMenosPesq tbody');
 
 /* ========= INIT ========= */
 (async function init(){
@@ -428,12 +369,13 @@ async function reloadAll(){
   hideErr();
   try{
     setStatus('Carregando KPIs…');
+    await loadKpis();
+    setStatus('Carregando Oportunidades…');
     await Promise.all([
-      loadKpis(),
       loadMaisBaratos(),
       loadMaisCaros(),
       loadMaioresAlt(),
-      loadPesquisas()
+      loadRegiao()
     ]);
     setStatus('Pronto.');
   }catch(e){
@@ -455,26 +397,21 @@ function applyDateFilter(q){
   return q;
 }
 
-/* ========= Consultas ========= */
-// Contadores via HEAD: true para count exato
-async function countDistinct(field){
-  const q = applyDateFilter( sb.from(VIEW).select(field, { count:'exact', head:true }) );
-  // Dica: em PostgREST, count+head conta linhas do select. Use .select('distinct field') se tiver view com colunas amplas.
-  const { count, error } = await q;
+/* ========= Consultas utilitárias ========= */
+async function countRows(table){
+  // Conta linhas de uma tabela, sem carregar dados
+  const { count, error } = await sb.from(table).select('*', { count:'exact', head:true });
   if (error) throw error;
   return count ?? 0;
 }
-
-// Para KPIs de séries (sparks), geramos buckets diários
 async function seriesCountByDay(distinctField){
   const {from,to} = getPeriod();
   const days =  Math.max(1, Math.ceil((to - from)/(24*3600*1000)));
-  const map = new Map(); // key=YYYY-MM-DD -> Set or counter
+  const map = new Map(); // YYYY-MM-DD -> Set
   for (let i=0;i<=days;i++){
     const d = new Date(from.getTime() + i*24*3600*1000);
     map.set(d.toISOString().slice(0,10), new Set());
   }
-  // Busca amostra (limite para perf). Ajuste conforme volume:
   const { data, error } = await applyDateFilter(
     sb.from(VIEW).select('data,'+distinctField).not(''+distinctField,'is',null).order('data',{ascending:true}).limit(5000)
   );
@@ -486,11 +423,8 @@ async function seriesCountByDay(distinctField){
   return Array.from(map.values()).map(set=>set.size);
 }
 
-function isFiniteNum(n){ return typeof n === 'number' && isFinite(n); }
-
 function computeStatsByEan(rows){
   // rows: [{ean, preco_num, site_id, site_nome, data, descricao}]
-  // agrega preços válidos por EAN e calcula média
   const byEan = new Map();
   for (const r of rows){
     const pn = Number(r.preco_num);
@@ -512,74 +446,99 @@ function computeStatsByEan(rows){
 
 /* ========= KPIs ========= */
 async function loadKpis(){
-  // Nº produtos (distintos EAN no período)
-  const totalProdutos = await countDistinct('ean');
-  kpiProdutos.textContent = totalProdutos.toLocaleString('pt-BR');
-
-  // Nº sites (distintos site_id no período)
-  const totalSites = await countDistinct('site_id');
-  kpiSites.textContent = totalSites.toLocaleString('pt-BR');
-
-  // Sparks simples (amostras diárias)
+  // Nº produtos da tabela cadastro_produtos
   try{
-    const s1 = await seriesCountByDay('ean');  drawSpark(sparkProdutos, s1);
-    const s2 = await seriesCountByDay('site_id'); drawSpark(sparkSites, s2);
-  }catch{ /* ignora spark em erros de amostra */ }
+    const totalProdutos = await countRows('cadastro_produtos');
+    kpiProdutos.textContent = totalProdutos.toLocaleString('pt-BR');
+  }catch(e){
+    console.warn('cadastro_produtos count falhou:', e?.message||e);
+    kpiProdutos.textContent = '—';
+  }
 
-  // Variação média (amostra): pegamos últimos e primeiros preços por (ean, site)
-  const {from,to} = getPeriod();
-  const { data, error } = await applyDateFilter(
-    sb.from(VIEW).select('ean, site_id, preco_num, data').not('preco_num','is',null).order('data',{ascending:true}).limit(8000)
-  );
-  if (!error && data && data.length){
-    const key = (r)=> String(r.ean)+'|'+String(r.site_id);
-    const first = new Map(), last = new Map();
-    for (const r of data){
-      const k=key(r), pn=Number(r.preco_num); if(!isFinite(pn)) continue;
-      if (!first.has(k)) first.set(k, pn);
-      last.set(k, pn);
+  // Nº sites da tabela sites
+  try{
+    const totalSites = await countRows('sites');
+    kpiSites.textContent = totalSites.toLocaleString('pt-BR');
+  }catch(e){
+    console.warn('sites count falhou:', e?.message||e);
+    kpiSites.textContent = '—';
+  }
+
+  // Sparks de tendência (amostras usando a view)
+  try{
+    const s1 = await seriesCountByDay('ean');      drawSpark(sparkProdutos, s1);
+  }catch{}
+  try{
+    const s2 = await seriesCountByDay('site_id');  drawSpark(sparkSites, s2);
+  }catch{}
+
+  // Variação média (amostra): primeiros vs últimos por (ean, site)
+  try{
+    const { data } = await applyDateFilter(
+      sb.from(VIEW).select('ean, site_id, preco_num, data')
+        .not('preco_num','is',null).order('data',{ascending:true}).limit(8000)
+    );
+    if (data && data.length){
+      const key = (r)=> String(r.ean)+'|'+String(r.site_id);
+      const first = new Map(), last = new Map();
+      for (const r of data){
+        const k=key(r), pn=Number(r.preco_num); if(!isFinite(pn)) continue;
+        if (!first.has(k)) first.set(k, pn);
+        last.set(k, pn);
+      }
+      let sum=0, cnt=0, series=[];
+      for (const [k, fa] of first){
+        const la = last.get(k); if(isFiniteNum(la)){ sum += (la-fa)/Math.max(1e-9, fa); cnt++; series.push(Math.abs((la-fa)/Math.max(1e-9, fa))); }
+      }
+      const avg = cnt ? (sum/cnt)*100 : 0;
+      kpiVariacao.textContent = (avg>=0?'+':'')+avg.toFixed(1)+'%';
+      drawSpark(sparkVariacao, series.slice(-30));
+    }else{
+      kpiVariacao.textContent = '—';
     }
-    let sum=0, cnt=0, series=[];
-    for (const [k, fa] of first){
-      const la = last.get(k); if(isFiniteNum(la)){ sum += (la-fa)/Math.max(1e-9, fa); cnt++; series.push(Math.abs((la-fa)/Math.max(1e-9, fa))); }
-    }
-    const avg = cnt ? (sum/cnt)*100 : 0;
-    kpiVariacao.textContent = (avg>=0?'+':'')+avg.toFixed(1)+'%';
-    drawSpark(sparkVariacao, series.slice(-30));
-  }else{
+  }catch(e){
+    console.warn('variacao falhou:', e?.message||e);
     kpiVariacao.textContent = '—';
   }
 
-  // Economia (placeholder): precisa integrar vendas e “meu_preco”
+  // Economia (placeholder)
   kpiEconomia.textContent = '—';
 }
 
-/* ========= Mais baratos / Mais caros ========= */
+/* ========= Oportunidades ========= */
 async function fetchPricesSample(limit){
-  // Amostra do período para calcular mean/min/max por EAN de forma client-side
   const { data, error } = await applyDateFilter(
     sb.from(VIEW).select('ean, descricao, site_id, site_nome, preco_num, data')
       .not('preco_num','is',null)
       .order('data',{ascending:false})
-      .limit(12000) // ajuste conforme volume
+      .limit(12000)
   );
   if (error) throw error;
   const tol = Number(outTol.value || '0.50');
-  // calcula estatísticas por ean
   const stats = computeStatsByEan(data||[]);
-  // aplica filtro de outlier no momento de montar “mais baratos”/“mais caros”
   const baratos=[], caros=[];
   for (const s of stats){
     const lo = s.mean*(1-tol), hi = s.mean*(1+tol);
-    if (isFiniteNum(s.min.preco) && s.min.preco>=lo && s.min.preco<=hi){
-      baratos.push({ ean:s.ean, desc:s.desc, site:s.min.site, preco:s.min.preco, mean:s.mean });
+    const minOk = isFiniteNum(s.min.preco) && s.min.preco>=lo && s.min.preco<=hi;
+    const maxOk = isFiniteNum(s.max.preco) && s.max.preco>=lo && s.max.preco<=hi;
+
+    if (minOk){
+      const diffMin = s.min.preco - s.mean;
+      if (diffMin < 0){ // apenas Δ < 0
+        baratos.push({ ean:s.ean, desc:s.desc, site:s.min.site, preco:s.min.preco, mean:s.mean, diff: diffMin });
+      }
     }
-    if (isFiniteNum(s.max.preco) && s.max.preco>=lo && s.max.preco<=hi){
-      caros.push({ ean:s.ean, desc:s.desc, site:s.max.site, preco:s.max.preco, mean:s.mean });
+    if (maxOk){
+      const diffMax = s.max.preco - s.mean;
+      if (diffMax > 0){ // apenas Δ > 0
+        caros.push({ ean:s.ean, desc:s.desc, site:s.max.site, preco:s.max.preco, mean:s.mean, diff: diffMax });
+      }
     }
   }
-  baratos.sort((a,b)=>a.preco-b.preco);
-  caros.sort((a,b)=>b.preco-a.preco);
+  // Ordenações focadas na “oportunidade”
+  baratos.sort((a,b)=>a.diff-b.diff);      // mais negativo primeiro
+  caros.sort((a,b)=>b.diff-a.diff);        // mais positivo primeiro
+
   return {
     baratos: baratos.slice(0, limit),
     caros:   caros.slice(0, limit)
@@ -622,7 +581,7 @@ async function loadMaisCaros(){
   }
 }
 
-/* ========= Maiores alterações de preço ========= */
+/* ========= Maiores alterações de preço (Δ ≠ 0) ========= */
 async function loadMaioresAlt(){
   const lim = Number(topLimit.value||20);
   const { data, error } = await applyDateFilter(
@@ -646,8 +605,9 @@ async function loadMaioresAlt(){
   for (const [k, fa] of first){
     const la = last.get(k);
     if (!isFiniteNum(la)) continue;
-    const [ean, site_id] = k.split('|');
     const delta = la - fa;
+    if (delta === 0) continue; // **apenas quando há alteração**
+    const [ean, site_id] = k.split('|');
     const perc  = fa ? (delta/fa)*100 : 0;
     arr.push({
       ean, site: siteBy.get(site_id)||site_id, desc: descBy.get(ean)||'',
@@ -671,128 +631,54 @@ async function loadMaioresAlt(){
   });
 }
 
-/* ========= Pesquisas (search_logs) ========= */
-async function loadPesquisas(){
-  const lim = Number(topLimit.value||20);
-  const {from,to} = getPeriod();
-  // Traz logs brutos do período (apenas os que têm EAN)
-  const { data, error } = await sb.from('search_logs')
-    .select('ean_query, created_at')
-    .not('ean_query','is',null)
-    .gte('created_at', from.toISOString())
-    .lte('created_at', to.toISOString())
-    .order('created_at',{ascending:false})
-    .limit(5000);
-  if (error){ console.warn('search_logs', error); }
+/* ========= Região (opcional) ========= */
+async function loadRegiao(){
+  try{
+    const { data: rs } = await sb.from('sites').select('id, regiao').limit(1);
+    if (!(rs && rs.length && rs[0].regiao)) return; // sem coluna regiao, manter placeholder
 
-  const count = new Map();
-  for (const r of (data||[])){
-    const ean = String(r.ean_query||'').replace(/\D/g,'');
-    if (ean.length<8) continue;
-    count.set(ean, (count.get(ean)||0)+1);
-  }
-  // recuperar última descrição vista na view, para apresentação
-  const eans = Array.from(count.keys()).slice(0, 500);
-  let descMap = new Map();
-  if (eans.length){
-    const { data:descRows } = await applyDateFilter(
-      sb.from(VIEW).select('ean, descricao').in('ean', eans).order('data',{ascending:false}).limit(5000)
-    );
-    (descRows||[]).forEach(r=>{
-      const k=String(r.ean);
-      if (!descMap.has(k)) descMap.set(k, r.descricao||'');
+    const {from,to} = getPeriod();
+    const { data } = await sb.from(VIEW).select('preco_num, site_id, data')
+      .gte('data',from.toISOString()).lte('data',to.toISOString())
+      .not('preco_num','is',null).limit(10000);
+
+    const { data: allSites } = await sb.from('sites').select('id, regiao').not('regiao','is',null);
+    const m = new Map((allSites||[]).map(s=>[Number(s.id), String(s.regiao)]));
+
+    const mapReg = new Map(); // regiao -> [precos]
+    (data||[]).forEach(r=>{
+      const reg = m.get(Number(r.site_id)); if(!reg) return;
+      const pn = Number(r.preco_num); if(!isFinite(pn)) return;
+      if(!mapReg.has(reg)) mapReg.set(reg, []); mapReg.get(reg).push(pn);
     });
-  }
-  const list = Array.from(count.entries()).map(([ean, q])=>({ ean, qnt:q, desc: descMap.get(ean)||'' }));
-  const mais = list.slice().sort((a,b)=>b.qnt-a.qnt).slice(0, lim);
-  const menos = list.slice().sort((a,b)=>a.qnt-b.qnt).filter(x=>x.qnt<=2).slice(0, lim);
+    if (!mapReg.size) return;
 
-  // Render
-  const tb1 = tblMaisPesq; tb1.innerHTML='';
-  for (const r of mais){
-    const tr=document.createElement('tr');
-    tr.innerHTML = `<td class="mono">${r.ean}</td><td>${(r.desc||'').replace(/</g,'&lt;')}</td><td class="center">${r.qnt}</td>`;
-    tb1.appendChild(tr);
-  }
-  const tb2 = tblMenosPesq; tb2.innerHTML='';
-  for (const r of menos){
-    const tr=document.createElement('tr');
-    tr.innerHTML = `<td class="mono">${r.ean}</td><td>${(r.desc||'').replace(/</g,'&lt;')}</td><td class="center">${r.qnt}</td>`;
-    tb2.appendChild(tr);
+    const pares = Array.from(mapReg.entries()).map(([reg, arr])=>[reg, arr.reduce((a,b)=>a+b,0)/arr.length]);
+
+    // desenha gráfico simples de barras
+    const canvas = document.getElementById('chartRegiao');
+    const ctx = canvas.getContext('2d');
+    document.querySelector('#blocoRegiao .empty').style.display='none';
+    canvas.style.display='block';
+    const W=canvas.width, H=canvas.height, pad=30;
+    ctx.clearRect(0,0,W,H);
+    const max = Math.max(...pares.map(p=>p[1]));
+    const bw = (W - pad*2)/Math.max(1,pares.length);
+    ctx.fillStyle='#00b140';
+    pares.forEach((p,i)=>{
+      const h = (p[1]/(max||1))*(H-pad*2);
+      ctx.fillRect(pad + i*bw + 6, H-pad - h, bw-12, h);
+      ctx.fillStyle='#9aa0a6'; ctx.font='12px Arial';
+      ctx.fillText(p[0], pad + i*bw + 6, H-pad+14);
+      ctx.fillStyle='#00b140';
+    });
+  }catch(e){
+    console.warn('regiao falhou:', e?.message||e);
   }
 }
 
-/* ========= Placeholders Regionais / Fornecedor / Abaixo Custo =========
-   Basta popular as colunas mencionadas e remover o "empty". Exemplo de auto-ativação:
-*/
-(async function watchOptionalBlocks(){
-  // Região (sites.regiao ou view própria)
-  try{
-    const {from,to} = getPeriod();
-    const { data: rs } = await sb.from('sites').select('id, regiao').limit(1);
-    if (rs && rs.length && rs[0].regiao){
-      // Exemplo mínimo: média por regiao no período (client-side)
-      const { data } = await sb.from(VIEW).select('preco_num, site_id, data').gte('data',from.toISOString()).lte('data',to.toISOString()).not('preco_num','is',null).limit(10000);
-      const mapReg = new Map(); // regiao -> [precos]
-      // buscar mapa site_id->regiao
-      const { data: allSites } = await sb.from('sites').select('id, regiao').not('regiao','is',null);
-      const m = new Map((allSites||[]).map(s=>[Number(s.id), String(s.regiao)]));
-      (data||[]).forEach(r=>{
-        const reg = m.get(Number(r.site_id)); if(!reg) return;
-        const pn = Number(r.preco_num); if(!isFinite(pn)) return;
-        if(!mapReg.has(reg)) mapReg.set(reg, []); mapReg.get(reg).push(pn);
-      });
-      const pares = Array.from(mapReg.entries()).map(([reg, arr])=>[reg, arr.reduce((a,b)=>a+b,0)/arr.length]);
-      // desenha gráfico simples de barras
-      const canvas = document.getElementById('chartRegiao');
-      const ctx = canvas.getContext('2d');
-      document.querySelector('#blocoRegiao .empty').style.display='none';
-      canvas.style.display='block';
-      const W=canvas.width, H=canvas.height, pad=30;
-      ctx.clearRect(0,0,W,H);
-      const max = Math.max(...pares.map(p=>p[1]));
-      const bw = (W - pad*2)/Math.max(1,pares.length);
-      ctx.fillStyle='#00b140';
-      pares.forEach((p,i)=>{
-        const h = (p[1]/(max||1))*(H-pad*2);
-        ctx.fillRect(pad + i*bw + 6, H-pad - h, bw-12, h);
-        ctx.fillStyle='#9aa0a6'; ctx.font='12px Arial';
-        ctx.fillText(p[0], pad + i*bw + 6, H-pad+14);
-        ctx.fillStyle='#00b140';
-      });
-    }
-  }catch{}
-
-  // Fornecedor (sites.fornecedor)
-  try{
-    const { data: rs } = await sb.from('sites').select('id, fornecedor').limit(1);
-    if (rs && rs.length && rs[0].fornecedor){
-      document.querySelector('#blocoFornecedor .empty').style.display='none';
-      const {from,to} = getPeriod();
-      const { data } = await sb.from(VIEW).select('preco_num, site_id, data').gte('data',from.toISOString()).lte('data',to.toISOString()).not('preco_num','is',null).limit(10000);
-      const { data: allSites } = await sb.from('sites').select('id, fornecedor').not('fornecedor','is',null);
-      const m = new Map((allSites||[]).map(s=>[Number(s.id), String(s.fornecedor)]));
-      const agg = new Map(); // fornecedor -> {sum, cnt}
-      (data||[]).forEach(r=>{
-        const f = m.get(Number(r.site_id)); if(!f) return;
-        const pn = Number(r.preco_num); if(!isFinite(pn)) return;
-        if(!agg.has(f)) agg.set(f, {sum:0,cnt:0}); const o=agg.get(f); o.sum+=pn; o.cnt++;
-      });
-      const arr = Array.from(agg.entries()).map(([f,o])=>({ fornecedor:f, media: o.sum/o.cnt, qtd:o.cnt }));
-      // Render ranking preço (menor melhor)
-      const tbP = document.querySelector('#tblRankFornecedorPreco tbody'); tbP.innerHTML='';
-      arr.slice().sort((a,b)=>a.media-b.media).slice(0,20).forEach(r=>{
-        const tr=document.createElement('tr'); tr.innerHTML=`<td>${r.fornecedor}</td><td class="right">${formatBRL(r.media)}</td>`; tbP.appendChild(tr);
-      });
-      // Render ranking qtd
-      const tbQ = document.querySelector('#tblRankFornecedorQtd tbody'); tbQ.innerHTML='';
-      arr.slice().sort((a,b)=>b.qtd-a.qtd).slice(0,20).forEach(r=>{
-        const tr=document.createElement('tr'); tr.innerHTML=`<td>${r.fornecedor}</td><td class="right">${r.qtd}</td>`; tbQ.appendChild(tr);
-      });
-    }
-  }catch{}
-
-  // Abaixo do custo (meu_custo / custo_cliente)
+/* ========= Abaixo do custo (opcional) ========= */
+(async function watchAbaixoCusto(){
   try{
     const { data: probe } = await sb.from(VIEW).select('ean, meu_custo, meu_preco').limit(1);
     if (probe && probe.length && (probe[0].meu_custo!=null || probe[0].meu_preco!=null)){
@@ -819,15 +705,6 @@ async function loadPesquisas(){
     }
   }catch{}
 })();
-
-/* ========= Ideias de insights futuros (para guiá-lo):
-   - Elasticidade de preço: correlação entre variação de preço e volume de pesquisa.
-   - “Ganho perdido”: quando meu_preco > menor concorrente por X%, estimar perda potencial.
-   - “Preço alvo”: sugerir preço competitivo (p.ex., P25 do mercado).
-   - Alertas: disparar quando Δ% diário > X ou quando concorrente fica abaixo do meu custo.
-   - Sazonalidade: heatmap de variações por dia da semana e mês.
-   - Cobertura: % de SKUs com preço válido por site (qualidade de scraping).
-*/
 </script>
 </body>
 </html>
