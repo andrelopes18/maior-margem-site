@@ -24,7 +24,7 @@
     .toolbar input, .toolbar select { background:#0a0f14; color:#fff; border:1px solid #263241; border-radius:8px; padding:8px 10px; }
     .toolbar label { font-size:12px; color:#cfd8dc; }
 
-    /* Maior contraste nos cartões */
+    /* KPIs */
     .kpis { display:grid; grid-template-columns: repeat(4, minmax(220px, 1fr)); gap:14px; }
     @media (max-width:1200px){ .kpis{ grid-template-columns: repeat(2, minmax(220px, 1fr)); } }
     @media (max-width:640px){ .kpis{ grid-template-columns: 1fr; } }
@@ -39,19 +39,19 @@
     .grid { display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin-top:14px; }
     @media (max-width:1200px){ .grid{ grid-template-columns: 1fr; } }
 
-    /* Maior contraste nos painéis de relatório */
+    /* Painéis */
     .panel { background:#141c27; border:1px solid #314457; border-radius:14px; box-shadow: 0 10px 22px rgba(0,0,0,.40); }
     .panel header { padding:12px 14px; border-bottom:1px solid #2b3b4b; display:flex; align-items:center; justify-content:space-between; }
     .panel header h2 { margin:0; font-size:16px; color:#d5ffd5; }
     .panel .content { padding:12px 14px; }
     .panel .empty { color:#9aa0a6; font-size:13px; }
 
+    /* Tabelas */
     .tablewrap { overflow:auto; border:1px solid #2d3b4a; border-radius:10px; }
     table { width:100%; border-collapse:separate; border-spacing:0; }
     thead th { position:sticky; top:0; background:#0c1218; z-index:1; }
     th, td { border-bottom:1px solid #243344; padding:10px; text-align:left; font-size:14px; vertical-align:top; }
     tbody tr:hover { background:#111924; }
-    /* Linhas zebradas para contraste */
     tbody tr:nth-child(even){ background:#0f1620; }
 
     .mono { font-family: ui-monospace,Consolas,monospace; }
@@ -66,6 +66,12 @@
 
     .right { text-align:right; }
     .center { text-align:center; }
+
+    /* Ordenação visual */
+    th.sortable { cursor:pointer; user-select:none; white-space:nowrap; }
+    th.sortable .arrow { display:inline-block; width:0; height:0; border-left:5px solid transparent; border-right:5px solid transparent; margin-left:6px; border-top:7px solid #7b8ca1; opacity:.7; transform:rotate(0deg); }
+    th.sortable.asc  .arrow { border-top-color:#fff; transform:rotate(180deg); }
+    th.sortable.desc .arrow { border-top-color:#fff; transform:rotate(0deg); }
   </style>
   <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="./config.js"></script>
@@ -99,11 +105,21 @@
 
     <div class="group">
       <label for="topLimit">Top:</label>
-      <select id="topLimit">
+      <select id="topLimit" title="Quantidade total de itens carregados por relatório">
+        <option>10</option>
+        <option>20</option>
+        <option>50</option>
+        <option selected>100</option>
+      </select>
+    </div>
+
+    <div class="group">
+      <label for="visibleRows">Visíveis:</label>
+      <select id="visibleRows" title="Limite visual com rolagem">
         <option>10</option>
         <option selected>20</option>
+        <option>30</option>
         <option>50</option>
-        <option>100</option>
       </select>
     </div>
 
@@ -129,7 +145,7 @@
         <div class="val" id="kpiProdutos">—</div>
         <canvas id="sparkProdutos" class="spark" width="300" height="54" aria-hidden="true"></canvas>
       </div>
-      <div class="muted" id="kpiProdutosHint">Total em <code>cadastro_produtos</code> (amostra de tendência usa a view).</div>
+      <div class="muted" id="kpiProdutosHint">Total em <code>cadastro_produtos</code> (tendência usa a view).</div>
     </div>
     <div class="card">
       <h3>Nº de sites</h3>
@@ -164,16 +180,16 @@
         <div><span class="pill">Δ &lt; 0 (abaixo da média)</span></div>
       </header>
       <div class="content">
-        <div class="tablewrap">
+        <div class="tablewrap" id="wrapBaratos">
           <table id="tblMaisBaratos">
             <thead>
               <tr>
-                <th>EAN</th>
-                <th>Descrição</th>
-                <th>Site</th>
-                <th class="right">Preço</th>
-                <th class="right">Média</th>
-                <th class="right">Δ</th>
+                <th class="sortable" data-col="desc"  data-table="baratos">Descrição<span class="arrow"></span></th>
+                <th class="sortable" data-col="ean"   data-table="baratos">EAN<span class="arrow"></span></th>
+                <th class="sortable" data-col="site"  data-table="baratos">Site<span class="arrow"></span></th>
+                <th class="right sortable" data-col="preco" data-table="baratos">Preço<span class="arrow"></span></th>
+                <th class="right sortable" data-col="mean"  data-table="baratos">Média<span class="arrow"></span></th>
+                <th class="right sortable" data-col="diff"  data-table="baratos">Δ (R$ vs média)<span class="arrow"></span></th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -189,16 +205,16 @@
         <div><span class="pill">Δ &gt; 0 (acima da média)</span></div>
       </header>
       <div class="content">
-        <div class="tablewrap">
+        <div class="tablewrap" id="wrapCaros">
           <table id="tblMaisCaros">
             <thead>
               <tr>
-                <th>EAN</th>
-                <th>Descrição</th>
-                <th>Site</th>
-                <th class="right">Preço</th>
-                <th class="right">Média</th>
-                <th class="right">Δ</th>
+                <th class="sortable" data-col="desc"  data-table="caros">Descrição<span class="arrow"></span></th>
+                <th class="sortable" data-col="ean"   data-table="caros">EAN<span class="arrow"></span></th>
+                <th class="sortable" data-col="site"  data-table="caros">Site<span class="arrow"></span></th>
+                <th class="right sortable" data-col="preco" data-table="caros">Preço<span class="arrow"></span></th>
+                <th class="right sortable" data-col="mean"  data-table="caros">Média<span class="arrow"></span></th>
+                <th class="right sortable" data-col="diff"  data-table="caros">Δ (R$ vs média)<span class="arrow"></span></th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -214,15 +230,15 @@
       <header><h2>Produtos abaixo do preço de custo</h2></header>
       <div class="content" id="blocoAbaixoCusto">
         <div class="empty">Para ativar, disponibilize uma view com <span class="pill">ean</span>, <span class="pill">meu_custo</span>, <span class="pill">meu_preco</span> ou inclua <span class="pill">custo_cliente</span> na <code>vw_precos_dinamica</code>. Neste layout, a lista aparecerá automaticamente.</div>
-        <div class="tablewrap" style="margin-top:10px; display:none;">
+        <div class="tablewrap" style="margin-top:10px; display:none;" id="wrapAbaixoCusto">
           <table id="tblAbaixoCusto">
             <thead>
               <tr>
-                <th>EAN</th>
-                <th>Descrição</th>
-                <th class="right">Custo</th>
-                <th class="right">Meu preço</th>
-                <th class="right">Δ</th>
+                <th class="sortable" data-col="desc" data-table="abaixo">Descrição<span class="arrow"></span></th>
+                <th class="sortable" data-col="ean"  data-table="abaixo">EAN<span class="arrow"></span></th>
+                <th class="right sortable" data-col="meu_custo" data-table="abaixo">Custo<span class="arrow"></span></th>
+                <th class="right sortable" data-col="meu_preco" data-table="abaixo">Meu preço<span class="arrow"></span></th>
+                <th class="right sortable" data-col="delta" data-table="abaixo">Δ<span class="arrow"></span></th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -234,17 +250,17 @@
     <div class="panel">
       <header><h2>Maiores alterações de preço</h2></header>
       <div class="content">
-        <div class="tablewrap">
+        <div class="tablewrap" id="wrapAlt">
           <table id="tblMaioresAlt">
             <thead>
               <tr>
-                <th>EAN</th>
-                <th>Descrição</th>
-                <th>Site</th>
-                <th class="right">Preço Ant.</th>
-                <th class="right">Preço Atual</th>
-                <th class="right">Δ Abs.</th>
-                <th class="right">Δ %</th>
+                <th class="sortable" data-col="desc"  data-table="alt">Descrição<span class="arrow"></span></th>
+                <th class="sortable" data-col="ean"   data-table="alt">EAN<span class="arrow"></span></th>
+                <th class="sortable" data-col="site"  data-table="alt">Site<span class="arrow"></span></th>
+                <th class="right sortable" data-col="prev" data-table="alt">Preço Ant.<span class="arrow"></span></th>
+                <th class="right sortable" data-col="curr" data-table="alt">Preço Atual<span class="arrow"></span></th>
+                <th class="right sortable" data-col="delta" data-table="alt">Δ Abs.<span class="arrow"></span></th>
+                <th class="right sortable" data-col="perc"  data-table="alt">Δ %<span class="arrow"></span></th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -263,9 +279,6 @@
         <canvas id="chartRegiao" width="640" height="240" style="display:none;"></canvas>
       </div>
     </div>
-
-    <!-- (Ranking de fornecedor removido, conforme pedido) -->
-
   </section>
 
   <div id="err" class="err"></div>
@@ -276,7 +289,7 @@
 const CFG = window.CONFIG || {};
 if(!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY){ alert('CONFIG ausente (config.js)'); throw new Error('CONFIG ausente'); }
 const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth:{ persistSession:true, autoRefreshToken:true, detectSessionInUrl:true }});
-const VIEW = 'vw_precos_dinamica'; // mesma view usada no dashboard principal
+const VIEW = 'vw_precos_dinamica';
 
 /* ========= Util ========= */
 const NA = '---';
@@ -296,19 +309,21 @@ function isFiniteNum(n){ return typeof n === 'number' && isFinite(n); }
 /* ========= Controles ========= */
 const dateFrom = document.getElementById('dateFrom');
 const dateTo   = document.getElementById('dateTo');
-const quickRange = document.getElementById('quickRange');
-const topLimit = document.getElementById('topLimit');
-const outTol   = document.getElementById('outTol');
+const quickRange  = document.getElementById('quickRange');
+const topLimit    = document.getElementById('topLimit');
+const visibleRows = document.getElementById('visibleRows');
+const outTol      = document.getElementById('outTol');
 document.getElementById('btnRecarregar').addEventListener('click', reloadAll);
 
 quickRange.addEventListener('change', ()=>{
   const v = quickRange.value;
-  if (v==='custom') return; // mantém datas
+  if (v==='custom') return;
   const today = new Date();
   const from = new Date(today.getTime() - Number(v)*24*3600*1000);
   dateTo.value   = today.toISOString().slice(0,10);
   dateFrom.value = from.toISOString().slice(0,10);
 });
+visibleRows.addEventListener('change', applyVisibleHeights);
 
 btnSair.addEventListener('click', async ()=>{
   try{ await sb.auth.signOut(); } finally { localStorage.removeItem('mm_login_date'); location.href = CFG.SITE_URL || 'index.html'; }
@@ -337,10 +352,21 @@ function drawSpark(ctx, points){
   ctx.stroke();
 }
 
-/* ========= Tabelas ========= */
-const tblMaisBaratos = document.querySelector('#tblMaisBaratos tbody');
-const tblMaisCaros   = document.querySelector('#tblMaisCaros tbody');
-const tblMaioresAlt  = document.querySelector('#tblMaioresAlt tbody');
+/* ========= Dados em memória p/ ordenação ========= */
+let lastBaratos = [];
+let lastCaros   = [];
+let lastAlt     = [];
+let lastAbaixo  = [];
+
+const sortState = {
+  baratos: { key:'diff', dir:'asc'  }, // mais negativo primeiro
+  caros:   { key:'diff', dir:'desc' }, // mais positivo primeiro
+  alt:     { key:'perc', dir:'desc' },
+  abaixo:  { key:'delta', dir:'asc' }
+};
+const collators = {
+  pt: new Intl.Collator('pt-BR', { sensitivity:'base', numeric:true })
+};
 
 /* ========= INIT ========= */
 (async function init(){
@@ -348,19 +374,17 @@ const tblMaioresAlt  = document.querySelector('#tblMaioresAlt tbody');
   if (!session){ location.href = CFG.SITE_URL || 'index.html'; return; }
   userChip.textContent = session.user?.email || 'Logado';
 
-  // Plano
   try{
     const rs = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
     const raw = (rs.data?.plan ?? 'básico').toString();
     planChip.textContent = 'Plano: ' + raw.charAt(0).toUpperCase()+raw.slice(1);
   }catch{}
 
-  // Período padrão (30 dias)
   const today = new Date(); const from = new Date(today.getTime() - 30*24*3600*1000);
   dateTo.value   = today.toISOString().slice(0,10);
   dateFrom.value = from.toISOString().slice(0,10);
 
-  // Primeira carga
+  bindSortingHandlers();
   await reloadAll();
 })();
 
@@ -375,8 +399,10 @@ async function reloadAll(){
       loadMaisBaratos(),
       loadMaisCaros(),
       loadMaioresAlt(),
-      loadRegiao()
+      loadRegiao(),
+      watchAbaixoCusto()
     ]);
+    applyVisibleHeights();
     setStatus('Pronto.');
   }catch(e){
     console.error(e);
@@ -384,7 +410,7 @@ async function reloadAll(){
   }
 }
 
-/* ========= Helpers de período ========= */
+/* ========= Período ========= */
 function getPeriod(){
   const f = dateFrom.value ? new Date(dateFrom.value+'T00:00:00') : null;
   const t = dateTo.value   ? new Date(dateTo.value  +'T23:59:59') : null;
@@ -399,7 +425,6 @@ function applyDateFilter(q){
 
 /* ========= Consultas utilitárias ========= */
 async function countRows(table){
-  // Conta linhas de uma tabela, sem carregar dados
   const { count, error } = await sb.from(table).select('*', { count:'exact', head:true });
   if (error) throw error;
   return count ?? 0;
@@ -407,7 +432,7 @@ async function countRows(table){
 async function seriesCountByDay(distinctField){
   const {from,to} = getPeriod();
   const days =  Math.max(1, Math.ceil((to - from)/(24*3600*1000)));
-  const map = new Map(); // YYYY-MM-DD -> Set
+  const map = new Map();
   for (let i=0;i<=days;i++){
     const d = new Date(from.getTime() + i*24*3600*1000);
     map.set(d.toISOString().slice(0,10), new Set());
@@ -424,7 +449,6 @@ async function seriesCountByDay(distinctField){
 }
 
 function computeStatsByEan(rows){
-  // rows: [{ean, preco_num, site_id, site_nome, data, descricao}]
   const byEan = new Map();
   for (const r of rows){
     const pn = Number(r.preco_num);
@@ -446,33 +470,19 @@ function computeStatsByEan(rows){
 
 /* ========= KPIs ========= */
 async function loadKpis(){
-  // Nº produtos da tabela cadastro_produtos
   try{
     const totalProdutos = await countRows('cadastro_produtos');
     kpiProdutos.textContent = totalProdutos.toLocaleString('pt-BR');
-  }catch(e){
-    console.warn('cadastro_produtos count falhou:', e?.message||e);
-    kpiProdutos.textContent = '—';
-  }
+  }catch(e){ kpiProdutos.textContent = '—'; }
 
-  // Nº sites da tabela sites
   try{
     const totalSites = await countRows('sites');
     kpiSites.textContent = totalSites.toLocaleString('pt-BR');
-  }catch(e){
-    console.warn('sites count falhou:', e?.message||e);
-    kpiSites.textContent = '—';
-  }
+  }catch(e){ kpiSites.textContent = '—'; }
 
-  // Sparks de tendência (amostras usando a view)
-  try{
-    const s1 = await seriesCountByDay('ean');      drawSpark(sparkProdutos, s1);
-  }catch{}
-  try{
-    const s2 = await seriesCountByDay('site_id');  drawSpark(sparkSites, s2);
-  }catch{}
+  try{ const s1 = await seriesCountByDay('ean');     drawSpark(sparkProdutos, s1); }catch{}
+  try{ const s2 = await seriesCountByDay('site_id'); drawSpark(sparkSites, s2); }catch{}
 
-  // Variação média (amostra): primeiros vs últimos por (ean, site)
   try{
     const { data } = await applyDateFilter(
       sb.from(VIEW).select('ean, site_id, preco_num, data')
@@ -496,12 +506,8 @@ async function loadKpis(){
     }else{
       kpiVariacao.textContent = '—';
     }
-  }catch(e){
-    console.warn('variacao falhou:', e?.message||e);
-    kpiVariacao.textContent = '—';
-  }
+  }catch(e){ kpiVariacao.textContent = '—'; }
 
-  // Economia (placeholder)
   kpiEconomia.textContent = '—';
 }
 
@@ -511,7 +517,7 @@ async function fetchPricesSample(limit){
     sb.from(VIEW).select('ean, descricao, site_id, site_nome, preco_num, data')
       .not('preco_num','is',null)
       .order('data',{ascending:false})
-      .limit(12000)
+      .limit(Math.max(12000, limit*50))
   );
   if (error) throw error;
   const tol = Number(outTol.value || '0.50');
@@ -524,71 +530,115 @@ async function fetchPricesSample(limit){
 
     if (minOk){
       const diffMin = s.min.preco - s.mean;
-      if (diffMin < 0){ // apenas Δ < 0
+      if (diffMin < 0){
         baratos.push({ ean:s.ean, desc:s.desc, site:s.min.site, preco:s.min.preco, mean:s.mean, diff: diffMin });
       }
     }
     if (maxOk){
       const diffMax = s.max.preco - s.mean;
-      if (diffMax > 0){ // apenas Δ > 0
+      if (diffMax > 0){
         caros.push({ ean:s.ean, desc:s.desc, site:s.max.site, preco:s.max.preco, mean:s.mean, diff: diffMax });
       }
     }
   }
-  // Ordenações focadas na “oportunidade”
-  baratos.sort((a,b)=>a.diff-b.diff);      // mais negativo primeiro
-  caros.sort((a,b)=>b.diff-a.diff);        // mais positivo primeiro
+  // defaults
+  baratos.sort((a,b)=>a.diff-b.diff);
+  caros.sort((a,b)=>b.diff-a.diff);
 
-  return {
-    baratos: baratos.slice(0, limit),
-    caros:   caros.slice(0, limit)
-  };
+  return { baratos: baratos.slice(0, limit), caros: caros.slice(0, limit) };
 }
 
-async function loadMaisBaratos(){
-  const lim = Number(topLimit.value||20);
-  const { baratos } = await fetchPricesSample(lim);
-  const tb = tblMaisBaratos; tb.innerHTML='';
-  for (const r of baratos){
+function sortArray(arr, key, dir){
+  const m = dir==='desc' ? -1 : 1;
+  return arr.slice().sort((a,b)=>{
+    const va = a[key], vb = b[key];
+    if (typeof va === 'number' && typeof vb === 'number'){
+      return (va - vb) * m;
+    }
+    return collators.pt.compare(String(va||''), String(vb||'')) * m;
+  });
+}
+
+function renderBaratos(){
+  const state = sortState.baratos;
+  const data  = sortArray(lastBaratos, state.key, state.dir);
+  const tb = document.querySelector('#tblMaisBaratos tbody'); tb.innerHTML='';
+  data.forEach(r=>{
     const tr=document.createElement('tr');
     tr.innerHTML = `
-      <td class="mono">${r.ean}</td>
       <td>${(r.desc||'').replace(/</g,'&lt;')}</td>
+      <td class="mono">${r.ean}</td>
       <td>${r.site||NA}</td>
       <td class="right"><span class="price min">${formatBRL(r.preco)}</span></td>
       <td class="right">${formatBRL(r.mean)}</td>
-      <td class="right">${pct(r.preco, r.mean)}</td>
+      <td class="right">${formatBRL(r.diff)}</td>
     `;
     tb.appendChild(tr);
-  }
+  });
+  applyVisibleHeights();
+  decorateHeaders('baratos');
+}
+async function loadMaisBaratos(){
+  const lim = Number(topLimit.value||100);
+  const { baratos } = await fetchPricesSample(lim);
+  lastBaratos = baratos;
+  renderBaratos();
 }
 
-async function loadMaisCaros(){
-  const lim = Number(topLimit.value||20);
-  const { caros } = await fetchPricesSample(lim);
-  const tb = tblMaisCaros; tb.innerHTML='';
-  for (const r of caros){
+function renderCaros(){
+  const state = sortState.caros;
+  const data  = sortArray(lastCaros, state.key, state.dir);
+  const tb = document.querySelector('#tblMaisCaros tbody'); tb.innerHTML='';
+  data.forEach(r=>{
     const tr=document.createElement('tr');
     tr.innerHTML = `
-      <td class="mono">${r.ean}</td>
       <td>${(r.desc||'').replace(/</g,'&lt;')}</td>
+      <td class="mono">${r.ean}</td>
       <td>${r.site||NA}</td>
       <td class="right"><span class="price max">${formatBRL(r.preco)}</span></td>
       <td class="right">${formatBRL(r.mean)}</td>
-      <td class="right">${pct(r.preco, r.mean)}</td>
+      <td class="right">${formatBRL(r.diff)}</td>
     `;
     tb.appendChild(tr);
-  }
+  });
+  applyVisibleHeights();
+  decorateHeaders('caros');
+}
+async function loadMaisCaros(){
+  const lim = Number(topLimit.value||100);
+  const { caros } = await fetchPricesSample(lim);
+  lastCaros = caros;
+  renderCaros();
 }
 
-/* ========= Maiores alterações de preço (Δ ≠ 0) ========= */
+/* ========= Maiores alterações (Δ ≠ 0) ========= */
+function renderAlt(){
+  const state = sortState.alt;
+  const data  = sortArray(lastAlt, state.key, state.dir);
+  const tb = document.querySelector('#tblMaioresAlt tbody'); tb.innerHTML='';
+  data.forEach(r=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = `
+      <td>${(r.desc||'').replace(/</g,'&lt;')}</td>
+      <td class="mono">${r.ean}</td>
+      <td>${r.site||NA}</td>
+      <td class="right">${formatBRL(r.prev)}</td>
+      <td class="right">${formatBRL(r.curr)}</td>
+      <td class="right">${formatBRL(r.delta)}</td>
+      <td class="right">${(r.perc>=0?'+':'')+r.perc.toFixed(1)}%</td>
+    `;
+    tb.appendChild(tr);
+  });
+  applyVisibleHeights();
+  decorateHeaders('alt');
+}
 async function loadMaioresAlt(){
-  const lim = Number(topLimit.value||20);
+  const lim = Number(topLimit.value||100);
   const { data, error } = await applyDateFilter(
     sb.from(VIEW).select('ean, descricao, site_id, site_nome, preco_num, data')
       .not('preco_num','is',null)
       .order('data',{ascending:true})
-      .limit(12000)
+      .limit(Math.max(12000, lim*50))
   );
   if (error) throw error;
 
@@ -606,7 +656,7 @@ async function loadMaioresAlt(){
     const la = last.get(k);
     if (!isFiniteNum(la)) continue;
     const delta = la - fa;
-    if (delta === 0) continue; // **apenas quando há alteração**
+    if (delta === 0) continue;
     const [ean, site_id] = k.split('|');
     const perc  = fa ? (delta/fa)*100 : 0;
     arr.push({
@@ -614,28 +664,17 @@ async function loadMaioresAlt(){
       prev: fa, curr: la, delta, perc
     });
   }
+  // default por maior |Δ%|
   arr.sort((a,b)=> Math.abs(b.perc) - Math.abs(a.perc));
-  const tb = tblMaioresAlt; tb.innerHTML='';
-  arr.slice(0, lim).forEach(r=>{
-    const tr=document.createElement('tr');
-    tr.innerHTML = `
-      <td class="mono">${r.ean}</td>
-      <td>${(r.desc||'').replace(/</g,'&lt;')}</td>
-      <td>${r.site||NA}</td>
-      <td class="right">${formatBRL(r.prev)}</td>
-      <td class="right">${formatBRL(r.curr)}</td>
-      <td class="right">${formatBRL(r.delta)}</td>
-      <td class="right">${(r.perc>=0?'+':'')+r.perc.toFixed(1)}%</td>
-    `;
-    tb.appendChild(tr);
-  });
+  lastAlt = arr.slice(0, lim);
+  renderAlt();
 }
 
 /* ========= Região (opcional) ========= */
 async function loadRegiao(){
   try{
     const { data: rs } = await sb.from('sites').select('id, regiao').limit(1);
-    if (!(rs && rs.length && rs[0].regiao)) return; // sem coluna regiao, manter placeholder
+    if (!(rs && rs.length && rs[0].regiao)) return;
 
     const {from,to} = getPeriod();
     const { data } = await sb.from(VIEW).select('preco_num, site_id, data')
@@ -645,7 +684,7 @@ async function loadRegiao(){
     const { data: allSites } = await sb.from('sites').select('id, regiao').not('regiao','is',null);
     const m = new Map((allSites||[]).map(s=>[Number(s.id), String(s.regiao)]));
 
-    const mapReg = new Map(); // regiao -> [precos]
+    const mapReg = new Map();
     (data||[]).forEach(r=>{
       const reg = m.get(Number(r.site_id)); if(!reg) return;
       const pn = Number(r.preco_num); if(!isFinite(pn)) return;
@@ -654,8 +693,6 @@ async function loadRegiao(){
     if (!mapReg.size) return;
 
     const pares = Array.from(mapReg.entries()).map(([reg, arr])=>[reg, arr.reduce((a,b)=>a+b,0)/arr.length]);
-
-    // desenha gráfico simples de barras
     const canvas = document.getElementById('chartRegiao');
     const ctx = canvas.getContext('2d');
     document.querySelector('#blocoRegiao .empty').style.display='none';
@@ -678,33 +715,96 @@ async function loadRegiao(){
 }
 
 /* ========= Abaixo do custo (opcional) ========= */
-(async function watchAbaixoCusto(){
+async function watchAbaixoCusto(){
   try{
     const { data: probe } = await sb.from(VIEW).select('ean, meu_custo, meu_preco').limit(1);
     if (probe && probe.length && (probe[0].meu_custo!=null || probe[0].meu_preco!=null)){
       const {from,to} = getPeriod();
       const { data } = await sb.from(VIEW).select('ean, descricao, meu_custo, meu_preco, data')
         .gte('data',from.toISOString()).lte('data',to.toISOString()).limit(10000);
-      const rows = (data||[]).filter(r=>isFiniteNum(r.meu_custo)&&isFiniteNum(r.meu_preco)&&r.meu_preco<r.meu_custo);
-      const wrap = document.querySelector('#blocoAbaixoCusto .tablewrap');
-      document.querySelector('#blocoAbaixoCusto .empty').style.display='none';
-      wrap.style.display='block';
-      const tb = document.querySelector('#tblAbaixoCusto tbody'); tb.innerHTML='';
-      rows.slice(0, Number(topLimit.value||20)).forEach(r=>{
-        const tr=document.createElement('tr');
-        const delta = Number(r.meu_preco) - Number(r.meu_custo);
-        tr.innerHTML = `
-          <td class="mono">${r.ean}</td>
-          <td>${(r.descricao||'').replace(/</g,'&lt;')}</td>
-          <td class="right">${formatBRL(r.meu_custo)}</td>
-          <td class="right">${formatBRL(r.meu_preco)}</td>
-          <td class="right">${formatBRL(delta)}</td>
-        `;
-        tb.appendChild(tr);
-      });
+      const rows = (data||[]).filter(r=>isFiniteNum(r.meu_custo)&&isFiniteNum(r.meu_preco)&&r.meu_preco<r.meu_custo)
+        .map(r=>({ ean:r.ean, desc:r.descricao||'', meu_custo:Number(r.meu_custo), meu_preco:Number(r.meu_preco), delta:Number(r.meu_preco)-Number(r.meu_custo) }));
+      lastAbaixo = rows;
+      renderAbaixo();
     }
   }catch{}
-})();
+}
+function renderAbaixo(){
+  const state = sortState.abaixo;
+  const data  = sortArray(lastAbaixo, state.key, state.dir);
+  const wrap = document.getElementById('wrapAbaixoCusto');
+  const empty = document.querySelector('#blocoAbaixoCusto .empty');
+  if (!data.length){ wrap.style.display='none'; empty.style.display='block'; return; }
+  empty.style.display='none'; wrap.style.display='block';
+  const tb = document.querySelector('#tblAbaixoCusto tbody'); tb.innerHTML='';
+  data.forEach(r=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = `
+      <td>${(r.desc||'').replace(/</g,'&lt;')}</td>
+      <td class="mono">${r.ean}</td>
+      <td class="right">${formatBRL(r.meu_custo)}</td>
+      <td class="right">${formatBRL(r.meu_preco)}</td>
+      <td class="right">${formatBRL(r.delta)}</td>
+    `;
+    tb.appendChild(tr);
+  });
+  applyVisibleHeights();
+  decorateHeaders('abaixo');
+}
+
+/* ========= Ordenação (UI) ========= */
+function bindSortingHandlers(){
+  document.querySelectorAll('th.sortable').forEach(th=>{
+    th.addEventListener('click', ()=>{
+      const table = th.getAttribute('data-table');
+      const col   = th.getAttribute('data-col');
+      const state = sortState[table];
+      if (!state) return;
+      if (state.key === col){
+        state.dir = state.dir==='asc' ? 'desc' : 'asc';
+      } else {
+        state.key = col;
+        // default de direção por tipo de coluna
+        state.dir = (col==='desc' || col==='site' || col==='ean') ? 'asc' : (table==='caros' ? 'desc' : 'asc');
+      }
+      switch(table){
+        case 'baratos': renderBaratos(); break;
+        case 'caros':   renderCaros();   break;
+        case 'alt':     renderAlt();     break;
+        case 'abaixo':  renderAbaixo();  break;
+      }
+    });
+  });
+}
+function decorateHeaders(tableKey){
+  // limpa
+  document.querySelectorAll(`th.sortable[data-table="${tableKey}"]`).forEach(th=>{
+    th.classList.remove('asc','desc');
+  });
+  const st = sortState[tableKey];
+  const th = document.querySelector(`th.sortable[data-table="${tableKey}"][data-col="${st.key}"]`);
+  if (th) th.classList.add(st.dir);
+}
+
+/* ========= Limite visual com rolagem ========= */
+function applyVisibleHeights(){
+  const vis = Number(visibleRows.value||20);
+  // aplica para cada wrap
+  ['wrapBaratos','wrapCaros','wrapAlt','wrapAbaixoCusto'].forEach(id=>{
+    const wrap = document.getElementById(id);
+    if (!wrap || wrap.style.display==='none') return;
+    // mede altura do header + 20 linhas
+    const table = wrap.querySelector('table');
+    const thead = table.querySelector('thead');
+    const row   = table.querySelector('tbody tr');
+    const headH = thead ? thead.getBoundingClientRect().height : 40;
+    const rowH  = row ? row.getBoundingClientRect().height : 38;
+    wrap.style.maxHeight = (headH + rowH * vis + 6) + 'px';
+    wrap.style.overflow = 'auto';
+  });
+}
+
+/* ========= FIM ========= */
 </script>
 </body>
 </html>
