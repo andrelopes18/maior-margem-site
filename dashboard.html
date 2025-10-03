@@ -816,46 +816,6 @@ function updateCounts(){
   countFavs.textContent  = 'Favoritos: ' + favSet.size;
 }
 
-
-/* ========= Favoritos: consulta imediata na base (mínimo impacto) ========= */
-async function fetchFavoritesNow(){
-  try{
-    if (!favSet || favSet.size === 0){
-      // sem favoritos — só limpa a UI
-      favBody.innerHTML='';
-      updateFavHeight();
-      updateCounts();
-      dlog({step:'favorites.skip.no-favs'});
-      return;
-    }
-    const favs = Array.from(favSet).map(String);
-    const siteIds = (chosen||[]).map(c => Number(c.site_id)).filter(n => Number.isFinite(n));
-
-    let q = sb.from(VIEW).select(
-      'ean, site_id, site_nome, preco, data, descricao, preco_num, meu_preco, descricao_cliente'
-    ).in('ean', favs).order('data', { ascending:false });
-
-    if (siteIds.length){
-      q = q.in('site_id', siteIds);
-    }
-
-    const { data, error, status } = await q;
-    if (error){
-      dlog({error:'favorites.query', code:error.code, msg:error.message, status});
-      return;
-    }
-    if (Array.isArray(data) && data.length){
-      upsertRowsIntoProdutos(data);
-    }
-    renderFavs();
-    updateFavHeight();
-    updateCounts();
-    dlog({step:'favorites.loaded.immediate', favs:favs.length, rows:(data?data.length:0)});
-  }catch(e){
-    dlog({error:'favorites.exception', detail:String(e)});
-  }
-}
-
 /* ========= Query / paginação ========= */
 function buildQuery(){
   let q = sb.from(VIEW).select(
@@ -909,19 +869,8 @@ async function fetchNextPage(){
 }
 
 /* ========= Reset ========= */
-
 function resetAndQuery(){
   dlog({step:'resetAndQuery'});
-  produtosMap.clear(); produtosList=[]; serverOffset=0; serverExhausted=false; favFirstAutoRenderDone=false;
-  generalView=[]; resetGeneralDom(); renderFavs(); updateFavHeight(); updateCounts();
-
-  // Carrega favoritos imediatamente da base (independente da rolagem do Geral)
-  if (typeof fetchFavoritesNow === 'function') { fetchFavoritesNow(); }
-
-  // Inicia a paginação do Geral
-  fetchNextPage();
-}
-);
   produtosMap.clear(); produtosList=[]; serverOffset=0; serverExhausted=false; favFirstAutoRenderDone=false;
   generalView=[]; resetGeneralDom(); renderFavs(); updateFavHeight(); updateCounts(); fetchNextPage();
 }
@@ -1126,7 +1075,15 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
     applyToggle(toggleFavBtn, favWrap, document.getElementById('favResizer'), 'mm_tgl_fav');
     applyToggle(toggleGenBtn, generalWrap, null, 'mm_tgl_gen');
 
-    resetAndQuery();
+    
+// TESTE: limpar favoritos no load (mantém resto intacto)
+try{
+  favSet = new Set();
+  localStorage.setItem('mm_favs','[]');
+  renderFavs(); updateFavHeight(); updateCounts();
+  dlog({step:'test.clearFavoritesOnLoad'});
+}catch(_){}
+resetAndQuery();
     generalWrap.dispatchEvent(new Event('scroll'));
   }catch(e){ showErr('Falha na inicializaÃ§Ã£o'); dlog({error:'init', detail:String(e)}); }
 })();
