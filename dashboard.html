@@ -924,15 +924,33 @@ function buildPrintHTMLFromFav() {
   const now=new Date(); const meta = now.toLocaleDateString('pt-BR')+' '+now.toLocaleTimeString('pt-BR');
   return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório — Favoritos</title><style>'+css+'</style></head><body><h1>Relatório — Favoritos</h1><div class="meta">Gerado em '+meta+'</div><table>'+thead+'<tbody>'+tbody+'</tbody></table></body></html>';
 }
+
 function printFavReport(){
-  const iframe = document.createElement('iframe');
-  iframe.style.position='fixed'; iframe.style.right='0'; iframe.style.bottom='0';
-  iframe.style.width='0'; iframe.style.height='0'; iframe.style.border='0'; iframe.style.visibility='hidden';
-  document.body.appendChild(iframe);
-  const doc = iframe.contentWindow || iframe.contentDocument;
-  const html = buildPrintHTMLFromFav();
-  (doc.document || doc).open();
-  (doc.document || doc).write(html + '<script>window.onload=function(){setTimeout(function(){window.focus();window.print();},10)}<\/script>');
+  try{
+    const iframe = document.createElement('iframe');
+    iframe.style.position='fixed';
+    iframe.style.right='0';
+    iframe.style.bottom='0';
+    iframe.style.width='0';
+    iframe.style.height='0';
+    iframe.style.border='0';
+    iframe.style.visibility='hidden';
+    document.body.appendChild(iframe);
+
+    const win = iframe.contentWindow || iframe;
+    const doc = win.document || iframe.contentDocument;
+    const html = (typeof buildPrintHTMLFromFav==='function') ? buildPrintHTMLFromFav() : '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Favoritos</title></head><body><p>Nenhum conteúdo para imprimir.</p></body></html>';
+
+    doc.open();
+    // importante: escapar </script> para não quebrar a string
+    const tail = "<script>window.onload=function(){setTimeout(function(){window.focus();window.print();window.close();},100);};<\/script>";
+    doc.write(html + tail);
+    doc.close();
+  }catch(e){
+    if (typeof dlog==='function') dlog({error:'printFavReport.exception', detail:String(e)});
+  }
+}
+,10)}<\/script>');
   (doc.document || doc).close();
   setTimeout(()=>{ try{ document.body.removeChild(iframe); }catch{} }, 2000);
 }
