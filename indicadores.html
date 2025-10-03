@@ -72,6 +72,10 @@
     th.sortable .arrow { display:inline-block; width:0; height:0; border-left:5px solid transparent; border-right:5px solid transparent; margin-left:6px; border-top:7px solid #7b8ca1; opacity:.7; transform:rotate(0deg); }
     th.sortable.asc  .arrow { border-top-color:#fff; transform:rotate(180deg); }
     th.sortable.desc .arrow { border-top-color:#fff; transform:rotate(0deg); }
+
+    /* Fontes/diagnóstico */
+    .source { margin-top:10px; font-size:12px; color:#9aa0a6; }
+    .diag { margin-top:10px; font-size:12px; color:#ffb3b3; background:#2b1414; border:1px solid #6b2c2c; padding:8px 10px; border-radius:8px; display:none; }
   </style>
   <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="./config.js"></script>
@@ -131,6 +135,11 @@
         <option value="0.80">±80%</option>
         <option value="1.00">±100%</option>
       </select>
+    </div>
+
+    <div class="group">
+      <label for="qOportunidades">Pesquisar:</label>
+      <input id="qOportunidades" type="search" placeholder="Descrição contém…" />
     </div>
 
     <button id="btnRecarregar" class="btn" type="button">Recarregar</button>
@@ -194,7 +203,8 @@
             <tbody></tbody>
           </table>
         </div>
-        <div class="hint">Use o “próximo acima” como referência para subir preço e manter competitividade.</div>
+        <div class="source">Fontes: <code>vw_precos_dinamica</code> (campos: <em>ean, descricao, meu_preco, preco_num, site_id, site_nome</em>)</div>
+        <div id="diagBaratos" class="diag"></div>
       </div>
     </div>
 
@@ -218,12 +228,13 @@
             <tbody></tbody>
           </table>
         </div>
-        <div class="hint">Δ = <code>meu_preco − menor_concorrente</code>. Ajuste para ser competitivo.</div>
+        <div class="source">Fontes: <code>vw_precos_dinamica</code> (campos: <em>ean, descricao, meu_preco, preco_num, site_id, site_nome</em>)</div>
+        <div id="diagCaros" class="diag"></div>
       </div>
     </div>
   </section>
 
-  <!-- Abaixo do custo + Alterações + Região (inalterados) -->
+  <!-- Abaixo do custo + Alterações + Região -->
   <section class="grid">
     <div class="panel">
       <header><h2>Produtos abaixo do preço de custo</h2></header>
@@ -243,6 +254,7 @@
             <tbody></tbody>
           </table>
         </div>
+        <div class="source">Fontes: <code>vw_precos_dinamica</code> (campos: <em>ean, descricao, meu_custo, meu_preco</em>)</div>
       </div>
     </div>
 
@@ -265,7 +277,7 @@
             <tbody></tbody>
           </table>
         </div>
-        <div class="hint">Compara o primeiro e o último preço do período por (EAN, Site). Exibe apenas quando Δ ≠ 0.</div>
+        <div class="source">Fontes: <code>vw_precos_dinamica</code> (campos: <em>ean, descricao, site_id, site_nome, preco_num, data</em>)</div>
       </div>
     </div>
   </section>
@@ -276,6 +288,7 @@
       <div class="content" id="blocoRegiao">
         <div class="empty">Inclua <span class="pill">regiao</span> na tabela <code>sites</code> (ou crie view <code>vw_preco_regiao</code>).</div>
         <canvas id="chartRegiao" width="640" height="240" style="display:none;"></canvas>
+        <div class="source">Fontes: <code>vw_precos_dinamica</code> + <code>sites</code> (join por <em>site_id</em>)</div>
       </div>
     </div>
   </section>
@@ -311,6 +324,7 @@ const quickRange  = document.getElementById('quickRange');
 const topLimit    = document.getElementById('topLimit');
 const visibleRows = document.getElementById('visibleRows');
 const outTol      = document.getElementById('outTol');
+const qOportunidades = document.getElementById('qOportunidades');
 document.getElementById('btnRecarregar').addEventListener('click', reloadAll);
 
 quickRange.addEventListener('change', ()=>{
@@ -321,7 +335,12 @@ quickRange.addEventListener('change', ()=>{
   dateTo.value   = today.toISOString().slice(0,10);
   dateFrom.value = from.toISOString().slice(0,10);
 });
+
 visibleRows.addEventListener('change', applyVisibleHeights);
+qOportunidades.addEventListener('input', ()=>{
+  renderBaratos();
+  renderCaros();
+});
 
 btnSair.addEventListener('click', async ()=>{
   try{ await sb.auth.signOut(); } finally { localStorage.removeItem('mm_login_date'); location.href = CFG.SITE_URL || 'index.html'; }
@@ -350,15 +369,15 @@ function drawSpark(ctx, points){
   ctx.stroke();
 }
 
-/* ========= Dados em memória p/ ordenação ========= */
+/* ========= Dados em memória p/ ordenação/filtragem ========= */
 let lastBaratos = [];
 let lastCaros   = [];
 let lastAlt     = [];
 let lastAbaixo  = [];
 
 const sortState = {
-  baratos: { key:'gap_up', dir:'desc' }, // maior potencial de recuperação primeiro
-  caros:   { key:'diff',   dir:'desc' }, // maior sobrepreço primeiro
+  baratos: { key:'gap_up', dir:'desc' },
+  caros:   { key:'diff',   dir:'desc' },
   alt:     { key:'perc',   dir:'desc' },
   abaixo:  { key:'delta',  dir:'asc'  }
 };
@@ -395,7 +414,8 @@ async function reloadAll(){
       loadOportunidadesVsMin(),
       loadMaioresAlt(),
       loadRegiao(),
-      watchAbaixoCusto()
+      watchAbaixoCusto(),
+      runDiagnosticsForOpportunities()
     ]);
     applyVisibleHeights();
     setStatus('Pronto.');
@@ -500,12 +520,17 @@ function filterOutliersAroundMedian(list, tol){
   const filtered = list.filter(x => x.price>=lo && x.price<=hi);
   return filtered.length ? filtered : list; // fallback
 }
+function filterValidCompetitors(list){
+  // remove valores não numéricos, negativos e zero
+  return list.filter(x => isFiniteNum(x.price) && x.price > 0);
+}
+function currentQuery(){ return (qOportunidades.value||'').trim().toLowerCase(); }
+function appliesQuery(desc){ const q=currentQuery(); return !q || String(desc||'').toLowerCase().includes(q); }
 
 async function loadOportunidadesVsMin(){
   const lim = Number(topLimit.value||100);
   const tol = Number(outTol.value||'0.50');
 
-  // Precisamos de meu_preco (do usuário) e preços de mercado (preco_num) + site para saber o menor e o próximo acima
   const { data, error } = await applyDateFilter(
     sb.from(VIEW).select('ean, descricao, site_id, site_nome, preco_num, meu_preco, data')
       .order('data',{ascending:false})
@@ -521,7 +546,7 @@ async function loadOportunidadesVsMin(){
     const obj = byEan.get(e);
 
     const mp = Number(r.meu_preco);
-    if (obj.my===null && isFiniteNum(mp)) obj.my = mp; // mais recente (ordenado por data desc)
+    if (obj.my===null && isFiniteNum(mp)) obj.my = mp; // mais recente válido
 
     const pn = Number(r.preco_num);
     if (isFiniteNum(pn)) obj.market.push({ price: pn, site: r.site_nome || r.site_id });
@@ -530,20 +555,19 @@ async function loadOportunidadesVsMin(){
   const baratos=[], caros=[];
   for (const obj of byEan.values()){
     if (!isFiniteNum(obj.my)) continue;
-    if (!obj.market.length) continue;
+    let market = filterValidCompetitors(obj.market);
+    if (!market.length) continue;
 
-    // filtro robusto de outliers em torno da mediana (não usa média)
-    const valid = filterOutliersAroundMedian(obj.market, tol)
-      .sort((a,b)=>a.price-b.price);
+    // filtro robusto de outliers (em torno da mediana, sem usar média)
+    market = filterOutliersAroundMedian(market, tol).sort((a,b)=>a.price-b.price);
+    if (!market.length) continue;
 
-    if (!valid.length) continue;
+    const minc = market[0]; // menor concorrente (>0 garantido)
 
-    const minc = valid[0]; // menor concorrente
     // próximo acima do meu preço: menor preço concorrente > meu_preco
-    const nextAbove = valid.find(x => x.price > obj.my) || null;
+    const nextAbove = market.find(x => x.price > obj.my) || null;
 
     if (obj.my < minc.price){
-      // Eu sou o mais barato: exibir "próximo acima" (se não houver, usa o menor concorrente)
       const prox = nextAbove || minc;
       const gapUp = prox.price - obj.my;
       baratos.push({
@@ -553,7 +577,6 @@ async function loadOportunidadesVsMin(){
         gap_up: gapUp
       });
     } else if (obj.my > minc.price){
-      // Eu estou mais caro que o menor concorrente
       const diff = obj.my - minc.price;
       caros.push({
         ean: obj.ean, desc: obj.desc,
@@ -562,14 +585,13 @@ async function loadOportunidadesVsMin(){
         diff
       });
     }
-    // empates (==) não entram em nenhum
+    // empates não entram
   }
 
   // Ordenações padrão
   baratos.sort((a,b)=> b.gap_up - a.gap_up);
   caros.sort((a,b)=> b.diff   - a.diff);
 
-  // guarda e renderiza
   const limN = Number(topLimit.value||100);
   lastBaratos = baratos.slice(0, limN);
   lastCaros   = caros.slice(0, limN);
@@ -577,7 +599,7 @@ async function loadOportunidadesVsMin(){
   renderCaros();
 }
 
-/* ========= Render + Ordenação ========= */
+/* ========= Render + Ordenação + Filtro por descrição ========= */
 function sortArray(arr, key, dir){
   const m = dir==='desc' ? -1 : 1;
   return arr.slice().sort((a,b)=>{
@@ -589,9 +611,15 @@ function sortArray(arr, key, dir){
   });
 }
 
+function filteredByQuery(arr){
+  const q = currentQuery();
+  if (!q) return arr;
+  return arr.filter(r => String(r.desc||'').toLowerCase().includes(q));
+}
+
 function renderBaratos(){
   const st = sortState.baratos;
-  const data = sortArray(lastBaratos, st.key, st.dir);
+  const data = filteredByQuery( sortArray(lastBaratos, st.key, st.dir) );
   const tb = document.querySelector('#tblMaisBaratos tbody'); tb.innerHTML='';
   data.forEach(r=>{
     const tr=document.createElement('tr');
@@ -610,7 +638,7 @@ function renderBaratos(){
 
 function renderCaros(){
   const st = sortState.caros;
-  const data = sortArray(lastCaros, st.key, st.dir);
+  const data = filteredByQuery( sortArray(lastCaros, st.key, st.dir) );
   const tb = document.querySelector('#tblMaisCaros tbody'); tb.innerHTML='';
   data.forEach(r=>{
     const tr=document.createElement('tr');
@@ -813,6 +841,41 @@ function applyVisibleHeights(){
     wrap.style.maxHeight = (headH + rowH * vis + 6) + 'px';
     wrap.style.overflow = 'auto';
   });
+}
+
+/* ========= Diagnóstico dos dados das Oportunidades ========= */
+async function runDiagnosticsForOpportunities(){
+  // Contagens simples para identificar possíveis causas de "0,00"
+  const diagBaratos = document.getElementById('diagBaratos');
+  const diagCaros   = document.getElementById('diagCaros');
+  diagBaratos.style.display = 'none'; diagCaros.style.display = 'none';
+
+  try{
+    const qPeriod = (sel)=> applyDateFilter( sb.from(VIEW).select(sel, { count:'exact', head:true }) );
+
+    const { count: totalAll }     = await qPeriod('*');
+    const { count: zeroMarket }   = await qPeriod('*').lte('preco_num', 0).not('preco_num','is',null);
+    const { count: nullMarket }   = await qPeriod('preco_num').is('preco_num', null);
+
+    const { count: zeroMy }       = await qPeriod('*').lte('meu_preco', 0).not('meu_preco','is',null);
+    const { count: nullMy }       = await qPeriod('meu_preco').is('meu_preco', null);
+
+    const msgs = [];
+    if (zeroMarket>0) msgs.push(`Detectei <b>${zeroMarket.toLocaleString('pt-BR')}</b> registros com <code>preco_num &le; 0</code> no período.`);
+    if (nullMarket>0) msgs.push(`Há <b>${nullMarket.toLocaleString('pt-BR')}</b> registros com <code>preco_num = NULL</code>.`);
+    if (zeroMy>0) msgs.push(`Detectei <b>${zeroMy.toLocaleString('pt-BR')}</b> registros com <code>meu_preco &le; 0</code>.`);
+    if (nullMy>0) msgs.push(`Há <b>${nullMy.toLocaleString('pt-BR')}</b> registros com <code>meu_preco = NULL</code>.`);
+    if (totalAll>0) msgs.push(`Total de linhas analisadas em <code>${VIEW}</code>: <b>${totalAll.toLocaleString('pt-BR')}</b>.`);
+
+    if (msgs.length){
+      const html = `Diagnóstico do período:<br>• ${msgs.join('<br>• ')}<br><br><em>Nota:</em> o cálculo ignora concorrentes com preço &le; 0 e valores não numéricos.`;
+      diagBaratos.innerHTML = html; diagBaratos.style.display = 'block';
+      diagCaros.innerHTML   = html; diagCaros.style.display   = 'block';
+    }
+  }catch(e){
+    diagCaros.innerHTML = 'Diagnóstico indisponível: '+(e.message||e);
+    diagCaros.style.display = 'block';
+  }
 }
 </script>
 </body>
