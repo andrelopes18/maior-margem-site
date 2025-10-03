@@ -1103,6 +1103,12 @@ btnReload.addEventListener('click', async ()=>{
   resetAndQuery();
   dlog({step:'manualReload.end'});
 });
+btnReload.addEventListener('click', async ()=>{
+  dlog({step:'manualReload.start'});
+  await initUserAndSites();
+  resetAndQuery();
+  dlog({step:'manualReload.end'});
+});
 btnPrintFav.addEventListener('click', printFavReport);
 
 
