@@ -911,8 +911,24 @@ async function fetchNextPage(){
 
 /* ========= Reset ========= */
 
-async function resetAndQuery(){
-  dlog({step:'resetAndQuery'});
+async 
+function resetAndQuery(){
+  try{
+    mmLog('resetAndQuery');
+    if (typeof produtosMap!=='undefined'){ produtosMap.clear && produtosMap.clear(); }
+    if (typeof produtosList!=='undefined'){ produtosList.length=0; }
+    try{ serverOffset=0; serverExhausted=false; fetching=false; favFirstAutoRenderDone=false; generalView=[]; itemsRendered=0; }catch(_){}
+    if (typeof resetGeneralDom==='function') resetGeneralDom();
+    if (typeof renderFavs==='function') renderFavs();
+    if (typeof updateFavHeight==='function') updateFavHeight();
+    if (typeof updateCounts==='function') updateCounts();
+    // Carrega favoritos imediatamente da base
+    if (typeof fetchFavsImmediate==='function') fetchFavsImmediate();
+    // Inicia a paginação do Geral
+    if (typeof fetchNextPage==='function') fetchNextPage();
+  }catch(e){ mmLog({resetAndQuery_exception:String(e)}); }
+}
+);
   // Reset de estado
   produtosMap.clear(); produtosList=[];
   serverOffset=0; serverExhausted=false; fetching=false;
@@ -981,7 +997,34 @@ function buildPrintHTMLFromFav() {
   }
   const css = '*{box-sizing:border-box;} body{font-family:Arial,sans-serif;color:#000;background:#fff;padding:24px;} h1{margin:0 0 4px 0;font-size:18px;} .meta{color:#444;font-size:12px;margin-bottom:14px;} table{width:100%;border-collapse:collapse;} thead th{text-align:left;font-weight:700;padding:6px 0;} tbody td{padding:4px 0;} @media print{body{padding:0;}}';
   const now=new Date(); const meta = now.toLocaleDateString('pt-BR')+' '+now.toLocaleTimeString('pt-BR');
-  return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório — Favoritos</title><style>'+css+'</style></head><body><h1>Relatório — Favoritos</h1><div class="meta">Gerado em '+meta+'</div><table>'+thead+'<tbody>'+tbody+'</tbody></table></body></html>';
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório — Favoritos</title><style>'+css+'</style></head><body><h1>Relatório — Favoritos</h1><div class="meta">Gerado em '+meta+'</div><table>'+thead+'<tbody>'+tbody+'</tbody></table>
+<!-- ===== Mini Debug Overlay ===== -->
+<style>
+#mmDebugPanel{position:fixed;bottom:10px;right:10px;max-width:40vw;background:#111;color:#eee;
+  font:12px/1.4 monospace;padding:10px;border-radius:8px;box-shadow:0 4px 24px rgba(0,0,0,.5);
+  display:none;z-index:99999;white-space:pre-wrap;word-break:break-word}
+#mmDebugPanel b{color:#9FEF00}
+</style>
+<div id="mmDebugPanel"></div>
+<script>
+(function(){
+  const panel = document.getElementById('mmDebugPanel');
+  window.mmLog = function(o){
+    try{
+      const msg = (typeof o==='string')?o:JSON.stringify(o);
+      panel.innerText = (panel.innerText + (panel.innerText?'\n':'') + msg).slice(-5000);
+    }catch(e){}
+  };
+  window.addEventListener('keydown', (e)=>{
+    if(e.ctrlKey && e.altKey && (e.key==='d' || e.key==='D')){
+      panel.style.display = (panel.style.display==='none'?'block':'none');
+    }
+  });
+  mmLog('Debug pronto: Ctrl+Alt+D');
+})();
+</script>
+
+</body></html>';
 }
 function printFavReport(){
   const iframe = document.createElement('iframe');
@@ -1139,5 +1182,32 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
   }catch(e){ showErr('Falha na inicializaÃ§Ã£o'); dlog({error:'init', detail:String(e)}); }
 })();
 </script>
+
+<!-- ===== Mini Debug Overlay ===== -->
+<style>
+#mmDebugPanel{position:fixed;bottom:10px;right:10px;max-width:40vw;background:#111;color:#eee;
+  font:12px/1.4 monospace;padding:10px;border-radius:8px;box-shadow:0 4px 24px rgba(0,0,0,.5);
+  display:none;z-index:99999;white-space:pre-wrap;word-break:break-word}
+#mmDebugPanel b{color:#9FEF00}
+</style>
+<div id="mmDebugPanel"></div>
+<script>
+(function(){
+  const panel = document.getElementById('mmDebugPanel');
+  window.mmLog = function(o){
+    try{
+      const msg = (typeof o==='string')?o:JSON.stringify(o);
+      panel.innerText = (panel.innerText + (panel.innerText?'\n':'') + msg).slice(-5000);
+    }catch(e){}
+  };
+  window.addEventListener('keydown', (e)=>{
+    if(e.ctrlKey && e.altKey && (e.key==='d' || e.key==='D')){
+      panel.style.display = (panel.style.display==='none'?'block':'none');
+    }
+  });
+  mmLog('Debug pronto: Ctrl+Alt+D');
+})();
+</script>
+
 </body>
 </html>
