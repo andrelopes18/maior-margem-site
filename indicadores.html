@@ -145,7 +145,7 @@
         <div class="val" id="kpiProdutos">—</div>
         <canvas id="sparkProdutos" class="spark" width="300" height="54" aria-hidden="true"></canvas>
       </div>
-      <div class="muted" id="kpiProdutosHint">Total em <code>cadastro_produtos</code> (tendência usa a view).</div>
+      <div class="muted">Total em <code>cadastro_produtos</code> (tendência usa a view).</div>
     </div>
     <div class="card">
       <h3>Nº de sites</h3>
@@ -153,7 +153,7 @@
         <div class="val" id="kpiSites">—</div>
         <canvas id="sparkSites" class="spark" width="300" height="54" aria-hidden="true"></canvas>
       </div>
-      <div class="muted" id="kpiSitesHint">Total em <code>sites</code> (tendência usa a view).</div>
+      <div class="muted">Total em <code>sites</code> (tendência usa a view).</div>
     </div>
     <div class="card">
       <h3>Economia estimada (baseado em vendas)</h3>
@@ -172,12 +172,12 @@
     </div>
   </section>
 
-  <!-- OPORTUNIDADES -->
+  <!-- OPORTUNIDADES (baseadas em MEU PREÇO vs MENOR CONCORRENTE) -->
   <section class="grid" style="margin-top:14px;">
     <div class="panel">
       <header>
-        <h2>Oportunidades — Produtos mais baratos</h2>
-        <div><span class="pill">Δ &lt; 0 (abaixo da média)</span></div>
+        <h2>Oportunidades — Eu sou o mais barato</h2>
+        <div><span class="pill">Critério: <code>meu_preco &lt; menor_concorrente</code></span></div>
       </header>
       <div class="content">
         <div class="tablewrap" id="wrapBaratos">
@@ -186,23 +186,22 @@
               <tr>
                 <th class="sortable" data-col="desc"  data-table="baratos">Descrição<span class="arrow"></span></th>
                 <th class="sortable" data-col="ean"   data-table="baratos">EAN<span class="arrow"></span></th>
-                <th class="sortable" data-col="site"  data-table="baratos">Site<span class="arrow"></span></th>
-                <th class="right sortable" data-col="preco" data-table="baratos">Preço<span class="arrow"></span></th>
-                <th class="right sortable" data-col="mean"  data-table="baratos">Média<span class="arrow"></span></th>
-                <th class="right sortable" data-col="diff"  data-table="baratos">Δ (R$ vs média)<span class="arrow"></span></th>
+                <th class="right sortable" data-col="my"    data-table="baratos">Meu preço<span class="arrow"></span></th>
+                <th class="right sortable" data-col="next"  data-table="baratos">Próximo acima (conc.)<span class="arrow"></span></th>
+                <th class="right sortable" data-col="gap_up" data-table="baratos">Gap p/ recuperar<span class="arrow"></span></th>
               </tr>
             </thead>
             <tbody></tbody>
           </table>
         </div>
-        <div class="hint">Critério: menor preço do período por EAN, filtrado por outliers e **somente** quando Δ &lt; 0.</div>
+        <div class="hint">Use o “próximo acima” como referência para subir preço e manter competitividade.</div>
       </div>
     </div>
 
     <div class="panel">
       <header>
-        <h2>Oportunidades — Produtos mais caros</h2>
-        <div><span class="pill">Δ &gt; 0 (acima da média)</span></div>
+        <h2>Oportunidades — Eu estou mais caro</h2>
+        <div><span class="pill">Critério: <code>meu_preco &gt; menor_concorrente</code></span></div>
       </header>
       <div class="content">
         <div class="tablewrap" id="wrapCaros">
@@ -211,25 +210,25 @@
               <tr>
                 <th class="sortable" data-col="desc"  data-table="caros">Descrição<span class="arrow"></span></th>
                 <th class="sortable" data-col="ean"   data-table="caros">EAN<span class="arrow"></span></th>
-                <th class="sortable" data-col="site"  data-table="caros">Site<span class="arrow"></span></th>
-                <th class="right sortable" data-col="preco" data-table="caros">Preço<span class="arrow"></span></th>
-                <th class="right sortable" data-col="mean"  data-table="caros">Média<span class="arrow"></span></th>
-                <th class="right sortable" data-col="diff"  data-table="caros">Δ (R$ vs média)<span class="arrow"></span></th>
+                <th class="right sortable" data-col="my"    data-table="caros">Meu preço<span class="arrow"></span></th>
+                <th class="right sortable" data-col="minc"  data-table="caros">Menor concorrente<span class="arrow"></span></th>
+                <th class="right sortable" data-col="diff"  data-table="caros">Δ (R$)<span class="arrow"></span></th>
               </tr>
             </thead>
             <tbody></tbody>
           </table>
         </div>
-        <div class="hint">Critério: maior preço do período por EAN, filtrado por outliers e **somente** quando Δ &gt; 0.</div>
+        <div class="hint">Δ = <code>meu_preco − menor_concorrente</code>. Ajuste para ser competitivo.</div>
       </div>
     </div>
   </section>
 
+  <!-- Abaixo do custo + Alterações + Região (inalterados) -->
   <section class="grid">
     <div class="panel">
       <header><h2>Produtos abaixo do preço de custo</h2></header>
       <div class="content" id="blocoAbaixoCusto">
-        <div class="empty">Para ativar, disponibilize uma view com <span class="pill">ean</span>, <span class="pill">meu_custo</span>, <span class="pill">meu_preco</span> ou inclua <span class="pill">custo_cliente</span> na <code>vw_precos_dinamica</code>. Neste layout, a lista aparecerá automaticamente.</div>
+        <div class="empty">Para ativar, inclua <span class="pill">meu_custo</span> e <span class="pill">meu_preco</span> na view (<code>vw_precos_dinamica</code>).</div>
         <div class="tablewrap" style="margin-top:10px; display:none;" id="wrapAbaixoCusto">
           <table id="tblAbaixoCusto">
             <thead>
@@ -275,7 +274,7 @@
     <div class="panel">
       <header><h2>Preços por região</h2></header>
       <div class="content" id="blocoRegiao">
-        <div class="empty">Inclua <span class="pill">regiao</span> na tabela <code>sites</code> (ou crie view <code>vw_preco_regiao</code> com <em>regiao, preco_num</em>). O gráfico aparece aqui automaticamente.</div>
+        <div class="empty">Inclua <span class="pill">regiao</span> na tabela <code>sites</code> (ou crie view <code>vw_preco_regiao</code>).</div>
         <canvas id="chartRegiao" width="640" height="240" style="display:none;"></canvas>
       </div>
     </div>
@@ -303,7 +302,6 @@ function setStatus(t){ statusEl.textContent = t||''; }
 function showErr(msg){ errEl.style.display='block'; errEl.textContent=msg; console.error(msg); }
 function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
 function formatBRL(n){ try { return Number(n).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); } catch { return String(n); } }
-function pct(a,b){ if(!isFinite(a)||!isFinite(b)||b===0) return NA; const p=((a-b)/b)*100; return (p>=0?'+':'')+p.toFixed(1)+'%'; }
 function isFiniteNum(n){ return typeof n === 'number' && isFinite(n); }
 
 /* ========= Controles ========= */
@@ -359,14 +357,12 @@ let lastAlt     = [];
 let lastAbaixo  = [];
 
 const sortState = {
-  baratos: { key:'diff', dir:'asc'  }, // mais negativo primeiro
-  caros:   { key:'diff', dir:'desc' }, // mais positivo primeiro
-  alt:     { key:'perc', dir:'desc' },
-  abaixo:  { key:'delta', dir:'asc' }
+  baratos: { key:'gap_up', dir:'desc' }, // maior potencial de recuperação primeiro
+  caros:   { key:'diff',   dir:'desc' }, // maior sobrepreço primeiro
+  alt:     { key:'perc',   dir:'desc' },
+  abaixo:  { key:'delta',  dir:'asc'  }
 };
-const collators = {
-  pt: new Intl.Collator('pt-BR', { sensitivity:'base', numeric:true })
-};
+const collator = new Intl.Collator('pt-BR', { sensitivity:'base', numeric:true });
 
 /* ========= INIT ========= */
 (async function init(){
@@ -394,10 +390,9 @@ async function reloadAll(){
   try{
     setStatus('Carregando KPIs…');
     await loadKpis();
-    setStatus('Carregando Oportunidades…');
+    setStatus('Carregando Oportunidades (meu preço vs menor concorrente)…');
     await Promise.all([
-      loadMaisBaratos(),
-      loadMaisCaros(),
+      loadOportunidadesVsMin(),
       loadMaioresAlt(),
       loadRegiao(),
       watchAbaixoCusto()
@@ -423,7 +418,7 @@ function applyDateFilter(q){
   return q;
 }
 
-/* ========= Consultas utilitárias ========= */
+/* ========= Util de séries / contadores ========= */
 async function countRows(table){
   const { count, error } = await sb.from(table).select('*', { count:'exact', head:true });
   if (error) throw error;
@@ -446,26 +441,6 @@ async function seriesCountByDay(distinctField){
     if (map.has(day)) map.get(day).add(r[distinctField]);
   }
   return Array.from(map.values()).map(set=>set.size);
-}
-
-function computeStatsByEan(rows){
-  const byEan = new Map();
-  for (const r of rows){
-    const pn = Number(r.preco_num);
-    if (!isFinite(pn)) continue;
-    const key = String(r.ean);
-    if (!byEan.has(key)) byEan.set(key, { ean:key, desc:r.descricao||'', items:[] });
-    byEan.get(key).items.push({ site:r.site_nome||r.site_id, preco:pn, data:r.data });
-  }
-  const list = [];
-  for (const [ean, obj] of byEan){
-    const arr = obj.items;
-    if (!arr.length) continue;
-    const mean = arr.reduce((a,b)=>a+b.preco,0)/arr.length;
-    arr.sort((a,b)=>a.preco-b.preco);
-    list.push({ ean, desc:obj.desc, mean, min:arr[0], max:arr[arr.length-1] });
-  }
-  return list;
 }
 
 /* ========= KPIs ========= */
@@ -511,43 +486,98 @@ async function loadKpis(){
   kpiEconomia.textContent = '—';
 }
 
-/* ========= Oportunidades ========= */
-async function fetchPricesSample(limit){
-  const { data, error } = await applyDateFilter(
-    sb.from(VIEW).select('ean, descricao, site_id, site_nome, preco_num, data')
-      .not('preco_num','is',null)
-      .order('data',{ascending:false})
-      .limit(Math.max(12000, limit*50))
-  );
-  if (error) throw error;
-  const tol = Number(outTol.value || '0.50');
-  const stats = computeStatsByEan(data||[]);
-  const baratos=[], caros=[];
-  for (const s of stats){
-    const lo = s.mean*(1-tol), hi = s.mean*(1+tol);
-    const minOk = isFiniteNum(s.min.preco) && s.min.preco>=lo && s.min.preco<=hi;
-    const maxOk = isFiniteNum(s.max.preco) && s.max.preco>=lo && s.max.preco<=hi;
-
-    if (minOk){
-      const diffMin = s.min.preco - s.mean;
-      if (diffMin < 0){
-        baratos.push({ ean:s.ean, desc:s.desc, site:s.min.site, preco:s.min.preco, mean:s.mean, diff: diffMin });
-      }
-    }
-    if (maxOk){
-      const diffMax = s.max.preco - s.mean;
-      if (diffMax > 0){
-        caros.push({ ean:s.ean, desc:s.desc, site:s.max.site, preco:s.max.preco, mean:s.mean, diff: diffMax });
-      }
-    }
-  }
-  // defaults
-  baratos.sort((a,b)=>a.diff-b.diff);
-  caros.sort((a,b)=>b.diff-a.diff);
-
-  return { baratos: baratos.slice(0, limit), caros: caros.slice(0, limit) };
+/* ========= Oportunidades: MEU PREÇO vs MENOR CONCORRENTE ========= */
+function median(nums){
+  if (!nums.length) return NaN;
+  const arr = nums.slice().sort((a,b)=>a-b);
+  const m = Math.floor(arr.length/2);
+  return arr.length%2 ? arr[m] : (arr[m-1]+arr[m])/2;
+}
+function filterOutliersAroundMedian(list, tol){
+  if (!list.length) return list;
+  const med = median(list.map(x=>x.price));
+  const lo = med*(1-tol), hi = med*(1+tol);
+  const filtered = list.filter(x => x.price>=lo && x.price<=hi);
+  return filtered.length ? filtered : list; // fallback
 }
 
+async function loadOportunidadesVsMin(){
+  const lim = Number(topLimit.value||100);
+  const tol = Number(outTol.value||'0.50');
+
+  // Precisamos de meu_preco (do usuário) e preços de mercado (preco_num) + site para saber o menor e o próximo acima
+  const { data, error } = await applyDateFilter(
+    sb.from(VIEW).select('ean, descricao, site_id, site_nome, preco_num, meu_preco, data')
+      .order('data',{ascending:false})
+      .limit(Math.max(20000, lim*100))
+  );
+  if (error) throw error;
+
+  // EAN -> { desc, my, market:[{price,site}] }
+  const byEan = new Map();
+  for (const r of (data||[])){
+    const e = String(r.ean);
+    if (!byEan.has(e)) byEan.set(e, { ean:e, desc:r.descricao||'', my:null, market:[] });
+    const obj = byEan.get(e);
+
+    const mp = Number(r.meu_preco);
+    if (obj.my===null && isFiniteNum(mp)) obj.my = mp; // mais recente (ordenado por data desc)
+
+    const pn = Number(r.preco_num);
+    if (isFiniteNum(pn)) obj.market.push({ price: pn, site: r.site_nome || r.site_id });
+  }
+
+  const baratos=[], caros=[];
+  for (const obj of byEan.values()){
+    if (!isFiniteNum(obj.my)) continue;
+    if (!obj.market.length) continue;
+
+    // filtro robusto de outliers em torno da mediana (não usa média)
+    const valid = filterOutliersAroundMedian(obj.market, tol)
+      .sort((a,b)=>a.price-b.price);
+
+    if (!valid.length) continue;
+
+    const minc = valid[0]; // menor concorrente
+    // próximo acima do meu preço: menor preço concorrente > meu_preco
+    const nextAbove = valid.find(x => x.price > obj.my) || null;
+
+    if (obj.my < minc.price){
+      // Eu sou o mais barato: exibir "próximo acima" (se não houver, usa o menor concorrente)
+      const prox = nextAbove || minc;
+      const gapUp = prox.price - obj.my;
+      baratos.push({
+        ean: obj.ean, desc: obj.desc,
+        my: obj.my,
+        next: prox.price, next_site: prox.site,
+        gap_up: gapUp
+      });
+    } else if (obj.my > minc.price){
+      // Eu estou mais caro que o menor concorrente
+      const diff = obj.my - minc.price;
+      caros.push({
+        ean: obj.ean, desc: obj.desc,
+        my: obj.my,
+        minc: minc.price, min_site: minc.site,
+        diff
+      });
+    }
+    // empates (==) não entram em nenhum
+  }
+
+  // Ordenações padrão
+  baratos.sort((a,b)=> b.gap_up - a.gap_up);
+  caros.sort((a,b)=> b.diff   - a.diff);
+
+  // guarda e renderiza
+  const limN = Number(topLimit.value||100);
+  lastBaratos = baratos.slice(0, limN);
+  lastCaros   = caros.slice(0, limN);
+  renderBaratos();
+  renderCaros();
+}
+
+/* ========= Render + Ordenação ========= */
 function sortArray(arr, key, dir){
   const m = dir==='desc' ? -1 : 1;
   return arr.slice().sort((a,b)=>{
@@ -555,48 +585,40 @@ function sortArray(arr, key, dir){
     if (typeof va === 'number' && typeof vb === 'number'){
       return (va - vb) * m;
     }
-    return collators.pt.compare(String(va||''), String(vb||'')) * m;
+    return collator.compare(String(va??''), String(vb??'')) * m;
   });
 }
 
 function renderBaratos(){
-  const state = sortState.baratos;
-  const data  = sortArray(lastBaratos, state.key, state.dir);
+  const st = sortState.baratos;
+  const data = sortArray(lastBaratos, st.key, st.dir);
   const tb = document.querySelector('#tblMaisBaratos tbody'); tb.innerHTML='';
   data.forEach(r=>{
     const tr=document.createElement('tr');
     tr.innerHTML = `
       <td>${(r.desc||'').replace(/</g,'&lt;')}</td>
       <td class="mono">${r.ean}</td>
-      <td>${r.site||NA}</td>
-      <td class="right"><span class="price min">${formatBRL(r.preco)}</span></td>
-      <td class="right">${formatBRL(r.mean)}</td>
-      <td class="right">${formatBRL(r.diff)}</td>
+      <td class="right"><span class="price min">${formatBRL(r.my)}</span></td>
+      <td class="right" title="${r.next_site||''}">${formatBRL(r.next)}</td>
+      <td class="right">${formatBRL(r.gap_up)}</td>
     `;
     tb.appendChild(tr);
   });
   applyVisibleHeights();
   decorateHeaders('baratos');
 }
-async function loadMaisBaratos(){
-  const lim = Number(topLimit.value||100);
-  const { baratos } = await fetchPricesSample(lim);
-  lastBaratos = baratos;
-  renderBaratos();
-}
 
 function renderCaros(){
-  const state = sortState.caros;
-  const data  = sortArray(lastCaros, state.key, state.dir);
+  const st = sortState.caros;
+  const data = sortArray(lastCaros, st.key, st.dir);
   const tb = document.querySelector('#tblMaisCaros tbody'); tb.innerHTML='';
   data.forEach(r=>{
     const tr=document.createElement('tr');
     tr.innerHTML = `
       <td>${(r.desc||'').replace(/</g,'&lt;')}</td>
       <td class="mono">${r.ean}</td>
-      <td>${r.site||NA}</td>
-      <td class="right"><span class="price max">${formatBRL(r.preco)}</span></td>
-      <td class="right">${formatBRL(r.mean)}</td>
+      <td class="right"><span class="price max">${formatBRL(r.my)}</span></td>
+      <td class="right" title="${r.min_site||''}">${formatBRL(r.minc)}</td>
       <td class="right">${formatBRL(r.diff)}</td>
     `;
     tb.appendChild(tr);
@@ -604,34 +626,8 @@ function renderCaros(){
   applyVisibleHeights();
   decorateHeaders('caros');
 }
-async function loadMaisCaros(){
-  const lim = Number(topLimit.value||100);
-  const { caros } = await fetchPricesSample(lim);
-  lastCaros = caros;
-  renderCaros();
-}
 
 /* ========= Maiores alterações (Δ ≠ 0) ========= */
-function renderAlt(){
-  const state = sortState.alt;
-  const data  = sortArray(lastAlt, state.key, state.dir);
-  const tb = document.querySelector('#tblMaioresAlt tbody'); tb.innerHTML='';
-  data.forEach(r=>{
-    const tr=document.createElement('tr');
-    tr.innerHTML = `
-      <td>${(r.desc||'').replace(/</g,'&lt;')}</td>
-      <td class="mono">${r.ean}</td>
-      <td>${r.site||NA}</td>
-      <td class="right">${formatBRL(r.prev)}</td>
-      <td class="right">${formatBRL(r.curr)}</td>
-      <td class="right">${formatBRL(r.delta)}</td>
-      <td class="right">${(r.perc>=0?'+':'')+r.perc.toFixed(1)}%</td>
-    `;
-    tb.appendChild(tr);
-  });
-  applyVisibleHeights();
-  decorateHeaders('alt');
-}
 async function loadMaioresAlt(){
   const lim = Number(topLimit.value||100);
   const { data, error } = await applyDateFilter(
@@ -664,10 +660,29 @@ async function loadMaioresAlt(){
       prev: fa, curr: la, delta, perc
     });
   }
-  // default por maior |Δ%|
   arr.sort((a,b)=> Math.abs(b.perc) - Math.abs(a.perc));
   lastAlt = arr.slice(0, lim);
   renderAlt();
+}
+function renderAlt(){
+  const st = sortState.alt;
+  const data = sortArray(lastAlt, st.key, st.dir);
+  const tb = document.querySelector('#tblMaioresAlt tbody'); tb.innerHTML='';
+  data.forEach(r=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = `
+      <td>${(r.desc||'').replace(/</g,'&lt;')}</td>
+      <td class="mono">${r.ean}</td>
+      <td>${r.site||NA}</td>
+      <td class="right">${formatBRL(r.prev)}</td>
+      <td class="right">${formatBRL(r.curr)}</td>
+      <td class="right">${formatBRL(r.delta)}</td>
+      <td class="right">${(r.perc>=0?'+':'')+r.perc.toFixed(1)}%</td>
+    `;
+    tb.appendChild(tr);
+  });
+  applyVisibleHeights();
+  decorateHeaders('alt');
 }
 
 /* ========= Região (opcional) ========= */
@@ -730,8 +745,8 @@ async function watchAbaixoCusto(){
   }catch{}
 }
 function renderAbaixo(){
-  const state = sortState.abaixo;
-  const data  = sortArray(lastAbaixo, state.key, state.dir);
+  const st = sortState.abaixo;
+  const data = sortArray(lastAbaixo, st.key, st.dir);
   const wrap = document.getElementById('wrapAbaixoCusto');
   const empty = document.querySelector('#blocoAbaixoCusto .empty');
   if (!data.length){ wrap.style.display='none'; empty.style.display='block'; return; }
@@ -758,14 +773,13 @@ function bindSortingHandlers(){
     th.addEventListener('click', ()=>{
       const table = th.getAttribute('data-table');
       const col   = th.getAttribute('data-col');
-      const state = sortState[table];
-      if (!state) return;
-      if (state.key === col){
-        state.dir = state.dir==='asc' ? 'desc' : 'asc';
+      const st = sortState[table];
+      if (!st) return;
+      if (st.key === col){
+        st.dir = st.dir==='asc' ? 'desc' : 'asc';
       } else {
-        state.key = col;
-        // default de direção por tipo de coluna
-        state.dir = (col==='desc' || col==='site' || col==='ean') ? 'asc' : (table==='caros' ? 'desc' : 'asc');
+        st.key = col;
+        st.dir = (col==='desc' || col==='ean') ? 'asc' : 'desc';
       }
       switch(table){
         case 'baratos': renderBaratos(); break;
@@ -777,7 +791,6 @@ function bindSortingHandlers(){
   });
 }
 function decorateHeaders(tableKey){
-  // limpa
   document.querySelectorAll(`th.sortable[data-table="${tableKey}"]`).forEach(th=>{
     th.classList.remove('asc','desc');
   });
@@ -789,11 +802,9 @@ function decorateHeaders(tableKey){
 /* ========= Limite visual com rolagem ========= */
 function applyVisibleHeights(){
   const vis = Number(visibleRows.value||20);
-  // aplica para cada wrap
   ['wrapBaratos','wrapCaros','wrapAlt','wrapAbaixoCusto'].forEach(id=>{
     const wrap = document.getElementById(id);
     if (!wrap || wrap.style.display==='none') return;
-    // mede altura do header + 20 linhas
     const table = wrap.querySelector('table');
     const thead = table.querySelector('thead');
     const row   = table.querySelector('tbody tr');
@@ -803,8 +814,6 @@ function applyVisibleHeights(){
     wrap.style.overflow = 'auto';
   });
 }
-
-/* ========= FIM ========= */
 </script>
 </body>
 </html>
