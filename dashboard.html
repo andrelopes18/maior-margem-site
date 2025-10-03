@@ -15,6 +15,8 @@
     .chip.plan { color:#bfffc1; border-color:#2f5a2f; background:#132313; }
     .btn { background:#00b140; color:#fff; border:none; padding:8px 14px; border-radius:6px; cursor:pointer; }
     .btn:hover { background:#009b38; }
+    .badge-indicadores{ background: linear-gradient(135deg,#00b140,#00d084,#00bcd4); color:#0b0b0b; font-weight:700; box-shadow:0 6px 16px rgba(0,0,0,.35); border:1px solid rgba(255,255,255,.15); }
+    .badge-indicadores:hover{ filter:brightness(1.05); }
     .userChipWrap { position: relative; display:inline-block; }
     .dropdown { position:absolute; right:0; top:calc(100% + 6px); display:none; min-width:180px; padding:6px; background:#0f0f0f; border:1px solid #2a2a2a; border-radius:10px; box-shadow:0 10px 30px rgba(0,0,0,.5); z-index:50; }
     .userChipWrap:hover .dropdown, .userChipWrap.open .dropdown { display:block; }
@@ -112,6 +114,7 @@
 <body>
 <header>
   <h1>MaiorMargem — Dashboard</h1>
+  <a class="btn badge-indicadores" href="indicadores.html" title="Abrir Indicadores (BI)">Indicadores BI</a>
   <div class="userbox">
     <span id="planChip" class="chip plan">Plano: —</span>
     <div class="userChipWrap">
@@ -190,7 +193,7 @@
     <span id="chartTitle">Histórico</span>
     <button class="close" id="chartClose" aria-label="Fechar" type="button">×</button>
   </header>
-  <canvas id="spark" width="220" height="180"></canvas>
+  <canvas id="spark" width="264" height="216"></canvas>
   <div id="chartMsg" class="msg" style="display:none;"></div>
 </div>
 
@@ -757,7 +760,7 @@ generalWrap.addEventListener('scroll', onGeneralScroll);
 function renderRowIntoGeneral(tr,item){
   const tdFav=document.createElement('td'); tdFav.className='col-fav';
   const chk=document.createElement('input'); chk.type='checkbox'; chk.checked=isFav(item.sku);
-  chk.addEventListener('change',()=>{ if(chk.checked) favSet.add(item.sku); else favSet.delete(item.sku); favSave(); renderFavs(); updateFavHeight(); updateCounts(); });
+  chk.addEventListener('change',()=>{ if(chk.checked) favSet.add(item.sku); else favSet.delete(item.sku); favSave(); fetchMissingFavsIfNeeded(); renderFavs(); updateFavHeight(); updateCounts(); });
   tdFav.appendChild(chk); tr.appendChild(tdFav); generalChkMap.set(item.sku, chk);
 
   const {min,max}=computeMinMaxForRow(item);
@@ -788,7 +791,7 @@ function renderFavs(){
 
     const tdAct=document.createElement('td'); tdAct.className='col-fav';
     const btn=document.createElement('button'); btn.title='Remover'; btn.innerHTML='🗑️'; btn.type='button';
-    btn.addEventListener('click',()=>{ favSet.delete(item.sku); favSave(); const chk=generalChkMap.get(item.sku); if(chk){ chk.checked=false; } renderFavs(); updateFavHeight(); updateCounts(); });
+    btn.addEventListener('click',()=>{ favSet.delete(item.sku); favSave(); const chk=generalChkMap.get(item.sku); if(chk){ chk.checked=false; } fetchMissingFavsIfNeeded(); renderFavs(); updateFavHeight(); updateCounts(); });
     tdAct.appendChild(btn); tr.appendChild(tdAct);
 
     const {min,max}=computeMinMaxForRow(item);
@@ -823,20 +826,15 @@ function buildQuery(){
     { count:'estimated' }
   ).order('data', { ascending:false });
 
-  // Aplicar filtros diretamente na base quando houver consulta
   const eanQ  = (currentEanQ||'').trim();
   const descQ = (currentDescQ||'').trim();
 
   if (eanQ){
-    // Busca parcial por EAN/GTIN
     q = q.ilike('ean', `%${eanQ}%`);
   }
   if (descQ){
-    // Busca por descrição cliente OU descrição padrão
-    // Nota: usa OR para combinar os dois campos
     q = q.or(`descricao.ilike.%${descQ}%,descricao_cliente.ilike.%${descQ}%`);
   }
-
   return q;
 }
 async function fetchNextPage(){
@@ -941,31 +939,89 @@ function printFavReport(){
 /* ========= Chart ========= */
 popClose.addEventListener('click', ()=> pop.style.display='none');
 addEventListener('click', (ev)=>{ if(pop.style.display!=='none' && !pop.contains(ev.target) && !ev.target.closest('.chart-btn')) pop.style.display='none'; });
-function drawSparkFull(points){
-  const ctx=sparkCtx,W=spark.width,H=spark.height; ctx.clearRect(0,0,W,H);
-  if(!points || points.length<3){ popMsg.style.display='block'; popMsg.textContent='Histórico insuficiente (≥3 pontos).'; return; }
+function drawSparkFull(points, mySeries){
+  const ctx=sparkCtx, W=spark.width, H=spark.height; ctx.clearRect(0,0,W,H);
+  if(!points || points.length<2){ popMsg.style.display='block'; popMsg.textContent='Histórico insuficiente (≥2 pontos).'; return; }
   popMsg.style.display='none';
-  const m={l:40,r:14,t:12,b:28}, xs=points.map(p=>p.x.getTime()), ys=points.map(p=>p.y);
-  const xMin=Math.min(...xs), xMax=Math.max(...xs), yMin=Math.min(...ys), yMax=Math.max(...ys);
+  const m={l:44,r:18,t:12,b:34};
+  const xs=points.map(p=>p.x.getTime()), ys=points.map(p=>p.y);
+  const allYs = mySeries && mySeries.length ? ys.concat(mySeries.map(p=>p.y)) : ys;
+  const xMin=Math.min(...xs), xMax=Math.max(...xs);
+  const yMin=Math.min(...allYs), yMax=Math.max(...allYs);
   const xS=v=>m.l+((v-xMin)/(xMax-xMin||1))*(W-m.l-m.r);
   const yR=v=>H-m.b-((v-yMin)/(yMax-yMin||1))*(H-m.t-m.b);
-  const yS=v=>Math.max(m.t+6, Math.min(H-m.b-6, yR(v)));
-  ctx.strokeStyle='#232323'; ctx.lineWidth=1; ctx.beginPath();
-  for(let i=0;i<=3;i++){ const yy=m.t+i*(H-m.t-m.b)/3; ctx.moveTo(m.l,yy); ctx.lineTo(W-m.r,yy); } ctx.stroke();
+  const yS=v=>Math.max(m.t+8, Math.min(H-m.b-8, yR(v)));
+
+  // Grid: horizontais e verticais
+  ctx.strokeStyle='#232323'; ctx.lineWidth=1;
+  ctx.beginPath();
+  for(let i=0;i<=3;i++){ const yy=m.t+i*(H-m.t-m.b)/3; ctx.moveTo(m.l,yy); ctx.lineTo(W-m.r,yy); }
+  const vCount = 4;
+  for(let i=0;i<=vCount;i++){ const xx=m.l+i*(W-m.l-m.r)/vCount; ctx.moveTo(xx,m.t); ctx.lineTo(xx,H-m.b); }
+  ctx.stroke();
+
+  // Série principal (site)
   ctx.beginPath(); ctx.lineWidth=3; ctx.strokeStyle='#00d084';
-  points.forEach((p,i)=>{ const X=xS(p.x.getTime()), Y=yS(p.y); if(i===0) ctx.moveTo(X,Y); else ctx.lineTo(X,Y); }); ctx.stroke();
-  ctx.fillStyle='#00d084'; points.forEach(p=>{ const X=xS(p.x.getTime()), Y=yS(p.y); ctx.beginPath(); ctx.arc(X,Y,2.5,0,Math.PI*2); ctx.fill(); });
-  ctx.fillStyle='#9aa0a6'; ctx.font='10px Arial'; ctx.fillText(new Date(xMin).toLocaleDateString('pt-BR'), m.l, H-8); ctx.fillText(new Date(xMax).toLocaleDateString('pt-BR'), W-m.r-64, H-8);
+  points.forEach((p,i)=>{ const X=xS(p.x.getTime()), Y=yS(p.y); if(i===0) ctx.moveTo(X,Y); else ctx.lineTo(X,Y); });
+  ctx.stroke();
+
+  // Meu preço (tracejado)
+  if (mySeries && mySeries.length){
+    ctx.save();
+    ctx.setLineDash([5,4]); ctx.lineWidth=2; ctx.strokeStyle='#ffd54f';
+    ctx.beginPath();
+    mySeries.forEach((p,i)=>{ const X=xS(p.x.getTime()), Y=yS(p.y); if(i===0) ctx.moveTo(X,Y); else ctx.lineTo(X,Y); });
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Marcadores e labels
+  ctx.fillStyle='#00d084';
+  ctx.font='10px Arial';
+  ctx.textAlign='center'; ctx.textBaseline='bottom';
+  points.forEach(p=>{
+    const X=xS(p.x.getTime()), Y=yS(p.y);
+    ctx.beginPath(); ctx.arc(X,Y,3.8,0,Math.PI*2); ctx.fill();
+    const val = (p.y).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+    ctx.fillText(val, X, Y-6);
+  });
+
+  if (mySeries && mySeries.length){
+    ctx.fillStyle='#ffd54f';
+    mySeries.forEach(p=>{
+      const X=xS(p.x.getTime()), Y=yS(p.y);
+      ctx.beginPath();
+      ctx.moveTo(X-4,Y-4); ctx.lineTo(X+4,Y-4); ctx.lineTo(X+4,Y+4); ctx.lineTo(X-4,Y+4); ctx.closePath(); ctx.fill();
+    });
+  }
+
+  // Rótulos de data (mín/máx)
+  ctx.fillStyle='#9aa0a6'; ctx.font='10px Arial';
+  ctx.fillText(new Date(xMin).toLocaleDateString('pt-BR'), m.l+4, H-8);
+  ctx.fillText(new Date(xMax).toLocaleDateString('pt-BR'), W-m.r-64, H-8);
 }
 async function fetchHistory(ean, siteId){
-  let pts=[];
+  let pts=[], mine=[];
   try{
-    const { data, error } = await sb.from(VIEW).select('data, preco_num').eq('ean', ean).eq('site_id', siteId).not('preco_num','is',null).order('data',{ascending:true}).limit(180);
-    if (!error && data && data.length){ pts = data.map(r=>({ x:new Date(r.data), y:Number(r.preco_num) })).filter(p=>Number.isFinite(p.y)); }
+    const { data, error } = await sb.from(VIEW).select('data, preco_num, meu_preco').eq('ean', ean).eq('site_id', siteId).order('data',{ascending:true}).limit(180);
+    if (!error && data && data.length){
+      pts = data.map(r=>({ x:new Date(r.data), y:Number(r.preco_num) })).filter(p=>Number.isFinite(p.y));
+      mine = data.map(r=>({ x:new Date(r.data), y:Number(r.meu_preco) })).filter(p=>Number.isFinite(p.y));
+    }
   }catch(e){ dlog({error:'fetchHistory.view', detail:String(e)}); }
-  const byTs = new Map(pts.map(p=>[p.x.getTime(), p])); return Array.from(byTs.values()).sort((a,b)=>a.x-b.x);
+  const byTs = new Map(pts.map(p=>[p.x.getTime(), p]));
+  const byTsMine = new Map(mine.map(p=>[p.x.getTime(), p]));
+  return { series: Array.from(byTs.values()).sort((a,b)=>a.x-b.x),
+           mySeries: Array.from(byTsMine.values()).sort((a,b)=>a.x-b.x) };
 }
 async function openChartFor(ev, ean, label, siteId){
+  const x = ev.clientX || (ev.touches && ev.touches[0]?.clientX) || 120, y = ev.clientY || (ev.touches && ev.touches[0]?.clientY) || 80;
+  pop.style.left = Math.max(12, x - 260) + 'px'; pop.style.top  = Math.max(12, y - 200) + 'px';
+  popTitle.textContent = 'Histórico — ' + label + ' • EAN ' + ean; pop.style.display='block'; popMsg.style.display='none';
+  const { series, mySeries } = await fetchHistory(String(ean), Number(siteId));
+  drawSparkFull(series, mySeries);
+}
+(ev, ean, label, siteId){
   const x = ev.clientX || (ev.touches && ev.touches[0]?.clientX) || 120, y = ev.clientY || (ev.touches && ev.touches[0]?.clientY) || 80;
   pop.style.left = Math.max(12, x - 260) + 'px'; pop.style.top  = Math.max(12, y - 200) + 'px';
   popTitle.textContent = 'Histórico — ' + label + ' • EAN ' + ean; pop.style.display='block'; popMsg.style.display='none';
@@ -1022,11 +1078,11 @@ async function initUserAndSites(){
 const onFilterInput = debounce(()=>{
   currentEanQ = (eanFilter.value||'').trim();
   currentDescQ = (descFilter.value||'').trim();
-  // Reconsultar a base com os filtros aplicados (em vez de só filtrar local)
+  // Reconsultar a base com os filtros aplicados
   resetAndQuery();
   dlog({step:'filter', ean:currentEanQ, desc:currentDescQ});
   logSearchDebounced();
-}, 350);
+}, 800);
 eanFilter.addEventListener('input', onFilterInput);
 descFilter.addEventListener('input', onFilterInput);
 
@@ -1041,6 +1097,32 @@ btnReload.addEventListener('click', async ()=>{
   dlog({step:'manualReload.end'});
 });
 btnPrintFav.addEventListener('click', printFavReport);
+
+
+/* ========= Favoritos: pré-carregar itens favoritos ========= */
+let _fetchFavsInFlight = false;
+async function fetchMissingFavsIfNeeded(){
+  try{
+    if (_fetchFavsInFlight) return;
+    const missing = [];
+    for (const sku of favSet){
+      if (!produtosMap.has(String(sku))) missing.push(String(sku));
+    }
+    if (!missing.length) return;
+    _fetchFavsInFlight = true;
+    const { data, error } = await sb.from(VIEW).select(
+      'ean, site_id, site_nome, preco, data, descricao, preco_num, meu_preco, descricao_cliente'
+    ).in('ean', missing).order('data', { ascending:false }).limit(2000);
+    if (!error && data && data.length){
+      upsertRowsIntoProdutos(data);
+      recomputeGeneralView();
+      renderFavs();
+      updateFavHeight();
+      updateCounts();
+    }
+  }catch(e){ dlog({warn:'fetchMissingFavsIfNeeded', detail:String(e)}); }
+  finally{ _fetchFavsInFlight=false; }
+}
 
 /* ========= Favoritos: altura/resizer ========= */
 function measureRowHeight(){ const row=document.querySelector('#favTable tbody tr'); if(!row) return 44; const h=Math.round(row.getBoundingClientRect().height); return Math.max(36, h||44); }
@@ -1066,6 +1148,7 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
     applyToggle(toggleGenBtn, generalWrap, null, 'mm_tgl_gen');
 
     resetAndQuery();
+    fetchMissingFavsIfNeeded();
     generalWrap.dispatchEvent(new Event('scroll'));
   }catch(e){ showErr('Falha na inicializaÃ§Ã£o'); dlog({error:'init', detail:String(e)}); }
 })();
