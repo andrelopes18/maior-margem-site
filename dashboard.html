@@ -490,6 +490,47 @@ function upsertRowsIntoProdutos(rows){
   for (const it of produtosList){ if (it._tokNeeds) ensureDescIndex(it); }
   analyzeAllItemsOutliers();
 }
+/* ========= Favoritos: carga imediata ========= */
+async function fetchFavsImmediate(){
+  try{
+    // Se não houver favoritos, apenas atualiza contadores/altura
+    if (!favSet || favSet.size === 0){
+      renderFavs();
+      updateFavHeight();
+      updateCounts();
+      dlog({step:'favorites.none'});
+      return;
+    }
+
+    const favs = Array.from(favSet).map(String);
+    // sites do usuário
+    const siteIds = (chosen||[]).map(c => Number(c.site_id)).filter(n => Number.isFinite(n));
+
+    let q = sb.from(VIEW).select(
+      'ean, site_id, site_nome, preco, data, descricao, preco_num, meu_preco, descricao_cliente'
+    ).in('ean', favs).order('data', { ascending:false });
+
+    if (siteIds.length){
+      q = q.in('site_id', siteIds);
+    }
+
+    const { data, error, status } = await q;
+    if (error){
+      dlog({error:'fetchFavsImmediate', code:error.code, msg:error.message, status});
+      return;
+    }
+    if (Array.isArray(data) && data.length){
+      upsertRowsIntoProdutos(data);
+    }
+    renderFavs();
+    updateFavHeight();
+    updateCounts();
+    dlog({step:'favorites.loaded.immediate', favorites:favs.length, rows:data?data.length:0});
+  }catch(e){
+    dlog({error:'favorites.immediate.exception', detail:String(e)});
+  }
+}
+
 
 /* ========= Busca robusta ========= */
 function matchesFilters(item){
@@ -869,8 +910,26 @@ async function fetchNextPage(){
 }
 
 /* ========= Reset ========= */
-function resetAndQuery(){
+
+async function resetAndQuery(){
   dlog({step:'resetAndQuery'});
+  // Reset de estado
+  produtosMap.clear(); produtosList=[];
+  serverOffset=0; serverExhausted=false; fetching=false;
+  favFirstAutoRenderDone=false;
+  generalView=[]; itemsRendered=0;
+  resetGeneralDom();
+  renderFavs();
+  updateFavHeight();
+  updateCounts();
+
+  // 1) Carrega favoritos imediatamente da base (independente do scroll do Geral)
+  await fetchFavsImmediate();
+
+  // 2) Inicia paginação do Geral normalmente
+  fetchNextPage();
+}
+);
   produtosMap.clear(); produtosList=[]; serverOffset=0; serverExhausted=false; favFirstAutoRenderDone=false;
   generalView=[]; resetGeneralDom(); renderFavs(); updateFavHeight(); updateCounts(); fetchNextPage();
 }
