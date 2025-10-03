@@ -838,47 +838,6 @@ function buildQuery(){
 
   return q;
 }
-/* ========= Favoritos: consulta imediata na base ========= */
-async function fetchFavoritesSnapshot(){
-  try{
-    const favsArr = Array.from(favSet||new Set()).map(String);
-    // Limpa e atualiza se não houver favoritos
-    if (!favsArr.length){
-      favBody.innerHTML='';
-      updateFavHeight();
-      updateCounts();
-      return;
-    }
-    // Limita por sites do usuário (chosen)
-    const siteIds = (chosen||[]).map(c => Number(c.site_id)).filter(n => Number.isFinite(n));
-
-    let q = sb.from(VIEW).select(
-      'ean, site_id, site_nome, preco, data, descricao, preco_num, meu_preco, descricao_cliente'
-    ).in('ean', favsArr);
-
-    if (siteIds.length){
-      q = q.in('site_id', siteIds);
-    }
-
-    // Busca últimos registros mais recentes
-    const { data, error, status } = await q.order('data', { ascending:false });
-    if (error){
-      dlog({error:'fetchFavoritesSnapshot', code:error.code, msg:error.message, status});
-      return;
-    }
-    if (Array.isArray(data) && data.length){
-      // Insere/atualiza no mapas gerais (produtosMap/produtosList) para reaproveitar o renderizador
-      upsertRowsIntoProdutos(data);
-    }
-    renderFavs();
-    updateFavHeight();
-    updateCounts();
-    dlog({step:'favorites.snapshot.loaded', favorites:favsArr.length, rows:(data?data.length:0)});
-  }catch(e){
-    dlog({error:'favorites.snapshot.exception', detail:String(e)});
-  }
-}
-
 async function fetchNextPage(){
   if (fetching || serverExhausted) return; fetching = true; hideErr(); setStatus('Carregando... (offset ' + serverOffset + ')'); dlog({step:'fetch', offset:serverOffset});
   try{
@@ -910,24 +869,8 @@ async function fetchNextPage(){
 }
 
 /* ========= Reset ========= */
-
 function resetAndQuery(){
   dlog({step:'resetAndQuery'});
-  // Reset de estado
-  produtosMap.clear(); produtosList=[];
-  serverOffset=0; serverExhausted=false; fetching=false;
-  favFirstAutoRenderDone=false;
-  generalView=[]; itemsRendered=0;
-  resetGeneralDom();
-  renderFavs();
-  updateFavHeight();
-  updateCounts();
-  // Carrega favoritos imediatamente da base (não depende de rolagem)
-  fetchFavoritesSnapshot();
-  // Inicia a paginação do Geral
-  fetchNextPage();
-}
-);
   produtosMap.clear(); produtosList=[]; serverOffset=0; serverExhausted=false; favFirstAutoRenderDone=false;
   generalView=[]; resetGeneralDom(); renderFavs(); updateFavHeight(); updateCounts(); fetchNextPage();
 }
