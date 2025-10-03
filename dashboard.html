@@ -829,8 +829,15 @@ function buildQuery(){
   const eanQ  = (currentEanQ||'').trim();
   const descQ = (currentDescQ||'').trim();
 
+  // EAN robusto: se só dígitos (>=8), usar igualdade (evita ilike em coluna numérica).
   if (eanQ){
-    q = q.ilike('ean', `%${eanQ}%`);
+    const digits = eanQ.replace(/\D/g, '');
+    if (digits.length >= 8 && digits === eanQ){
+      q = q.eq('ean', eanQ);
+    } else {
+      // Se o campo EAN for texto na view, pode usar ilike; se for numérico, este ramo não dispara.
+      q = q.ilike('ean', `%${eanQ}%`);
+    }
   }
   if (descQ){
     q = q.or(`descricao.ilike.%${descQ}%,descricao_cliente.ilike.%${descQ}%`);
