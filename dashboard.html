@@ -816,71 +816,6 @@ function updateCounts(){
   countFavs.textContent  = 'Favoritos: ' + favSet.size;
 }
 
-
-/* ========= Favoritos: consulta sob demanda ========= */
-async function fetchFavoritesNow(){
-  try{
-    const infoEl = document.getElementById('favInfo');
-    if (infoEl) infoEl.textContent = 'consultando…';
-
-    // obter EANs favoritados do storage como fallback
-    let favs = [];
-    try{
-      if (window.favSet && favSet.size) favs = Array.from(favSet);
-      if (!favs.length){
-        favs = JSON.parse(localStorage.getItem('mm_favs')||'[]');
-      }
-    }catch(_){}
-
-    if (!Array.isArray(favs) || favs.length===0){
-      // sem favoritos — limpa UI e sai
-      if (typeof favBody!=='undefined' && favBody) favBody.innerHTML='';
-      if (typeof renderFavs==='function') renderFavs();
-      if (typeof updateFavHeight==='function') updateFavHeight();
-      if (typeof updateCounts==='function') updateCounts();
-      if (infoEl) infoEl.textContent = 'nenhum favorito marcado';
-      if (typeof dlog==='function') dlog({step:'favorites.skip.no-favs'});
-      return;
-    }
-
-    // montar consulta defensiva
-    if (!window.sb || !window.VIEW){
-      if (infoEl) infoEl.textContent = 'cliente/view indisponível';
-      if (typeof dlog==='function') dlog('Supabase client ou VIEW indisponível.');
-      return;
-    }
-
-    const favsStr = favs.map(String);
-    const siteIds = (Array.isArray(window.chosen)?window.chosen:[])
-      .map(c => Number(c.site_id)).filter(n => Number.isFinite(n));
-
-    let q = sb.from(VIEW).select(
-      'ean, site_id, site_nome, preco, data, descricao, preco_num, meu_preco, descricao_cliente'
-    ).in('ean', favsStr).order('data', { ascending:false });
-
-    if (siteIds.length){ q = q.in('site_id', siteIds); }
-
-    const { data, error, status } = await q;
-    if (error){
-      if (infoEl) infoEl.textContent = 'erro ao consultar';
-      if (typeof dlog==='function') dlog({error:'favorites.query', code:error.code, msg:error.message, status});
-      return;
-    }
-
-    if (Array.isArray(data) && data.length && typeof upsertRowsIntoProdutos==='function'){
-      upsertRowsIntoProdutos(data);
-    }
-
-    if (typeof renderFavs==='function') renderFavs();
-    if (typeof updateFavHeight==='function') updateFavHeight();
-    if (typeof updateCounts==='function') updateCounts();
-    if (infoEl) infoEl.textContent = `carregados ${data?data.length:0} registros`;
-    if (typeof dlog==='function') dlog({step:'favorites.loaded.onDemand', favs:favsStr.length, rows:(data?data.length:0)});
-  }catch(e){
-    if (typeof dlog==='function') dlog({error:'favorites.exception', detail:String(e)});
-  }
-}
-
 /* ========= Query / paginação ========= */
 function buildQuery(){
   let q = sb.from(VIEW).select(
@@ -987,25 +922,7 @@ function buildPrintHTMLFromFav() {
   }
   const css = '*{box-sizing:border-box;} body{font-family:Arial,sans-serif;color:#000;background:#fff;padding:24px;} h1{margin:0 0 4px 0;font-size:18px;} .meta{color:#444;font-size:12px;margin-bottom:14px;} table{width:100%;border-collapse:collapse;} thead th{text-align:left;font-weight:700;padding:6px 0;} tbody td{padding:4px 0;} @media print{body{padding:0;}}';
   const now=new Date(); const meta = now.toLocaleDateString('pt-BR')+' '+now.toLocaleTimeString('pt-BR');
-  return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório — Favoritos</title><style>'+css+'</style></head><body><h1>Relatório — Favoritos</h1><div class="meta">Gerado em '+meta+'</div><table>'+thead+'<tbody>'+tbody+'</tbody></table>
-<script>
-(function(){
-  function wireFavBtn(){
-    var btn = document.getElementById('btnFavReload');
-    if(!btn) return;
-    btn.addEventListener('click', function(){
-      if (typeof fetchFavoritesNow==='function') fetchFavoritesNow();
-    });
-  }
-  if(document.readyState==='loading'){
-    document.addEventListener('DOMContentLoaded', wireFavBtn);
-  }else{
-    wireFavBtn();
-  }
-})();
-</script>
-
-</body></html>';
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório — Favoritos</title><style>'+css+'</style></head><body><h1>Relatório — Favoritos</h1><div class="meta">Gerado em '+meta+'</div><table>'+thead+'<tbody>'+tbody+'</tbody></table></body></html>';
 }
 function printFavReport(){
   const iframe = document.createElement('iframe');
@@ -1163,23 +1080,5 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
   }catch(e){ showErr('Falha na inicializaÃ§Ã£o'); dlog({error:'init', detail:String(e)}); }
 })();
 </script>
-
-<script>
-(function(){
-  function wireFavBtn(){
-    var btn = document.getElementById('btnFavReload');
-    if(!btn) return;
-    btn.addEventListener('click', function(){
-      if (typeof fetchFavoritesNow==='function') fetchFavoritesNow();
-    });
-  }
-  if(document.readyState==='loading'){
-    document.addEventListener('DOMContentLoaded', wireFavBtn);
-  }else{
-    wireFavBtn();
-  }
-})();
-</script>
-
 </body>
 </html>
