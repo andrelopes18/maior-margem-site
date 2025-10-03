@@ -910,20 +910,66 @@ async function doLogSearch(){
 }
 
 /* ========= Impressão (via iframe oculto, sem pop-up) ========= */
-function buildPrintHTMLFromFav() {
+
+function buildPrintHTMLFromFav(){
   const favHeaderRow = document.getElementById('favHeaderRow');
-  const headers = Array.from(favHeaderRow?.children || []).map((th,i) => i===0 ? null : th.textContent.trim()).filter(Boolean);
-  const favBody = document.querySelector('#favTable tbody'); const rows = Array.from(favBody?.rows || []);
-  const thead = '<thead><tr>' + headers.map(h => '<th>'+h+'</th>').join('') + '</tr></thead>';
+  const headers = Array.from((favHeaderRow && favHeaderRow.children) || [])
+    .map((th,i)=> i===0 ? null : (th.textContent||'').trim())
+    .filter(Boolean);
+
+  const favBodyEl = document.querySelector('#favTable tbody');
+  const rows = Array.from((favBodyEl && favBodyEl.rows) || []);
+
+  const esc = (txt) => String(txt==null?'':txt)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+  const thead = `<thead><tr>${headers.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead>`;
+
   let tbody = '';
-  for (const tr of rows) {
-    const cells = Array.from(tr.cells).slice(1).map(td => { const txt = (td.textContent || '').replace(/\s+/g, ' ').trim(); return '<td>'+(txt || NA)+'</td>'; });
+  for(const tr of rows){
+    const tds = Array.from(tr.cells).slice(1).map(td => {
+      const raw = (td.textContent||'').replace(/\s+/g,' ').trim();
+      return `<td>${esc(raw)}</td>`;
+    }).join('');
+    tbody += `<tr>${tds}</tr>`;
+  }
+
+  const style = `
+    body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;color:#111;padding:18px;}
+    h1{font-size:18px;margin:0 0 8px 0;}
+    .meta{font-size:12px;color:#555;margin-bottom:10px;}
+    table{width:100%;border-collapse:collapse;font-size:12px;}
+    thead th{text-align:left;font-weight:700;padding:6px 0;border-bottom:1px solid #ddd;}
+    tbody td{padding:4px 0;border-bottom:1px solid #f0f0f0;}
+    @page{margin:12mm;}
+    @media print{body{padding:0;}}
+  `;
+
+  const now = new Date();
+  const meta = now.toLocaleDateString('pt-BR')+' '+now.toLocaleTimeString('pt-BR');
+
+  return `<!DOCTYPE html>
+  <html lang="pt-BR">
+    <head>
+      <meta charset="utf-8">
+      <title>Favoritos</title>
+      <style>${style}</style>
+    </head>
+    <body>
+      <h1>Relatório de Favoritos</h1>
+      <div class="meta">${esc(meta)}</div>
+      <table>${thead}<tbody>${tbody}</tbody></table>
+    </body>
+  </html>`;
+}
+);
     tbody += '<tr>'+cells.join('')+'</tr>';
   }
   const css = '*{box-sizing:border-box;} body{font-family:Arial,sans-serif;color:#000;background:#fff;padding:24px;} h1{margin:0 0 4px 0;font-size:18px;} .meta{color:#444;font-size:12px;margin-bottom:14px;} table{width:100%;border-collapse:collapse;} thead th{text-align:left;font-weight:700;padding:6px 0;} tbody td{padding:4px 0;} @media print{body{padding:0;}}';
   const now=new Date(); const meta = now.toLocaleDateString('pt-BR')+' '+now.toLocaleTimeString('pt-BR');
   return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório — Favoritos</title><style>'+css+'</style></head><body><h1>Relatório — Favoritos</h1><div class="meta">Gerado em '+meta+'</div><table>'+thead+'<tbody>'+tbody+'</tbody></table></body></html>';
 }
+
 
 function printFavReport(){
   try{
@@ -938,12 +984,24 @@ function printFavReport(){
     document.body.appendChild(iframe);
 
     const win = iframe.contentWindow || iframe;
-    const doc = win.document || iframe.contentDocument;
-    const html = (typeof buildPrintHTMLFromFav==='function') ? buildPrintHTMLFromFav() : '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Favoritos</title></head><body><p>Nenhum conteúdo para imprimir.</p></body></html>';
+    const doc = (win.document || iframe.contentDocument);
+    const html = (typeof buildPrintHTMLFromFav==='function')
+      ? buildPrintHTMLFromFav()
+      : '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Favoritos</title></head><body><p>Nenhum conteúdo para imprimir.</p></body></html>';
+
+    iframe.onload = function(){
+      try{ win.focus(); win.print(); }catch(_){}
+      setTimeout(function(){ try{ document.body.removeChild(iframe); }catch(_){} }, 1200);
+    };
 
     doc.open();
-    // importante: escapar </script> para não quebrar a string
-    const tail = "<script>window.onload=function(){setTimeout(function(){window.focus();window.print();window.close();},100);};<\/script>";
+    doc.write(html);
+    doc.close();
+  }catch(e){
+    if (typeof dlog==='function') dlog({error:'printFavReport.exception', detail:String(e)});
+  }
+}
+,100);};<\/script>";
     doc.write(html + tail);
     doc.close();
   }catch(e){
