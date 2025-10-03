@@ -56,7 +56,6 @@
     .price.max { color:#00d084; }
     .price.param { color:#ffd54f; }
 
-    /* Antes era display:none; e sumia o marcador */
     .muted { color:#9aa0a6; opacity:.8; }
 
     .end-marker { text-align:center; padding:10px; color:#9aa0a6; }
@@ -277,6 +276,7 @@ const COL_ORDER_KEY = 'mm_col_order';
 
 /* ========= Utils ========= */
 function setStatus(t){ statusEl.textContent = t||''; }
+/* Debounce genérico */
 function debounce(fn,ms=500){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); } }
 function favSave(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet])); }
 function isFav(sku){ return favSet.has(String(sku)); }
@@ -833,7 +833,6 @@ function buildQuery(){
   }
   if (descQ){
     // Busca por descrição cliente OU descrição padrão
-    // Nota: usa OR para combinar os dois campos
     q = q.or(`descricao.ilike.%${descQ}%,descricao_cliente.ilike.%${descQ}%`);
   }
 
@@ -1019,16 +1018,27 @@ async function initUserAndSites(){
 }
 
 /* ========= Busca (EAN + Descrição) ========= */
+/* CHANGED: Aumenta o debounce para 800ms para evitar consulta a cada tecla */
+const SEARCH_DEBOUNCE_MS = 800; // << ajuste principal
 const onFilterInput = debounce(()=>{
   currentEanQ = (eanFilter.value||'').trim();
   currentDescQ = (descFilter.value||'').trim();
-  // Reconsultar a base com os filtros aplicados (em vez de só filtrar local)
   resetAndQuery();
   dlog({step:'filter', ean:currentEanQ, desc:currentDescQ});
   logSearchDebounced();
-}, 350);
+}, SEARCH_DEBOUNCE_MS);
 eanFilter.addEventListener('input', onFilterInput);
 descFilter.addEventListener('input', onFilterInput);
+/* CHANGED: Permite Enter para buscar imediatamente, sem esperar o debounce */
+function triggerSearchNow(){
+  currentEanQ = (eanFilter.value||'').trim();
+  currentDescQ = (descFilter.value||'').trim();
+  resetAndQuery();
+  dlog({step:'filterImmediate', ean:currentEanQ, desc:currentDescQ});
+  logSearchDebounced();
+}
+eanFilter.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); triggerSearchNow(); }});
+descFilter.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); triggerSearchNow(); }});
 
 /* ========= UI ========= */
 ddMeusDados.addEventListener('click', ()=> location.href='meusdados.html');
