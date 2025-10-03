@@ -818,10 +818,26 @@ function updateCounts(){
 
 /* ========= Query / paginação ========= */
 function buildQuery(){
-  return sb.from(VIEW).select(
+  let q = sb.from(VIEW).select(
     'ean, site_id, site_nome, preco, data, descricao, preco_num, meu_preco, descricao_cliente',
     { count:'estimated' }
   ).order('data', { ascending:false });
+
+  // Aplicar filtros diretamente na base quando houver consulta
+  const eanQ  = (currentEanQ||'').trim();
+  const descQ = (currentDescQ||'').trim();
+
+  if (eanQ){
+    // Busca parcial por EAN/GTIN
+    q = q.ilike('ean', `%${eanQ}%`);
+  }
+  if (descQ){
+    // Busca por descrição cliente OU descrição padrão
+    // Nota: usa OR para combinar os dois campos
+    q = q.or(`descricao.ilike.%${descQ}%,descricao_cliente.ilike.%${descQ}%`);
+  }
+
+  return q;
 }
 async function fetchNextPage(){
   if (fetching || serverExhausted) return; fetching = true; hideErr(); setStatus('Carregando... (offset ' + serverOffset + ')'); dlog({step:'fetch', offset:serverOffset});
@@ -1006,10 +1022,8 @@ async function initUserAndSites(){
 const onFilterInput = debounce(()=>{
   currentEanQ = (eanFilter.value||'').trim();
   currentDescQ = (descFilter.value||'').trim();
-  recomputeGeneralView();
-  renderFavs();
-  updateFavHeight();
-  updateCounts();
+  // Reconsultar a base com os filtros aplicados (em vez de só filtrar local)
+  resetAndQuery();
   dlog({step:'filter', ean:currentEanQ, desc:currentDescQ});
   logSearchDebounced();
 }, 350);
