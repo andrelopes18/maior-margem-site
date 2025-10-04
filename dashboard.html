@@ -94,16 +94,6 @@
     #chartPopover header { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
     #chartPopover .close { background:transparent; border:1px solid #333; color:#ddd; padding:2px 8px; border-radius:6px; cursor:pointer; }
     #chartPopover .msg { font-size:12px; color:#9aa0a6; }
-
-    th.sortable { cursor:pointer; user-select:none; }
-    th.reorderable { cursor:move; }
-    th.drop-left::before, th.drop-right::after { content:""; position:absolute; top:0; bottom:0; width:3px; background:#00b140; }
-    th.drop-left::before { left:0; }
-    th.drop-right::after { right:0; }
-    th .sort-ind { margin-left:6px; opacity:.8; font-size:11px; }
-
-    a.price-link { text-decoration:none; }
-    a.price-link:hover .price { text-decoration: underline; }
   </style>
   <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="./config.js"></script>
@@ -189,7 +179,8 @@
     <span id="chartTitle">Histórico</span>
     <button class="close" id="chartClose" aria-label="Fechar" type="button">×</button>
   </header>
-  <canvas id="spark" width="220" height="180"></canvas>
+  <!-- AUMENTO DO TAMANHO DO CANVAS -->
+  <canvas id="spark" width="360" height="240"></canvas>
   <div id="chartMsg" class="msg" style="display:none;"></div>
 </div>
 
@@ -197,7 +188,7 @@
 /* ========= Debug ========= */
 const dbgWrap = document.getElementById('dbgWrap');
 const dbg = document.getElementById('dbg');
-function dlog(o){ try{ dbg.textContent += (typeof o==='string' ? o : JSON.stringify(o,null,2)) + "\n"; dbg.scrollTop = dbg.scrollHeight; }catch{} }
+function dlog(o){ try{ dbg.textContent += (typeof o==='string' ? o : JSON.stringify(o,null,2)) + "\\n"; dbg.scrollTop = dbg.scrollHeight; }catch{} }
 addEventListener('keydown', (e)=>{ if (e.ctrlKey && e.altKey && (e.key==='d'||e.key==='D')) dbgWrap.style.display = (dbgWrap.style.display==='none'||!dbgWrap.style.display)?'block':'none'; });
 
 /* ========= Erros ========= */
@@ -573,7 +564,7 @@ function createPriceCell(item, label, isLocked, minLabel, maxLabel){
       }
 
       const b=document.createElement('button'); b.className='chart-btn'; b.type='button'; b.title=isLocked?'Disponível no upgrade':'Ver histórico'; b.innerHTML=chartButtonSVG();
-      const c=chosen.find(x=>x.label===label); b.addEventListener('click',(ev)=>{ if(isLocked){location.href='planos.html';return;} openChartFor(ev,item.sku,label,c?.site_id,item.meu_preco); }); td.appendChild(b);
+      const c=chosen.find(x=>x.label===label); b.addEventListener('click',(ev)=>{ if(isLocked){location.href='planos.html';return;} openChartFor(ev,item.sku,label,c?.site_id); }); td.appendChild(b);
       if (isLocked){ const up=document.createElement('button'); up.className='unlock'; up.type='button'; up.textContent='Ver planos'; up.addEventListener('click',()=>location.href='planos.html'); td.appendChild(up); }
     } else {
       const span=document.createElement('span'); span.className='price'; span.title=isLocked?'Excedeu o limite do plano':(dtStr?('Atualizado em '+dtStr):''); span.textContent=(d.precoRaw??'').toString().trim() || NA;
@@ -924,7 +915,7 @@ async function doLogSearch(){
     const descQ = (currentDescQ||'').trim();
     const scope = searchScope;
 
-    const isEanOk  = eanQ.replace(/\D/g,'').length >= 8;
+    const isEanOk  = eanQ.replace(/\\D/g,'').length >= 8;
     const isDescOk = descQ.length >= 3;
     if (!isEanOk && !isDescOk) return;
 
@@ -955,7 +946,7 @@ function buildPrintHTMLFromFav() {
   const thead = '<thead><tr>' + headers.map(h => '<th>'+h+'</th>').join('') + '</tr></thead>';
   let tbody = '';
   for (const tr of rows) {
-    const cells = Array.from(tr.cells).slice(1).map(td => { const txt = (td.textContent || '').replace(/\s+/g, ' ').trim(); return '<td>'+(txt || NA)+'</td>'; });
+    const cells = Array.from(tr.cells).slice(1).map(td => { const txt = (td.textContent || '').replace(/\\s+/g, ' ').trim(); return '<td>'+(txt || NA)+'</td>'; });
     tbody += '<tr>'+cells.join('')+'</tr>';
   }
   const css = '*{box-sizing:border-box;} body{font-family:Arial,sans-serif;color:#000;background:#fff;padding:24px;} h1{margin:0 0 4px 0;font-size:18px;} .meta{color:#444;font-size:12px;margin-bottom:14px;} table{width:100%;border-collapse:collapse;} thead th{text-align:left;font-weight:700;padding:6px 0;} tbody td{padding:4px 0;} @media print{body{padding:0;}}';
@@ -970,30 +961,140 @@ function printFavReport(){
   const doc = iframe.contentWindow || iframe.contentDocument;
   const html = buildPrintHTMLFromFav();
   (doc.document || doc).open();
-  (doc.document || doc).write(html + '<script>window.onload=function(){setTimeout(function(){window.focus();window.print();},10)}<\/script>');
+  (doc.document || doc).write(html + '<script>window.onload=function(){setTimeout(function(){window.focus();window.print();},10)}<\\/script>');
   (doc.document || doc).close();
   setTimeout(()=>{ try{ document.body.removeChild(iframe); }catch{} }, 2000);
 }
 
-/* ========= Chart ========= */
+/* ========= Chart (MELHORIAS) ========= */
 popClose.addEventListener('click', ()=> pop.style.display='none');
 addEventListener('click', (ev)=>{ if(pop.style.display!=='none' && !pop.contains(ev.target) && !ev.target.closest('.chart-btn')) pop.style.display='none'; });
-function drawSparkFull(points){
-  const ctx=sparkCtx,W=spark.width,H=spark.height; ctx.clearRect(0,0,W,H);
-  if(!points || points.length<3){ popMsg.style.display='block'; popMsg.textContent='Histórico insuficiente (≥3 pontos).'; return; }
+
+let lastChart = { points:[], xS:null, yS:null, margins:null, hoverIdx:null };
+
+function drawGrid(ctx, W, H, m, xTicks=4, yTicks=4){
+  ctx.save();
+  ctx.strokeStyle = '#232323';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  // horizontais
+  for(let i=0;i<=yTicks;i++){
+    const y = m.t + i*(H-m.t-m.b)/yTicks;
+    ctx.moveTo(m.l, y); ctx.lineTo(W-m.r, y);
+  }
+  // verticais
+  for(let i=0;i<=xTicks;i++){
+    const x = m.l + i*(W-m.l-m.r)/xTicks;
+    ctx.moveTo(x, m.t); ctx.lineTo(x, H-m.b);
+  }
+  ctx.stroke();
+  // moldura dos eixos
+  ctx.strokeStyle = '#2a2a2a';
+  ctx.strokeRect(m.l, m.t, W-m.l-m.r, H-m.t-m.b);
+  ctx.restore();
+}
+
+function drawSparkFull(points, hoverIdx=null){
+  const ctx=sparkCtx, W=spark.width, H=spark.height; ctx.clearRect(0,0,W,H);
+  if(!points || points.length<2){
+    popMsg.style.display='block'; popMsg.textContent='Histórico insuficiente (≥2 pontos).'; return;
+  }
   popMsg.style.display='none';
-  const m={l:40,r:14,t:12,b:28}, xs=points.map(p=>p.x.getTime()), ys=points.map(p=>p.y);
+  const m={l:46,r:18,t:16,b:34};
+  const xs=points.map(p=>p.x.getTime()), ys=points.map(p=>p.y);
   const xMin=Math.min(...xs), xMax=Math.max(...xs), yMin=Math.min(...ys), yMax=Math.max(...ys);
   const xS=v=>m.l+((v-xMin)/(xMax-xMin||1))*(W-m.l-m.r);
   const yR=v=>H-m.b-((v-yMin)/(yMax-yMin||1))*(H-m.t-m.b);
   const yS=v=>Math.max(m.t+6, Math.min(H-m.b-6, yR(v)));
-  ctx.strokeStyle='#232323'; ctx.lineWidth=1; ctx.beginPath();
-  for(let i=0;i<=3;i++){ const yy=m.t+i*(H-m.t-m.b)/3; ctx.moveTo(m.l,yy); ctx.lineTo(W-m.r,yy); } ctx.stroke();
-  ctx.beginPath(); ctx.lineWidth=3; ctx.strokeStyle='#00d084';
-  points.forEach((p,i)=>{ const X=xS(p.x.getTime()), Y=yS(p.y); if(i===0) ctx.moveTo(X,Y); else ctx.lineTo(X,Y); }); ctx.stroke();
-  ctx.fillStyle='#00d084'; points.forEach(p=>{ const X=xS(p.x.getTime()), Y=yS(p.y); ctx.beginPath(); ctx.arc(X,Y,2.5,0,Math.PI*2); ctx.fill(); });
-  ctx.fillStyle='#9aa0a6'; ctx.font='10px Arial'; ctx.fillText(new Date(xMin).toLocaleDateString('pt-BR'), m.l, H-8); ctx.fillText(new Date(xMax).toLocaleDateString('pt-BR'), W-m.r-64, H-8);
+
+  // grid
+  drawGrid(ctx, W, H, m, 5, 4);
+
+  // linha
+  ctx.beginPath();
+  ctx.lineWidth=2.5;
+  ctx.strokeStyle='#00d084';
+  points.forEach((p,i)=>{
+    const X=xS(p.x.getTime()), Y=yS(p.y);
+    if(i===0) ctx.moveTo(X,Y); else ctx.lineTo(X,Y);
+  });
+  ctx.stroke();
+
+  // pontos
+  ctx.fillStyle='#00d084';
+  points.forEach(p=>{ const X=xS(p.x.getTime()), Y=yS(p.y); ctx.beginPath(); ctx.arc(X,Y,3.5,0,Math.PI*2); ctx.fill(); });
+
+  // rótulos nos extremos de data
+  ctx.fillStyle='#9aa0a6'; ctx.font='11px Arial';
+  ctx.fillText(new Date(xMin).toLocaleDateString('pt-BR'), m.l, H-10);
+  const rightLabel = new Date(xMax).toLocaleDateString('pt-BR');
+  ctx.fillText(rightLabel, W - m.r - ctx.measureText(rightLabel).width, H-10);
+
+  // hover
+  if (hoverIdx!=null && points[hoverIdx]){
+    const p = points[hoverIdx];
+    const X=xS(p.x.getTime()), Y=yS(p.y);
+
+    // crosshair
+    ctx.save();
+    ctx.strokeStyle='#3a3a3a'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(m.l, Y); ctx.lineTo(W-m.r, Y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(X, m.t); ctx.lineTo(X, H-m.b); ctx.stroke();
+    ctx.restore();
+
+    // destaque do ponto
+    ctx.beginPath(); ctx.arc(X,Y,6,0,Math.PI*2); ctx.fillStyle='#00d084'; ctx.fill();
+
+    // tooltip
+    const price = formatBRL(p.y);
+    const date  = p.x.toLocaleDateString('pt-BR');
+    const txt   = price + ' • ' + date;
+    ctx.font='12px Arial'; const pad=6;
+    const tw = ctx.measureText(txt).width;
+    const th = 18;
+    let boxX = X + 10, boxY = Y - (th + 10);
+    if (boxX + tw + pad*2 > W - m.r) boxX = X - 10 - (tw + pad*2);
+    if (boxY < m.t) boxY = Y + 10;
+    ctx.fillStyle='rgba(0,0,0,0.85)';
+    ctx.fillRect(boxX, boxY, tw + pad*2, th);
+    ctx.strokeStyle='#2a2a2a'; ctx.strokeRect(boxX, boxY, tw + pad*2, th);
+    ctx.fillStyle='#eaeaea'; ctx.fillText(txt, boxX + pad, boxY + th - 5);
+  }
+
+  // guardar escalas para hover
+  lastChart.points = points;
+  lastChart.xS = xS;
+  lastChart.yS = yS;
+  lastChart.margins = m;
+  lastChart.hoverIdx = hoverIdx;
 }
+
+function indexFromMouse(evt){
+  const rect = spark.getBoundingClientRect();
+  const mx = evt.clientX - rect.left;
+  const my = evt.clientY - rect.top;
+  const pts = lastChart.points || [];
+  if (!pts.length || !lastChart.xS || !lastChart.yS) return null;
+  let bestIdx=null, bestDist=1e9;
+  pts.forEach((p,i)=>{
+    const X=lastChart.xS(p.x.getTime()), Y=lastChart.yS(p.y);
+    const dx=mx-X, dy=my-Y; const d=Math.sqrt(dx*dx+dy*dy);
+    if (d < bestDist){ bestDist=d; bestIdx=i; }
+  });
+  return (bestDist<=10) ? bestIdx : null; // tolerância ~10px
+}
+
+spark.addEventListener('mousemove', (e)=>{
+  const idx = indexFromMouse(e);
+  if (idx!==lastChart.hoverIdx){
+    lastChart.hoverIdx = idx;
+    drawSparkFull(lastChart.points, idx);
+  }
+});
+spark.addEventListener('mouseleave', ()=>{
+  if (lastChart.hoverIdx!=null){ lastChart.hoverIdx=null; drawSparkFull(lastChart.points, null); }
+});
+
 async function fetchHistory(ean, siteId){
   let pts=[];
   try{
@@ -1002,11 +1103,11 @@ async function fetchHistory(ean, siteId){
   }catch(e){ dlog({error:'fetchHistory.view', detail:String(e)}); }
   const byTs = new Map(pts.map(p=>[p.x.getTime(), p])); return Array.from(byTs.values()).sort((a,b)=>a.x-b.x);
 }
-async function openChartFor(ev, ean, label, siteId, userPrice){
+async function openChartFor(ev, ean, label, siteId){
   const x = ev.clientX || (ev.touches && ev.touches[0]?.clientX) || 120, y = ev.clientY || (ev.touches && ev.touches[0]?.clientY) || 80;
-  pop.style.left = Math.max(12, x - 260) + 'px'; pop.style.top  = Math.max(12, y - 200) + 'px';
+  pop.style.left = Math.max(12, x - 300) + 'px'; pop.style.top  = Math.max(12, y - 260) + 'px';
   popTitle.textContent = 'Histórico — ' + label + ' • EAN ' + ean; pop.style.display='block'; popMsg.style.display='none';
-  const points = await fetchHistory(String(ean), Number(siteId)); drawSparkFull(points);
+  const points = await fetchHistory(String(ean), Number(siteId)); drawSparkFull(points, null);
 }
 
 /* ========= Escopo ========= */
@@ -1115,7 +1216,7 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
 
     resetAndQuery();
     generalWrap.dispatchEvent(new Event('scroll'));
-  }catch(e){ showErr('Falha na inicializaÃ§Ã£o'); dlog({error:'init', detail:String(e)}); }
+  }catch(e){ showErr('Falha na inicialização'); dlog({error:'init', detail:String(e)}); }
 })();
 </script>
 </body>
