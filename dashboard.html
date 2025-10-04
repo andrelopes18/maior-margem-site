@@ -95,8 +95,18 @@
     #chartPopover .close { background:transparent; border:1px solid #333; color:#ddd; padding:2px 8px; border-radius:6px; cursor:pointer; }
     #chartPopover .msg { font-size:12px; color:#9aa0a6; }
   </style>
-  <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-  <script src="./config.js"></script>
+  <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js">
+/* ======= Chart custom extras (no-op for safety & future features) ======= */
+// Reservado para futuras camadas (ex.: média móvel, banda de variação)
+// Mantido propositadamente para manter compatibilidade de linhas e facilitar diffs
+
+</script>
+  <script src="./config.js">
+/* ======= Chart custom extras (no-op for safety & future features) ======= */
+// Reservado para futuras camadas (ex.: média móvel, banda de variação)
+// Mantido propositadamente para manter compatibilidade de linhas e facilitar diffs
+
+</script>
 </head>
 <body>
 <header>
@@ -564,7 +574,7 @@ function createPriceCell(item, label, isLocked, minLabel, maxLabel){
       }
 
       const b=document.createElement('button'); b.className='chart-btn'; b.type='button'; b.title=isLocked?'Disponível no upgrade':'Ver histórico'; b.innerHTML=chartButtonSVG();
-      const c=chosen.find(x=>x.label===label); b.addEventListener('click',(ev)=>{ if(isLocked){location.href='planos.html';return;} openChartFor(ev,item.sku,label,c?.site_id); }); td.appendChild(b);
+      const c=chosen.find(x=>x.label===label); b.addEventListener('click',(ev)=>{ if(isLocked){location.href='planos.html';return;} openChartFor(ev,item.sku,label,c?.site_id,item.meu_preco); }); td.appendChild(b);
       if (isLocked){ const up=document.createElement('button'); up.className='unlock'; up.type='button'; up.textContent='Ver planos'; up.addEventListener('click',()=>location.href='planos.html'); td.appendChild(up); }
     } else {
       const span=document.createElement('span'); span.className='price'; span.title=isLocked?'Excedeu o limite do plano':(dtStr?('Atualizado em '+dtStr):''); span.textContent=(d.precoRaw??'').toString().trim() || NA;
@@ -970,9 +980,9 @@ function printFavReport(){
 popClose.addEventListener('click', ()=> pop.style.display='none');
 addEventListener('click', (ev)=>{ if(pop.style.display!=='none' && !pop.contains(ev.target) && !ev.target.closest('.chart-btn')) pop.style.display='none'; });
 
-let lastChart = { points:[], xS:null, yS:null, margins:null, hoverIdx:null };
+let lastChart = { points:[], xS:null, yS:null, margins:null, hoverIdx:null, userPrice:null };
 
-function drawGrid(ctx, W, H, m, xTicks=4, yTicks=4){
+function drawGrid(ctx, W, H, m, xTicks=4, yTicks=4, yMin=null, yMax=null, fmtFn=null){
   ctx.save();
   ctx.strokeStyle = '#232323';
   ctx.lineWidth = 1;
@@ -981,6 +991,17 @@ function drawGrid(ctx, W, H, m, xTicks=4, yTicks=4){
   for(let i=0;i<=yTicks;i++){
     const y = m.t + i*(H-m.t-m.b)/yTicks;
     ctx.moveTo(m.l, y); ctx.lineTo(W-m.r, y);
+    // rótulos do eixo Y (preços)
+    if (yMin!=null && yMax!=null && fmtFn){
+      const val = yMax - ((y - m.t) / (H - m.t - m.b)) * (yMax - yMin);
+      const label = fmtFn(val);
+      ctx.save();
+      ctx.fillStyle = '#9aa0a6';
+      ctx.font = '11px Arial';
+      const tw = ctx.measureText(label).width;
+      ctx.fillText(label, Math.max(4, m.l - 8 - tw), Math.round(y) - 2);
+      ctx.restore();
+    }
   }
   // verticais
   for(let i=0;i<=xTicks;i++){
@@ -994,7 +1015,7 @@ function drawGrid(ctx, W, H, m, xTicks=4, yTicks=4){
   ctx.restore();
 }
 
-function drawSparkFull(points, hoverIdx=null){
+function drawSparkFull(points, hoverIdx=null, userPrice=null){
   const ctx=sparkCtx, W=spark.width, H=spark.height; ctx.clearRect(0,0,W,H);
   if(!points || points.length<2){
     popMsg.style.display='block'; popMsg.textContent='Histórico insuficiente (≥2 pontos).'; return;
@@ -1007,8 +1028,8 @@ function drawSparkFull(points, hoverIdx=null){
   const yR=v=>H-m.b-((v-yMin)/(yMax-yMin||1))*(H-m.t-m.b);
   const yS=v=>Math.max(m.t+6, Math.min(H-m.b-6, yR(v)));
 
-  // grid
-  drawGrid(ctx, W, H, m, 5, 4);
+  // grid com rótulos de preço no eixo Y
+  drawGrid(ctx, W, H, m, 5, 4, yMin, yMax, formatBRL);
 
   // linha
   ctx.beginPath();
@@ -1023,6 +1044,32 @@ function drawSparkFull(points, hoverIdx=null){
   // pontos
   ctx.fillStyle='#00d084';
   points.forEach(p=>{ const X=xS(p.x.getTime()), Y=yS(p.y); ctx.beginPath(); ctx.arc(X,Y,3.5,0,Math.PI*2); ctx.fill(); });
+
+  // linha de referência do Meu Preço (se existir)
+  if (userPrice!=null && isFinite(userPrice)){
+    const yUser = yS(Number(userPrice));
+    ctx.save();
+    ctx.setLineDash([6,4]);
+    ctx.strokeStyle = '#ffd54f';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(m.l, yUser); ctx.lineTo(W - m.r, yUser);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // etiqueta
+    const label = 'Meu preço: ' + formatBRL(Number(userPrice));
+    ctx.font='12px Arial';
+    const pad = 6;
+    const tw = ctx.measureText(label).width;
+    let bx = W - m.r - (tw + pad*2) - 6;
+    let by = Math.max(m.t+4, Math.min(H - m.b - 22, yUser - 12));
+    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    ctx.fillRect(bx, by, tw + pad*2, 18);
+    ctx.strokeStyle='#2a2a2a'; ctx.strokeRect(bx, by, tw + pad*2, 18);
+    ctx.fillStyle = '#ffd54f';
+    ctx.fillText(label, bx + pad, by + 13);
+    ctx.restore();
+  }
 
   // rótulos nos extremos de data
   ctx.fillStyle='#9aa0a6'; ctx.font='11px Arial';
@@ -1088,11 +1135,11 @@ spark.addEventListener('mousemove', (e)=>{
   const idx = indexFromMouse(e);
   if (idx!==lastChart.hoverIdx){
     lastChart.hoverIdx = idx;
-    drawSparkFull(lastChart.points, idx);
+    drawSparkFull(lastChart.points, idx, lastChart.userPrice || null);
   }
 });
 spark.addEventListener('mouseleave', ()=>{
-  if (lastChart.hoverIdx!=null){ lastChart.hoverIdx=null; drawSparkFull(lastChart.points, null); }
+  if (lastChart.hoverIdx!=null){ lastChart.hoverIdx=null; drawSparkFull(lastChart.points, null, lastChart.userPrice || null); }
 });
 
 async function fetchHistory(ean, siteId){
@@ -1103,11 +1150,11 @@ async function fetchHistory(ean, siteId){
   }catch(e){ dlog({error:'fetchHistory.view', detail:String(e)}); }
   const byTs = new Map(pts.map(p=>[p.x.getTime(), p])); return Array.from(byTs.values()).sort((a,b)=>a.x-b.x);
 }
-async function openChartFor(ev, ean, label, siteId){
+async function openChartFor(ev, ean, label, siteId, userPrice){
   const x = ev.clientX || (ev.touches && ev.touches[0]?.clientX) || 120, y = ev.clientY || (ev.touches && ev.touches[0]?.clientY) || 80;
   pop.style.left = Math.max(12, x - 300) + 'px'; pop.style.top  = Math.max(12, y - 260) + 'px';
   popTitle.textContent = 'Histórico — ' + label + ' • EAN ' + ean; pop.style.display='block'; popMsg.style.display='none';
-  const points = await fetchHistory(String(ean), Number(siteId)); drawSparkFull(points, null);
+  const points = await fetchHistory(String(ean), Number(siteId)); lastChart.userPrice = (userPrice!=null && isFinite(userPrice)) ? Number(userPrice) : null; drawSparkFull(points, null, lastChart.userPrice);
 }
 
 /* ========= Escopo ========= */
@@ -1218,6 +1265,11 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
     generalWrap.dispatchEvent(new Event('scroll'));
   }catch(e){ showErr('Falha na inicialização'); dlog({error:'init', detail:String(e)}); }
 })();
+
+/* ======= Chart custom extras (no-op for safety & future features) ======= */
+// Reservado para futuras camadas (ex.: média móvel, banda de variação)
+// Mantido propositadamente para manter compatibilidade de linhas e facilitar diffs
+
 </script>
 </body>
 </html>
