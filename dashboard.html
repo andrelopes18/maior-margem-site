@@ -95,18 +95,8 @@
     #chartPopover .close { background:transparent; border:1px solid #333; color:#ddd; padding:2px 8px; border-radius:6px; cursor:pointer; }
     #chartPopover .msg { font-size:12px; color:#9aa0a6; }
   </style>
-  <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js">
-/* ======= Chart custom extras (no-op for safety & future features) ======= */
-// Reservado para futuras camadas (ex.: média móvel, banda de variação)
-// Mantido propositadamente para manter compatibilidade de linhas e facilitar diffs
-
-</script>
-  <script src="./config.js">
-/* ======= Chart custom extras (no-op for safety & future features) ======= */
-// Reservado para futuras camadas (ex.: média móvel, banda de variação)
-// Mantido propositadamente para manter compatibilidade de linhas e facilitar diffs
-
-</script>
+  <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+  <script src="./config.js"></script>
 </head>
 <body>
 <header>
@@ -189,7 +179,6 @@
     <span id="chartTitle">Histórico</span>
     <button class="close" id="chartClose" aria-label="Fechar" type="button">×</button>
   </header>
-  <!-- AUMENTO DO TAMANHO DO CANVAS -->
   <canvas id="spark" width="360" height="240"></canvas>
   <div id="chartMsg" class="msg" style="display:none;"></div>
 </div>
@@ -262,7 +251,10 @@ let serverOffset=0, serverExhausted=false, fetching=false;
 
 let generalView=[], itemsRendered=0;
 
-let favSet = new Set(JSON.parse(localStorage.getItem('mm_favs') || '[]'));
+/* ===== FAVORITOS AGORA EM TABELA ===== */
+let currentUserId = null;
+let favSet = new Set();              // conjunto em memória (espelho da tabela)
+let favLoadedOnce = false;           // garante carregamento
 let loadingMore=false; const generalChkMap=new Map();
 
 let favHeightUser = Number(localStorage.getItem('mm_fav_height')) || null, favFirstAutoRenderDone=false;
@@ -277,20 +269,11 @@ const COL_ORDER_KEY = 'mm_col_order';
 
 /* ========= Utils ========= */
 function setStatus(t){ statusEl.textContent = t||''; }
-/* Debounce genérico */
 function debounce(fn,ms=500){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); } }
-function favSave(){ localStorage.setItem('mm_favs', JSON.stringify([...favSet])); }
 function isFav(sku){ return favSet.has(String(sku)); }
 function formatBRL(n){ try{ return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) }catch{ return String(n) } }
 
 /* Normalização p/ busca */
-function norm(s){
-  return (s||'').toString()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g,'')
-    .replace(/[^a-zA-Z0-9]/g,'')
-    .toLowerCase();
-}
 function normTokens(s){
   const cleaned = (s||'').toString()
     .normalize('NFD')
@@ -307,6 +290,45 @@ function ensureDescIndex(item){
     item._tok = normTokens(item._descCached);
     item._tokNeeds = false;
   }
+}
+
+/* ========= Persistência de Favoritos (Supabase) ========= */
+async function refreshFavsFromDB(){
+  if (!currentUserId) return;
+  const { data, error } = await sb.from('favoritos').select('ean').eq('user_id', currentUserId).limit(10000);
+  if (error){ dlog({error:'favoritos.select', code:error.code, msg:error.message}); return; }
+  favSet = new Set((data||[]).map(r => String(r.ean)));
+  favLoadedOnce = true;
+  renderFavs();
+  updateFavHeight();
+  updateCounts();
+  // Carrega os dados dos favoritos mesmo sem rolar a lista geral
+  try{ await fetchFavsDirect(); }catch(_){}
+}
+async function addFavorite(ean){
+  if (!currentUserId) return;
+  const sku = String(ean);
+  favSet.add(sku); // otimista
+  const { error } = await sb.from('favoritos').upsert(
+    [{ user_id: currentUserId, ean: sku }],
+    { onConflict: 'user_id,ean', ignoreDuplicates: true }
+  );
+  if (error){
+    favSet.delete(sku); // rollback
+    showErr('Falha ao salvar favorito: '+error.message);
+  }
+  renderFavs(); updateCounts();
+}
+async function removeFavorite(ean){
+  if (!currentUserId) return;
+  const sku = String(ean);
+  const prevHad = favSet.delete(sku); // otimista
+  const { error } = await sb.from('favoritos').delete().eq('user_id', currentUserId).eq('ean', sku);
+  if (error){
+    if (prevHad) favSet.add(sku); // rollback
+    showErr('Falha ao remover favorito: '+error.message);
+  }
+  renderFavs(); updateCounts();
 }
 
 /* ========= Minimizar/Maximizar ========= */
@@ -590,7 +612,6 @@ function createPriceCell(item, label, isLocked, minLabel, maxLabel){
       }
     }
   } else {
-    // Sem dado do site — mostra NA
     const span=document.createElement('span'); span.className='price'; span.textContent=NA; td.appendChild(span);
   }
   return td;
@@ -758,7 +779,11 @@ generalWrap.addEventListener('scroll', onGeneralScroll);
 function renderRowIntoGeneral(tr,item){
   const tdFav=document.createElement('td'); tdFav.className='col-fav';
   const chk=document.createElement('input'); chk.type='checkbox'; chk.checked=isFav(item.sku);
-  chk.addEventListener('change',()=>{ if(chk.checked) favSet.add(item.sku); else favSet.delete(item.sku); favSave(); renderFavs(); updateFavHeight(); updateCounts(); });
+  chk.addEventListener('change',async ()=>{
+    if(chk.checked){ await addFavorite(item.sku); }
+    else { await removeFavorite(item.sku); }
+    renderFavs(); updateFavHeight(); updateCounts();
+  });
   tdFav.appendChild(chk); tr.appendChild(tdFav); generalChkMap.set(item.sku, chk);
 
   const {min,max}=computeMinMaxForRow(item);
@@ -789,7 +814,11 @@ function renderFavs(){
 
     const tdAct=document.createElement('td'); tdAct.className='col-fav';
     const btn=document.createElement('button'); btn.title='Remover'; btn.innerHTML='🗑️'; btn.type='button';
-    btn.addEventListener('click',()=>{ favSet.delete(item.sku); favSave(); const chk=generalChkMap.get(item.sku); if(chk){ chk.checked=false; } renderFavs(); updateFavHeight(); updateCounts(); });
+    btn.addEventListener('click',async ()=>{
+      await removeFavorite(item.sku);
+      const chk=generalChkMap.get(item.sku); if(chk){ chk.checked=false; }
+      renderFavs(); updateFavHeight(); updateCounts();
+    });
     tdAct.appendChild(btn); tr.appendChild(tdAct);
 
     const {min,max}=computeMinMaxForRow(item);
@@ -824,16 +853,13 @@ function buildQuery(){
     { count:'estimated' }
   ).order('data', { ascending:false });
 
-  // Aplicar filtros diretamente na base quando houver consulta
   const eanQ  = (currentEanQ||'').trim();
   const descQ = (currentDescQ||'').trim();
 
   if (eanQ){
-    // Busca parcial por EAN/GTIN
     q = q.ilike('ean', `%${eanQ}%`);
   }
   if (descQ){
-    // Busca por descrição cliente OU descrição padrão
     q = q.or(`descricao.ilike.%${descQ}%,descricao_cliente.ilike.%${descQ}%`);
   }
 
@@ -869,12 +895,10 @@ async function fetchNextPage(){
   } finally { fetching=false; updateCounts(); }
 }
 
-
 /* ========= Favoritos: consulta direta (não depende da rolagem) ========= */
 async function fetchFavsDirect(){
   try{
     if (!favSet || favSet.size === 0){
-      // mantem UI coerente
       renderFavs(); updateFavHeight(); updateCounts();
       dlog({step:'fav.direct.skip', reason:'no-favs'});
       return;
@@ -910,7 +934,7 @@ function resetAndQuery(){
   dlog({step:'resetAndQuery'});
   produtosMap.clear(); produtosList=[]; serverOffset=0; serverExhausted=false; favFirstAutoRenderDone=false;
   generalView=[]; resetGeneralDom(); renderFavs(); updateFavHeight(); updateCounts();
-  try{ if (typeof fetchFavsDirect==='function') fetchFavsDirect(); }catch(_){ /* silencioso */ }
+  try{ if (typeof fetchFavsDirect==='function') fetchFavsDirect(); }catch(_){}
   fetchNextPage();
 }
 
@@ -948,7 +972,7 @@ async function doLogSearch(){
   }
 }
 
-/* ========= Impressão (via iframe oculto, sem pop-up) ========= */
+/* ========= Impressão (via iframe oculto) ========= */
 function buildPrintHTMLFromFav() {
   const favHeaderRow = document.getElementById('favHeaderRow');
   const headers = Array.from(favHeaderRow?.children || []).map((th,i) => i===0 ? null : th.textContent.trim()).filter(Boolean);
@@ -976,7 +1000,7 @@ function printFavReport(){
   setTimeout(()=>{ try{ document.body.removeChild(iframe); }catch{} }, 2000);
 }
 
-/* ========= Chart (MELHORIAS) ========= */
+/* ========= Chart ========= */
 popClose.addEventListener('click', ()=> pop.style.display='none');
 addEventListener('click', (ev)=>{ if(pop.style.display!=='none' && !pop.contains(ev.target) && !ev.target.closest('.chart-btn')) pop.style.display='none'; });
 
@@ -987,11 +1011,9 @@ function drawGrid(ctx, W, H, m, xTicks=4, yTicks=4, yMin=null, yMax=null, fmtFn=
   ctx.strokeStyle = '#232323';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  // horizontais
   for(let i=0;i<=yTicks;i++){
     const y = m.t + i*(H-m.t-m.b)/yTicks;
     ctx.moveTo(m.l, y); ctx.lineTo(W-m.r, y);
-    // rótulos do eixo Y (preços)
     if (yMin!=null && yMax!=null && fmtFn){
       const val = yMax - ((y - m.t) / (H - m.t - m.b)) * (yMax - yMin);
       const label = fmtFn(val);
@@ -1003,13 +1025,11 @@ function drawGrid(ctx, W, H, m, xTicks=4, yTicks=4, yMin=null, yMax=null, fmtFn=
       ctx.restore();
     }
   }
-  // verticais
   for(let i=0;i<=xTicks;i++){
     const x = m.l + i*(W-m.l-m.r)/xTicks;
     ctx.moveTo(x, m.t); ctx.lineTo(x, H-m.b);
   }
   ctx.stroke();
-  // moldura dos eixos
   ctx.strokeStyle = '#2a2a2a';
   ctx.strokeRect(m.l, m.t, W-m.l-m.r, H-m.t-m.b);
   ctx.restore();
@@ -1024,25 +1044,22 @@ function drawSparkFull(points, hoverIdx=null, userPrice=null){
   const m={l:46,r:18,t:16,b:34};
   const xs=points.map(p=>p.x.getTime()), ys=points.map(p=>p.y);
   const xMin=Math.min(...xs), xMax=Math.max(...xs);
-// Inclui Meu preço no range Y e aplica padding para evitar colar no eixo
-const ysAll = (userPrice!=null && isFinite(userPrice)) ? ys.concat([Number(userPrice)]) : ys.slice();
-let yMin=Math.min(...ysAll), yMax=Math.max(...ysAll);
-let span = yMax - yMin;
-if (!isFinite(span) || span <= 0) {
-  span = Math.max(1, Math.abs(yMax||0) * 0.1 || 1);
-  yMin -= span/2; yMax += span/2;
-}
-const pad = Math.max(span * 0.1, 1e-6);
-yMin = yMin - pad;
-yMax = yMax + pad;
-const xS=v=>m.l+((v-xMin)/(xMax-xMin||1))*(W-m.l-m.r);
+  const ysAll = (userPrice!=null && isFinite(userPrice)) ? ys.concat([Number(userPrice)]) : ys.slice();
+  let yMin=Math.min(...ysAll), yMax=Math.max(...ysAll);
+  let span = yMax - yMin;
+  if (!isFinite(span) || span <= 0) {
+    span = Math.max(1, Math.abs(yMax||0) * 0.1 || 1);
+    yMin -= span/2; yMax += span/2;
+  }
+  const pad = Math.max(span * 0.1, 1e-6);
+  yMin = yMin - pad;
+  yMax = yMax + pad;
+  const xS=v=>m.l+((v-xMin)/(xMax-xMin||1))*(W-m.l-m.r);
   const yR=v=>H-m.b-((v-yMin)/(yMax-yMin||1))*(H-m.t-m.b);
   const yS=v=>Math.max(m.t+6, Math.min(H-m.b-6, yR(v)));
 
-  // grid com rótulos de preço no eixo Y
   drawGrid(ctx, W, H, m, 5, 4, yMin, yMax, formatBRL);
 
-  // linha
   ctx.beginPath();
   ctx.lineWidth=2.5;
   ctx.strokeStyle='#00d084';
@@ -1052,11 +1069,9 @@ const xS=v=>m.l+((v-xMin)/(xMax-xMin||1))*(W-m.l-m.r);
   });
   ctx.stroke();
 
-  // pontos
   ctx.fillStyle='#00d084';
   points.forEach(p=>{ const X=xS(p.x.getTime()), Y=yS(p.y); ctx.beginPath(); ctx.arc(X,Y,3.5,0,Math.PI*2); ctx.fill(); });
 
-  // linha de referência do Meu Preço (se existir)
   if (userPrice!=null && isFinite(userPrice)){
     const yUser = yS(Number(userPrice));
     ctx.save();
@@ -1067,7 +1082,6 @@ const xS=v=>m.l+((v-xMin)/(xMax-xMin||1))*(W-m.l-m.r);
     ctx.moveTo(m.l, yUser); ctx.lineTo(W - m.r, yUser);
     ctx.stroke();
     ctx.setLineDash([]);
-    // etiqueta
     const label = 'Meu preço: ' + formatBRL(Number(userPrice));
     ctx.font='12px Arial';
     const pad = 6;
@@ -1082,28 +1096,23 @@ const xS=v=>m.l+((v-xMin)/(xMax-xMin||1))*(W-m.l-m.r);
     ctx.restore();
   }
 
-  // rótulos nos extremos de data
   ctx.fillStyle='#9aa0a6'; ctx.font='11px Arial';
   ctx.fillText(new Date(xMin).toLocaleDateString('pt-BR'), m.l, H-10);
   const rightLabel = new Date(xMax).toLocaleDateString('pt-BR');
   ctx.fillText(rightLabel, W - m.r - ctx.measureText(rightLabel).width, H-10);
 
-  // hover
   if (hoverIdx!=null && points[hoverIdx]){
     const p = points[hoverIdx];
     const X=xS(p.x.getTime()), Y=yS(p.y);
 
-    // crosshair
     ctx.save();
     ctx.strokeStyle='#3a3a3a'; ctx.lineWidth=1;
     ctx.beginPath(); ctx.moveTo(m.l, Y); ctx.lineTo(W-m.r, Y); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(X, m.t); ctx.lineTo(X, H-m.b); ctx.stroke();
     ctx.restore();
 
-    // destaque do ponto
     ctx.beginPath(); ctx.arc(X,Y,6,0,Math.PI*2); ctx.fillStyle='#00d084'; ctx.fill();
 
-    // tooltip
     const price = formatBRL(p.y);
     const date  = p.x.toLocaleDateString('pt-BR');
     const txt   = price + ' • ' + date;
@@ -1119,7 +1128,6 @@ const xS=v=>m.l+((v-xMin)/(xMax-xMin||1))*(W-m.l-m.r);
     ctx.fillStyle='#eaeaea'; ctx.fillText(txt, boxX + pad, boxY + th - 5);
   }
 
-  // guardar escalas para hover
   lastChart.points = points;
   lastChart.xS = xS;
   lastChart.yS = yS;
@@ -1139,7 +1147,7 @@ function indexFromMouse(evt){
     const dx=mx-X, dy=my-Y; const d=Math.sqrt(dx*dx+dy*dy);
     if (d < bestDist){ bestDist=d; bestIdx=i; }
   });
-  return (bestDist<=10) ? bestIdx : null; // tolerância ~10px
+  return (bestDist<=10) ? bestIdx : null;
 }
 
 spark.addEventListener('mousemove', (e)=>{
@@ -1184,14 +1192,14 @@ function initScopeRadios(){
   });
 }
 
-/* ========= INIT: sessão, plano e sites ========= */
+/* ========= INIT: sessão, plano, sites e favoritos ========= */
 async function initUserAndSites(){
   const { data:{ session } } = await sb.auth.getSession();
   if (!session){ location.href = CFG.SITE_URL || 'index.html'; return; }
+  currentUserId = session.user?.id || null;
   userChip.textContent = session.user?.email || 'Logado';
   dlog({step:'session', user:session.user?.id, email:session.user?.email});
 
-  // Ler somente 'plan'
   let planKey='basico';
   try{
     const rs = await sb.from('profiles').select('plan').eq('id', session.user.id).maybeSingle();
@@ -1212,11 +1220,13 @@ async function initUserAndSites(){
     dlog({fatal:'init user_sites/sites failed', raw:String(e)});
     throw e;
   }
+
+  // Carrega favoritos da TABELA (não mais localStorage)
+  await refreshFavsFromDB();
 }
 
 /* ========= Busca (EAN + Descrição) ========= */
-/* CHANGED: Aumenta o debounce para 800ms para evitar consulta a cada tecla */
-const SEARCH_DEBOUNCE_MS = 800; // << ajuste principal
+const SEARCH_DEBOUNCE_MS = 800;
 const onFilterInput = debounce(()=>{
   currentEanQ = (eanFilter.value||'').trim();
   currentDescQ = (descFilter.value||'').trim();
@@ -1226,7 +1236,6 @@ const onFilterInput = debounce(()=>{
 }, SEARCH_DEBOUNCE_MS);
 eanFilter.addEventListener('input', onFilterInput);
 descFilter.addEventListener('input', onFilterInput);
-/* CHANGED: Permite Enter para buscar imediatamente, sem esperar o debounce */
 function triggerSearchNow(){
   currentEanQ = (eanFilter.value||'').trim();
   currentDescQ = (descFilter.value||'').trim();
@@ -1268,7 +1277,6 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
     initScopeRadios();
     loadColumnOrder(); buildHeaders();
 
-    // Minimizar/Maximizar reativado e persistente
     applyToggle(toggleFavBtn, favWrap, document.getElementById('favResizer'), 'mm_tgl_fav');
     applyToggle(toggleGenBtn, generalWrap, null, 'mm_tgl_gen');
 
@@ -1276,11 +1284,6 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
     generalWrap.dispatchEvent(new Event('scroll'));
   }catch(e){ showErr('Falha na inicialização'); dlog({error:'init', detail:String(e)}); }
 })();
-
-/* ======= Chart custom extras (no-op for safety & future features) ======= */
-// Reservado para futuras camadas (ex.: média móvel, banda de variação)
-// Mantido propositadamente para manter compatibilidade de linhas e facilitar diffs
-
 </script>
 </body>
 </html>
