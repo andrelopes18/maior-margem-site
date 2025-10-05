@@ -851,7 +851,7 @@ function buildQuery(){
   let q = sb.from(VIEW).select(
     'ean, site_id, site_nome, preco, data, descricao, preco_num, meu_preco, descricao_cliente',
     { count:'estimated' }
-  ).order('data', { ascending:false });
+  ).order('descricao', { ascending:true, nullsFirst:false }).order('ean', { ascending:true, nullsFirst:true }).order('site_id', { ascending:true });
 
   const eanQ  = (currentEanQ||'').trim();
   const descQ = (currentDescQ||'').trim();
@@ -908,7 +908,7 @@ async function fetchFavsDirect(){
 
     let q = sb.from(VIEW).select(
       'ean, site_id, site_nome, preco, data, descricao, preco_num, meu_preco, descricao_cliente'
-    ).in('ean', favs).order('data', { ascending:false });
+    ).in('ean', favs).order('descricao', { ascending:true, nullsFirst:false }).order('ean', { ascending:true, nullsFirst:true }).order('site_id', { ascending:true });
 
     if (siteIds.length){ q = q.in('site_id', siteIds); }
 
