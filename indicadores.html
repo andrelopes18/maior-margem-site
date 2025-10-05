@@ -76,6 +76,11 @@
     /* Fontes/diagnóstico */
     .source { margin-top:10px; font-size:12px; color:#9aa0a6; }
     .diag { margin-top:10px; font-size:12px; color:#ffb3b3; background:#2b1414; border:1px solid #6b2c2c; padding:8px 10px; border-radius:8px; display:none; }
+
+    /* ===== NOVO: Wordcloud ===== */
+    .wordcloud { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; }
+    .wordcloud span { color:#00b140; cursor:pointer; user-select:none; }
+    .wordcloud span:hover { text-decoration:underline; }
   </style>
   <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="./config.js"></script>
@@ -293,6 +298,51 @@
     </div>
   </section>
 
+  <!-- =================== NOVA SEÇÃO: RELATÓRIOS DE BUSCA (search_logs) =================== -->
+  <section class="grid">
+    <div class="panel">
+      <header>
+        <h2>Produtos mais pesquisados</h2>
+        <button id="btnAtualizarPesquisas" class="btn" type="button">Atualizar</button>
+      </header>
+      <div class="content">
+        <div class="tablewrap" id="wrapTopSearches">
+          <table id="tblPesquisas">
+            <thead>
+              <tr>
+                <th>EAN</th>
+                <th>Descrição</th>
+                <th class="right">Qtd Pesquisas</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="source">Fonte: <code>search_logs</code> (campos: <em>ean_query, desc_query</em>)</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <header>
+        <h2>Nuvem de Palavras (pesquisas)</h2>
+        <button id="btnListaPalavras" class="btn" type="button">Ver palavras em ordem</button>
+      </header>
+      <div class="content">
+        <div id="wordCloud" class="wordcloud"></div>
+        <div id="listaPalavras" style="display:none; margin-top:16px;">
+          <div class="tablewrap" id="wrapWordList">
+            <table id="tblPalavras" style="width:100%;">
+              <thead><tr><th>Palavra</th><th class="right">Frequência</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="hint">Dica: clique em “Ver palavras em ordem” para alternar a lista ordenada.</div>
+      </div>
+    </div>
+  </section>
+  <!-- =================== FIM NOVA SEÇÃO =================== -->
+
   <div id="err" class="err"></div>
 </main>
 
@@ -374,6 +424,8 @@ let lastBaratos = [];
 let lastCaros   = [];
 let lastAlt     = [];
 let lastAbaixo  = [];
+let lastTopSearches = [];   // NOVO
+let lastWordList   = [];    // NOVO
 
 const sortState = {
   baratos: { key:'gap_up', dir:'desc' },
@@ -415,7 +467,9 @@ async function reloadAll(){
       loadMaioresAlt(),
       loadRegiao(),
       watchAbaixoCusto(),
-      runDiagnosticsForOpportunities()
+      runDiagnosticsForOpportunities(),
+      loadTopSearches(),     // NOVO
+      loadWordCloud()        // NOVO
     ]);
     applyVisibleHeights();
     setStatus('Pronto.');
@@ -830,12 +884,12 @@ function decorateHeaders(tableKey){
 /* ========= Limite visual com rolagem ========= */
 function applyVisibleHeights(){
   const vis = Number(visibleRows.value||20);
-  ['wrapBaratos','wrapCaros','wrapAlt','wrapAbaixoCusto'].forEach(id=>{
+  ['wrapBaratos','wrapCaros','wrapAlt','wrapAbaixoCusto','wrapTopSearches','wrapWordList'].forEach(id=>{
     const wrap = document.getElementById(id);
     if (!wrap || wrap.style.display==='none') return;
     const table = wrap.querySelector('table');
-    const thead = table.querySelector('thead');
-    const row   = table.querySelector('tbody tr');
+    const thead = table ? table.querySelector('thead') : null;
+    const row   = table ? table.querySelector('tbody tr') : null;
     const headH = thead ? thead.getBoundingClientRect().height : 40;
     const rowH  = row ? row.getBoundingClientRect().height : 38;
     wrap.style.maxHeight = (headH + rowH * vis + 6) + 'px';
@@ -845,7 +899,6 @@ function applyVisibleHeights(){
 
 /* ========= Diagnóstico dos dados das Oportunidades ========= */
 async function runDiagnosticsForOpportunities(){
-  // Contagens simples para identificar possíveis causas de "0,00"
   const diagBaratos = document.getElementById('diagBaratos');
   const diagCaros   = document.getElementById('diagCaros');
   diagBaratos.style.display = 'none'; diagCaros.style.display = 'none';
@@ -877,6 +930,95 @@ async function runDiagnosticsForOpportunities(){
     diagCaros.style.display = 'block';
   }
 }
+
+/* ================= NOVO: Relatórios de Busca (search_logs) ================= */
+document.getElementById('btnAtualizarPesquisas').addEventListener('click', loadTopSearches);
+document.getElementById('btnListaPalavras').addEventListener('click', toggleWordList);
+
+async function loadTopSearches(){
+  // Obs.: muitos schemas usam created_at; como no print não aparece, usamos fallback por ID desc.
+  const lim = Number(topLimit.value||100);
+  const { data, error } = await sb.from('search_logs')
+    .select('ean_query, desc_query, id')   // id para ordenação recente
+    .order('id', { ascending:false })
+    .limit(Math.max(5000, lim*50));
+  if (error){ console.error(error); return; }
+
+  // chave = ean_query || desc_query
+  const counts = {};
+  for (const r of (data||[])){
+    const key = (r.ean_query || r.desc_query || '').trim().toLowerCase();
+    if (!key) continue;
+    if (!counts[key]) counts[key] = { ean: r.ean_query||'', desc: r.desc_query||'', n:0 };
+    counts[key].n++;
+  }
+  const arr = Object.values(counts).sort((a,b)=> b.n - a.n).slice(0, lim);
+  lastTopSearches = arr;
+
+  const tb = document.querySelector('#tblPesquisas tbody'); tb.innerHTML='';
+  arr.forEach(r=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="mono">${r.ean || '—'}</td>
+      <td>${(r.desc||'—').replace(/</g,'&lt;')}</td>
+      <td class="right">${r.n.toLocaleString('pt-BR')}</td>
+    `;
+    tb.appendChild(tr);
+  });
+  applyVisibleHeights();
+}
+
+async function loadWordCloud(){
+  const lim = 10000;
+  const { data, error } = await sb.from('search_logs')
+    .select('desc_query, id')
+    .order('id', { ascending:false })
+    .limit(lim);
+  if (error){ console.error(error); return; }
+
+  const stop = new Set(['de','da','do','das','dos','para','com','sem','por','uma','uns','umas','que','e','ou','em','na','no','nas','nos']);
+  const freq = new Map();
+  (data||[]).forEach(r=>{
+    const txt = (r.desc_query||'').toLowerCase();
+    txt.split(/[\s,.;:/\-+()]+/).forEach(w=>{
+      if(!w || w.length<3 || stop.has(w)) return;
+      freq.set(w, (freq.get(w)||0)+1);
+    });
+  });
+
+  const entries = Array.from(freq.entries()).sort((a,b)=> b[1]-a[1]).slice(0, 80);
+  lastWordList = entries;
+
+  const cloud = document.getElementById('wordCloud');
+  cloud.innerHTML='';
+  const max = entries.length ? entries[0][1] : 1;
+  entries.forEach(([w,c])=>{
+    const span = document.createElement('span');
+    const size = 12 + Math.round((c/max)*28); // 12px..40px
+    span.style.fontSize = size+'px';
+    span.title = `${c.toLocaleString('pt-BR')} ocorrências`;
+    span.textContent = w;
+    cloud.appendChild(span);
+  });
+}
+
+function toggleWordList(){
+  const box = document.getElementById('listaPalavras');
+  const tb = document.querySelector('#tblPalavras tbody');
+  if (box.style.display === 'none'){
+    box.style.display = 'block';
+    tb.innerHTML='';
+    lastWordList.forEach(([w,c])=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${w}</td><td class="right">${c.toLocaleString('pt-BR')}</td>`;
+      tb.appendChild(tr);
+    });
+    applyVisibleHeights();
+  }else{
+    box.style.display = 'none';
+  }
+}
+/* ================= FIM Relatórios de Busca ================= */
 </script>
 </body>
 </html>
