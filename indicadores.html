@@ -27,6 +27,10 @@
     .toolbar input, .toolbar select { background:#0a0f14; color:#fff; border:1px solid #263241; border-radius:8px; padding:8px 10px; }
     .toolbar label { font-size:12px; color:#cfd8dc; }
 
+    /* Multiselect de sites */
+    #siteFilter { min-width:260px; max-width:360px; }
+    #siteFilter option { padding:4px 6px; }
+
     /* KPIs */
     .kpis { display:grid; grid-template-columns: repeat(4, minmax(220px, 1fr)); gap:14px; }
     @media (max-width:1200px){ .kpis{ grid-template-columns: repeat(2, minmax(220px, 1fr)); } }
@@ -76,7 +80,7 @@
     th.sortable.asc  .arrow { border-top-color:#fff; transform:rotate(180deg); }
     th.sortable.desc .arrow { border-top-color:#fff; transform:rotate(0deg); }
 
-    /* Ocultar fontes/rodapés dos relatórios */
+    /* Ocultar fontes (rodapés dos relatórios) */
     .source { display:none !important; }
 
     /* ===== NUVEM DE PALAVRAS (nova) ===== */
@@ -163,39 +167,10 @@
       </select>
     </div>
 
+    <!-- NOVO: Filtro por sites selecionados -->
     <div class="group">
-      <label for="topLimit">Top:</label>
-      <select id="topLimit" title="Quantidade total de itens carregados por relatório">
-        <option>10</option>
-        <option>20</option>
-        <option>50</option>
-        <option selected>100</option>
-      </select>
-    </div>
-
-    <div class="group">
-      <label for="visibleRows">Visíveis:</label>
-      <select id="visibleRows" title="Limite visual com rolagem">
-        <option>10</option>
-        <option selected>20</option>
-        <option>30</option>
-        <option>50</option>
-      </select>
-    </div>
-
-    <div class="group">
-      <label>Outliers:</label>
-      <select id="outTol">
-        <option value="0.30">±30%</option>
-        <option value="0.50" selected>±50%</option>
-        <option value="0.80">±80%</option>
-        <option value="1.00">±100%</option>
-      </select>
-    </div>
-
-    <div class="group">
-      <label for="qOportunidades">Pesquisar:</label>
-      <input id="qOportunidades" type="search" placeholder="Descrição contém…" />
+      <label for="siteFilter">Sites na comparação:</label>
+      <select id="siteFilter" multiple size="4" title="Selecione um ou mais sites. Se não selecionar nenhum, serão usados todos."></select>
     </div>
 
     <button id="btnRecarregar" class="btn" type="button">Recarregar</button>
@@ -259,7 +234,6 @@
             <tbody></tbody>
           </table>
         </div>
-        <div id="diagBaratos" class="diag"></div>
       </div>
     </div>
 
@@ -283,7 +257,6 @@
             <tbody></tbody>
           </table>
         </div>
-        <div id="diagCaros" class="diag"></div>
       </div>
     </div>
   </section>
@@ -406,6 +379,11 @@ if(!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY){ alert('CONFIG ausente (config.j
 const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth:{ persistSession:true, autoRefreshToken:true, detectSessionInUrl:true }});
 const VIEW = 'vw_precos_dinamica';
 
+/* ========= Padrões após ocultar filtros ========= */
+const DEFAULT_TOP_LIMIT = 100;     // substitui "Top" (oculto)
+const DEFAULT_OUTLIER_TOL = 0.50;  // substitui "Outliers" (oculto)
+const DEFAULT_VISIBLE_ROWS = 20;   // substitui "Visíveis" (oculto)
+
 /* ========= Util ========= */
 const NA = '---';
 const planChip = document.getElementById('planChip');
@@ -413,6 +391,7 @@ const userChip = document.getElementById('userChip');
 const btnSair  = document.getElementById('btnSair');
 const statusEl = document.getElementById('status');
 const errEl    = document.getElementById('err');
+const siteFilter = document.getElementById('siteFilter');
 
 function setStatus(t){ statusEl.textContent = t||''; }
 function showErr(msg){ errEl.style.display='block'; errEl.textContent=msg; console.error(msg); }
@@ -424,12 +403,9 @@ function isFiniteNum(n){ return typeof n === 'number' && isFinite(n); }
 const dateFrom = document.getElementById('dateFrom');
 const dateTo   = document.getElementById('dateTo');
 const quickRange  = document.getElementById('quickRange');
-const topLimit    = document.getElementById('topLimit');
-const visibleRows = document.getElementById('visibleRows');
-const outTol      = document.getElementById('outTol');
-const qOportunidades = document.getElementById('qOportunidades');
-document.getElementById('btnRecarregar').addEventListener('click', reloadAll);
+const qOportunidades = document.getElementById('qOportunidades'); // (continua existente se estiver no HTML)
 
+document.getElementById('btnRecarregar').addEventListener('click', reloadAll);
 quickRange.addEventListener('change', ()=>{
   const v = quickRange.value;
   if (v==='custom') return;
@@ -438,11 +414,12 @@ quickRange.addEventListener('change', ()=>{
   dateTo.value   = today.toISOString().slice(0,10);
   dateFrom.value = from.toISOString().slice(0,10);
 });
-
-visibleRows.addEventListener('change', applyVisibleHeights);
-qOportunidades.addEventListener('input', ()=>{
-  renderBaratos();
-  renderCaros();
+if (qOportunidades){
+  qOportunidades.addEventListener('input', ()=>{ renderBaratos(); renderCaros(); });
+}
+siteFilter.addEventListener('change', async ()=>{
+  // Recarrega relatórios que dependem de sites
+  await Promise.all([ loadOportunidadesVsMin(), loadMaioresAlt() ]);
 });
 
 btnSair.addEventListener('click', async ()=>{
@@ -473,6 +450,7 @@ function drawSpark(ctx, points){
 }
 
 /* ========= Dados em memória ========= */
+let siteMap = new Map(); // id -> nome
 let lastBaratos = [];
 let lastCaros   = [];
 let lastAlt     = [];
@@ -500,6 +478,8 @@ const collator = new Intl.Collator('pt-BR', { sensitivity:'base', numeric:true }
     planChip.textContent = 'Plano: ' + raw.charAt(0).toUpperCase()+raw.slice(1);
   }catch{}
 
+  await populateSiteFilter();
+
   const today = new Date(); const from = new Date(today.getTime() - 30*24*3600*1000);
   dateTo.value   = today.toISOString().slice(0,10);
   dateFrom.value = from.toISOString().slice(0,10);
@@ -508,6 +488,37 @@ const collator = new Intl.Collator('pt-BR', { sensitivity:'base', numeric:true }
   installMinimizeButtons();
   await reloadAll();
 })();
+
+async function populateSiteFilter(){
+  // Carrega sites e preenche o multiselect
+  const { data, error } = await sb.from('sites').select('id, nome').order('nome', { ascending:true });
+  if (error){ console.warn('Falha ao carregar sites:', error.message||error); return; }
+  siteMap = new Map((data||[]).map(s => [Number(s.id), s.nome || String(s.id)]));
+  siteFilter.innerHTML = '';
+  (data||[]).forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = String(s.id);
+    opt.textContent = s.nome || String(s.id);
+    siteFilter.appendChild(opt);
+  });
+}
+
+/* ========= Helpers ========= */
+function getPeriod(){
+  const f = dateFrom.value ? new Date(dateFrom.value+'T00:00:00') : null;
+  const t = dateTo.value   ? new Date(dateTo.value  +'T23:59:59') : null;
+  return { from: f, to: t };
+}
+function applyDateFilter(q){
+  const {from,to} = getPeriod();
+  if (from) q = q.gte('data', from.toISOString());
+  if (to)   q = q.lte('data', to.toISOString());
+  return q;
+}
+function getSelectedSiteIds(){
+  const ids = Array.from(siteFilter.selectedOptions).map(o => Number(o.value)).filter(v=>!Number.isNaN(v));
+  return ids.length ? ids : null; // null = todos
+}
 
 /* ========= Carregamento ========= */
 async function reloadAll(){
@@ -521,7 +532,6 @@ async function reloadAll(){
       loadMaioresAlt(),
       loadRegiao(),
       watchAbaixoCusto(),
-      runDiagnosticsForOpportunities(),
       loadTopSearches(),
       loadWordCloud()
     ]);
@@ -533,20 +543,7 @@ async function reloadAll(){
   }
 }
 
-/* ========= Período ========= */
-function getPeriod(){
-  const f = dateFrom.value ? new Date(dateFrom.value+'T00:00:00') : null;
-  const t = dateTo.value   ? new Date(dateTo.value  +'T23:59:59') : null;
-  return { from: f, to: t };
-}
-function applyDateFilter(q){
-  const {from,to} = getPeriod();
-  if (from) q = q.gte('data', from.toISOString());
-  if (to)   q = q.lte('data', to.toISOString());
-  return q;
-}
-
-/* ========= Util de séries ========= */
+/* ========= KPIs ========= */
 async function countRows(table){
   const { count, error } = await sb.from(table).select('*', { count:'exact', head:true });
   if (error) throw error;
@@ -570,8 +567,6 @@ async function seriesCountByDay(distinctField){
   }
   return Array.from(map.values()).map(set=>set.size);
 }
-
-/* ========= KPIs ========= */
 async function loadKpis(){
   try{
     const totalProdutos = await countRows('cadastro_produtos');
@@ -614,7 +609,7 @@ async function loadKpis(){
   kpiEconomia.textContent = '—';
 }
 
-/* ========= Oportunidades: MEU PREÇO vs MENOR CONCORRENTE ========= */
+/* ========= Oportunidades: MEU PREÇO vs MENOR CONCORRENTE (filtra por sites) ========= */
 function median(nums){
   if (!nums.length) return NaN;
   const arr = nums.slice().sort((a,b)=>a-b);
@@ -631,12 +626,16 @@ function filterOutliersAroundMedian(list, tol){
 function filterValidCompetitors(list){
   return list.filter(x => isFiniteNum(x.price) && x.price > 0);
 }
-function currentQuery(){ return (qOportunidades.value||'').trim().toLowerCase(); }
+function currentQuery(){
+  const el = document.getElementById('qOportunidades');
+  return el ? (el.value||'').trim().toLowerCase() : '';
+}
 function appliesQuery(desc){ const q=currentQuery(); return !q || String(desc||'').toLowerCase().includes(q); }
 
 async function loadOportunidadesVsMin(){
-  const lim = Number(topLimit.value||100);
-  const tol = Number(outTol.value||'0.50');
+  const lim = DEFAULT_TOP_LIMIT;
+  const tol = DEFAULT_OUTLIER_TOL;
+  const siteIds = getSelectedSiteIds(); // null = todos
 
   const { data, error } = await applyDateFilter(
     sb.from(VIEW).select('ean, descricao, site_id, site_nome, preco_num, meu_preco, data')
@@ -647,6 +646,10 @@ async function loadOportunidadesVsMin(){
 
   const byEan = new Map();
   for (const r of (data||[])){
+    // Aplica filtro de site aqui
+    const sid = Number(r.site_id);
+    if (siteIds && !siteIds.includes(sid)) continue;
+
     const e = String(r.ean);
     if (!byEan.has(e)) byEan.set(e, { ean:e, desc:r.descricao||'', my:null, market:[] });
     const obj = byEan.get(e);
@@ -655,7 +658,7 @@ async function loadOportunidadesVsMin(){
     if (obj.my===null && isFiniteNum(mp)) obj.my = mp;
 
     const pn = Number(r.preco_num);
-    if (isFiniteNum(pn)) obj.market.push({ price: pn, site: r.site_nome || r.site_id });
+    if (isFiniteNum(pn)) obj.market.push({ price: pn, site: r.site_nome || sid });
   }
 
   const baratos=[], caros=[];
@@ -693,14 +696,13 @@ async function loadOportunidadesVsMin(){
   baratos.sort((a,b)=> b.gap_up - a.gap_up);
   caros.sort((a,b)=> b.diff   - a.diff);
 
-  const limN = Number(topLimit.value||100);
-  lastBaratos = baratos.slice(0, limN);
-  lastCaros   = caros.slice(0, limN);
+  lastBaratos = baratos.slice(0, lim).filter(r=>appliesQuery(r.desc));
+  lastCaros   = caros.slice(0, lim).filter(r=>appliesQuery(r.desc));
   renderBaratos();
   renderCaros();
 }
 
-/* ========= Render + Ordenação + Filtro por descrição ========= */
+/* ========= Render + Ordenação ========= */
 function sortArray(arr, key, dir){
   const m = dir==='desc' ? -1 : 1;
   return arr.slice().sort((a,b)=>{
@@ -711,14 +713,9 @@ function sortArray(arr, key, dir){
     return collator.compare(String(va??''), String(vb??'')) * m;
   });
 }
-function filteredByQuery(arr){
-  const q = currentQuery();
-  if (!q) return arr;
-  return arr.filter(r => String(r.desc||'').toLowerCase().includes(q));
-}
 function renderBaratos(){
   const st = sortState.baratos;
-  const data = filteredByQuery( sortArray(lastBaratos, st.key, st.dir) );
+  const data = sortArray(lastBaratos, st.key, st.dir);
   const tb = document.querySelector('#tblMaisBaratos tbody'); tb.innerHTML='';
   data.forEach(r=>{
     const tr=document.createElement('tr');
@@ -736,7 +733,7 @@ function renderBaratos(){
 }
 function renderCaros(){
   const st = sortState.caros;
-  const data = filteredByQuery( sortArray(lastCaros, st.key, st.dir) );
+  const data = sortArray(lastCaros, st.key, st.dir);
   const tb = document.querySelector('#tblMaisCaros tbody'); tb.innerHTML='';
   data.forEach(r=>{
     const tr=document.createElement('tr');
@@ -753,9 +750,11 @@ function renderCaros(){
   decorateHeaders('caros');
 }
 
-/* ========= Maiores alterações ========= */
+/* ========= Maiores alterações (aplica filtro de sites) ========= */
 async function loadMaioresAlt(){
-  const lim = Number(topLimit.value||100);
+  const lim = DEFAULT_TOP_LIMIT;
+  const siteIds = getSelectedSiteIds(); // null = todos
+
   const { data, error } = await applyDateFilter(
     sb.from(VIEW).select('ean, descricao, site_id, site_nome, preco_num, data')
       .not('preco_num','is',null)
@@ -767,6 +766,9 @@ async function loadMaioresAlt(){
   const key = (r)=> String(r.ean)+'|'+String(r.site_id);
   const first = new Map(), last = new Map(), descBy = new Map(), siteBy = new Map();
   for (const r of (data||[])){
+    const sid = Number(r.site_id);
+    if (siteIds && !siteIds.includes(sid)) continue;
+
     const k=key(r), pn=Number(r.preco_num); if(!isFinite(pn)) continue;
     if (!first.has(k)) first.set(k, pn);
     last.set(k, pn);
@@ -811,7 +813,7 @@ function renderAlt(){
   decorateHeaders('alt');
 }
 
-/* ========= Região (opcional) ========= */
+/* ========= Região (opcional, não filtra) ========= */
 async function loadRegiao(){
   try{
     const { data: rs } = await sb.from('sites').select('id, regiao').limit(1);
@@ -839,11 +841,10 @@ async function loadRegiao(){
     document.querySelector('#blocoRegiao .empty').style.display='none';
     canvas.style.display='block';
     const W=canvas.width, H=canvas.height, pad=30;
-    ctx.clearRect(0,0,W,H);
+    ctx.clearRect(0,0,0,0);
+    ctx.fillStyle='#00b140';
     const max = Math.max(...pares.map(p=>p[1]));
     const bw = (W - pad*2)/Math.max(1,pares.length);
-    ctx.fillRect(0,0,0,0); // touch canvas to avoid some browsers laziness
-    ctx.fillStyle='#00b140';
     pares.forEach((p,i)=>{
       const h = (p[1]/(max||1))*(H-pad*2);
       ctx.fillRect(pad + i*bw + 6, H-pad - h, bw-12, h);
@@ -926,9 +927,9 @@ function decorateHeaders(tableKey){
   if (th) th.classList.add(st.dir);
 }
 
-/* ========= Limite visual com rolagem ========= */
+/* ========= Limite visual com rolagem (usa DEFAULT_VISIBLE_ROWS) ========= */
 function applyVisibleHeights(){
-  const vis = Number(visibleRows.value||20);
+  const vis = DEFAULT_VISIBLE_ROWS;
   ['wrapBaratos','wrapCaros','wrapAlt','wrapAbaixoCusto','wrapTopSearches','wrapWordList'].forEach(id=>{
     const wrap = document.getElementById(id);
     if (!wrap || wrap.style.display==='none') return;
@@ -942,45 +943,11 @@ function applyVisibleHeights(){
   });
 }
 
-/* ========= Diagnóstico ========= */
-async function runDiagnosticsForOpportunities(){
-  const diagBaratos = document.getElementById('diagBaratos');
-  const diagCaros   = document.getElementById('diagCaros');
-  diagBaratos.style.display = 'none'; diagCaros.style.display = 'none';
-
-  try{
-    const qPeriod = (sel)=> applyDateFilter( sb.from(VIEW).select(sel, { count:'exact', head:true }) );
-
-    const { count: totalAll }     = await qPeriod('*');
-    const { count: zeroMarket }   = await qPeriod('*').lte('preco_num', 0).not('preco_num','is',null);
-    const { count: nullMarket }   = await qPeriod('preco_num').is('preco_num', null);
-
-    const { count: zeroMy }       = await qPeriod('*').lte('meu_preco', 0).not('meu_preco','is',null);
-    const { count: nullMy }       = await qPeriod('meu_preco').is('meu_preco', null);
-
-    const msgs = [];
-    if (zeroMarket>0) msgs.push(`Detectei <b>${zeroMarket.toLocaleString('pt-BR')}</b> registros com <code>preco_num &le; 0</code> no período.`);
-    if (nullMarket>0) msgs.push(`Há <b>${nullMarket.toLocaleString('pt-BR')}</b> registros com <code>preco_num = NULL</code>.`);
-    if (zeroMy>0) msgs.push(`Detectei <b>${zeroMy.toLocaleString('pt-BR')}</b> registros com <code>meu_preco &le; 0</code>.`);
-    if (nullMy>0) msgs.push(`Há <b>${nullMy.toLocaleString('pt-BR')}</b> registros com <code>meu_preco = NULL</code>.`);
-    if (totalAll>0) msgs.push(`Total de linhas analisadas em <code>${VIEW}</code>: <b>${totalAll.toLocaleString('pt-BR')}</b>.`);
-
-    if (msgs.length){
-      const html = `Diagnóstico do período:<br>• ${msgs.join('<br>• ')}<br><br><em>Nota:</em> o cálculo ignora concorrentes com preço &le; 0 e valores não numéricos.`;
-      diagBaratos.innerHTML = html; diagBaratos.style.display = 'block';
-      diagCaros.innerHTML   = html; diagCaros.style.display   = 'block';
-    }
-  }catch(e){
-    diagCaros.innerHTML = 'Diagnóstico indisponível: '+(e.message||e);
-    diagCaros.style.display = 'block';
-  }
-}
-
 /* ================= RELATÓRIOS DE BUSCA ================= */
 document.getElementById('btnAtualizarPesquisas').addEventListener('click', loadTopSearches);
 document.getElementById('btnListaPalavras').addEventListener('click', toggleWordList);
 
-/* === Limitar "Produtos mais pesquisados" para TOP 30 fixo === */
+/* === TOP 30 fixo em "Produtos mais pesquisados" === */
 async function loadTopSearches(){
   const lim = 5000; // coletar amostra grande
   const { data, error } = await sb.from('search_logs')
@@ -996,7 +963,7 @@ async function loadTopSearches(){
     if (!counts[key]) counts[key] = { ean: r.ean_query||'', desc: r.desc_query||'', n:0 };
     counts[key].n++;
   }
-  const arr = Object.values(counts).sort((a,b)=> b.n - a.n).slice(0, 30); // <= TOP 30
+  const arr = Object.values(counts).sort((a,b)=> b.n - a.n).slice(0, 30);
   lastTopSearches = arr;
 
   const tb = document.querySelector('#tblPesquisas tbody'); tb.innerHTML='';
@@ -1057,7 +1024,8 @@ async function loadWordCloud(){
     span.dataset.count = c;
 
     span.addEventListener('click', ()=>{
-      qOportunidades.value = w;
+      const el = document.getElementById('qOportunidades');
+      if (el){ el.value = w; }
       renderBaratos(); renderCaros();
       document.querySelector('.grid').scrollIntoView({ behavior:'smooth', block:'start' });
     });
