@@ -77,10 +77,58 @@
     .source { margin-top:10px; font-size:12px; color:#9aa0a6; }
     .diag { margin-top:10px; font-size:12px; color:#ffb3b3; background:#2b1414; border:1px solid #6b2c2c; padding:8px 10px; border-radius:8px; display:none; }
 
-    /* ===== NOVO: Wordcloud ===== */
-    .wordcloud { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; }
-    .wordcloud span { color:#00b140; cursor:pointer; user-select:none; }
-    .wordcloud span:hover { text-decoration:underline; }
+    /* ===== NUVEM DE PALAVRAS (nova) ===== */
+    .wordcloud-wrap{
+      position:relative;
+      border:1px solid #2d3b4a; border-radius:12px;
+      background: radial-gradient(1000px 300px at 50% 0%, rgba(0,255,200,.06), rgba(0,0,0,0));
+      padding:18px; overflow:hidden;
+    }
+    .wordcloud{
+      position:relative;
+      min-height:260px;
+      display:flex; flex-wrap:wrap; justify-content:center; align-content:center; gap:12px;
+    }
+    .wordcloud .w{
+      position:relative; display:inline-block; line-height:1.1; user-select:none; cursor:pointer;
+      font-weight:800; letter-spacing:.2px;
+      background: linear-gradient(90deg, #00e676, #00d0ff);
+      -webkit-background-clip:text; background-clip:text; color:transparent;
+      filter: drop-shadow(0 6px 18px rgba(0,255,200,.20));
+      text-shadow: 0 2px 8px rgba(0,0,0,.35);
+      transform: translateZ(0) rotate(var(--rot, 0deg));
+      animation: pop .6s ease both, drift 12s ease-in-out infinite;
+      animation-delay: var(--delay, 0s);
+      transition: transform .25s ease, filter .25s ease;
+      border-radius:8px; padding:2px 6px;
+    }
+    .wordcloud .w:hover{
+      transform: scale(1.08) rotate(var(--rot, 0deg));
+      filter: drop-shadow(0 10px 26px rgba(0,255,200,.35));
+    }
+    .wordcloud .w.top1{ text-shadow: 0 4px 16px rgba(0,0,0,.45); }
+    .wordcloud .w.top1::after{
+      content:""; position:absolute; inset:-2px; border-radius:10px; pointer-events:none;
+      box-shadow: 0 0 0 0 rgba(0,224,176,.0); animation: pulse 2.6s ease-in-out infinite;
+    }
+    @keyframes pulse{
+      0%,100%{ box-shadow: 0 0 0 0 rgba(0,224,176,.0); }
+      50%{ box-shadow: 0 0 0 8px rgba(0,224,176,.10); }
+    }
+    @keyframes pop{
+      0%{ opacity:0; transform: scale(.85) rotate(var(--rot, 0deg)); }
+      100%{ opacity:1; transform: scale(1) rotate(var(--rot, 0deg)); }
+    }
+    @keyframes drift{
+      0%,100%{ transform: translate(0,0) rotate(var(--rot,0deg)); }
+      50%{ transform: translate(var(--dx, 4px), var(--dy, -4px)) rotate(calc(var(--rot,0deg) * 1.02)); }
+    }
+    .tooltip{
+      position:fixed; pointer-events:none; z-index:9999;
+      padding:6px 8px; background:rgba(14,20,27,.96); color:#d9fff1;
+      border:1px solid #2d3b4a; border-radius:8px; font-size:12px;
+      display:none; box-shadow: 0 8px 22px rgba(0,0,0,.55);
+    }
   </style>
   <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="./config.js"></script>
@@ -298,7 +346,7 @@
     </div>
   </section>
 
-  <!-- =================== NOVA SEÇÃO: RELATÓRIOS DE BUSCA (search_logs) =================== -->
+  <!-- =================== RELATÓRIOS DE BUSCA (search_logs) =================== -->
   <section class="grid">
     <div class="panel">
       <header>
@@ -325,10 +373,16 @@
     <div class="panel">
       <header>
         <h2>Nuvem de Palavras (pesquisas)</h2>
-        <button id="btnListaPalavras" class="btn" type="button">Ver palavras em ordem</button>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <button id="btnListaPalavras" class="btn" type="button">Ver palavras em ordem</button>
+          <span class="muted">máx. 30 palavras</span>
+        </div>
       </header>
       <div class="content">
-        <div id="wordCloud" class="wordcloud"></div>
+        <div class="wordcloud-wrap">
+          <div id="wordCloud" class="wordcloud" aria-live="polite"></div>
+          <div id="wcTooltip" class="tooltip" role="tooltip"></div>
+        </div>
         <div id="listaPalavras" style="display:none; margin-top:16px;">
           <div class="tablewrap" id="wrapWordList">
             <table id="tblPalavras" style="width:100%;">
@@ -337,11 +391,11 @@
             </table>
           </div>
         </div>
-        <div class="hint">Dica: clique em “Ver palavras em ordem” para alternar a lista ordenada.</div>
+        <div class="hint">Dica: clique em uma palavra para filtrar a seção “Oportunidades”.</div>
       </div>
     </div>
   </section>
-  <!-- =================== FIM NOVA SEÇÃO =================== -->
+  <!-- =================== FIM RELATÓRIOS =================== -->
 
   <div id="err" class="err"></div>
 </main>
@@ -419,13 +473,13 @@ function drawSpark(ctx, points){
   ctx.stroke();
 }
 
-/* ========= Dados em memória p/ ordenação/filtragem ========= */
+/* ========= Dados em memória ========= */
 let lastBaratos = [];
 let lastCaros   = [];
 let lastAlt     = [];
 let lastAbaixo  = [];
-let lastTopSearches = [];   // NOVO
-let lastWordList   = [];    // NOVO
+let lastTopSearches = [];
+let lastWordList   = [];
 
 const sortState = {
   baratos: { key:'gap_up', dir:'desc' },
@@ -455,21 +509,21 @@ const collator = new Intl.Collator('pt-BR', { sensitivity:'base', numeric:true }
   await reloadAll();
 })();
 
-/* ========= Carregamento principal ========= */
+/* ========= Carregamento ========= */
 async function reloadAll(){
   hideErr();
   try{
     setStatus('Carregando KPIs…');
     await loadKpis();
-    setStatus('Carregando Oportunidades (meu preço vs menor concorrente)…');
+    setStatus('Carregando Oportunidades e Relatórios…');
     await Promise.all([
       loadOportunidadesVsMin(),
       loadMaioresAlt(),
       loadRegiao(),
       watchAbaixoCusto(),
       runDiagnosticsForOpportunities(),
-      loadTopSearches(),     // NOVO
-      loadWordCloud()        // NOVO
+      loadTopSearches(),
+      loadWordCloud()
     ]);
     applyVisibleHeights();
     setStatus('Pronto.');
@@ -492,7 +546,7 @@ function applyDateFilter(q){
   return q;
 }
 
-/* ========= Util de séries / contadores ========= */
+/* ========= Util de séries ========= */
 async function countRows(table){
   const { count, error } = await sb.from(table).select('*', { count:'exact', head:true });
   if (error) throw error;
@@ -709,7 +763,7 @@ function renderCaros(){
   decorateHeaders('caros');
 }
 
-/* ========= Maiores alterações (Δ ≠ 0) ========= */
+/* ========= Maiores alterações ========= */
 async function loadMaioresAlt(){
   const lim = Number(topLimit.value||100);
   const { data, error } = await applyDateFilter(
@@ -897,7 +951,7 @@ function applyVisibleHeights(){
   });
 }
 
-/* ========= Diagnóstico dos dados das Oportunidades ========= */
+/* ========= Diagnóstico ========= */
 async function runDiagnosticsForOpportunities(){
   const diagBaratos = document.getElementById('diagBaratos');
   const diagCaros   = document.getElementById('diagCaros');
@@ -931,20 +985,18 @@ async function runDiagnosticsForOpportunities(){
   }
 }
 
-/* ================= NOVO: Relatórios de Busca (search_logs) ================= */
+/* ================= RELATÓRIOS DE BUSCA ================= */
 document.getElementById('btnAtualizarPesquisas').addEventListener('click', loadTopSearches);
 document.getElementById('btnListaPalavras').addEventListener('click', toggleWordList);
 
 async function loadTopSearches(){
-  // Obs.: muitos schemas usam created_at; como no print não aparece, usamos fallback por ID desc.
   const lim = Number(topLimit.value||100);
   const { data, error } = await sb.from('search_logs')
-    .select('ean_query, desc_query, id')   // id para ordenação recente
+    .select('ean_query, desc_query, id')
     .order('id', { ascending:false })
     .limit(Math.max(5000, lim*50));
   if (error){ console.error(error); return; }
 
-  // chave = ean_query || desc_query
   const counts = {};
   for (const r of (data||[])){
     const key = (r.ean_query || r.desc_query || '').trim().toLowerCase();
@@ -968,6 +1020,7 @@ async function loadTopSearches(){
   applyVisibleHeights();
 }
 
+/* ========= NUVEM DE PALAVRAS (ANIMADA, máx 30) ========= */
 async function loadWordCloud(){
   const lim = 10000;
   const { data, error } = await sb.from('search_logs')
@@ -980,28 +1033,56 @@ async function loadWordCloud(){
   const freq = new Map();
   (data||[]).forEach(r=>{
     const txt = (r.desc_query||'').toLowerCase();
-    txt.split(/[\s,.;:/\-+()]+/).forEach(w=>{
+    txt.split(/[\s,.;:/\\\-+()]+/).forEach(w=>{
       if(!w || w.length<3 || stop.has(w)) return;
       freq.set(w, (freq.get(w)||0)+1);
     });
   });
 
-  const entries = Array.from(freq.entries()).sort((a,b)=> b[1]-a[1]).slice(0, 80);
+  // Top 30
+  const entries = Array.from(freq.entries()).sort((a,b)=> b[1]-a[1]).slice(0, 30);
   lastWordList = entries;
 
+  // Render
   const cloud = document.getElementById('wordCloud');
   cloud.innerHTML='';
+
   const max = entries.length ? entries[0][1] : 1;
-  entries.forEach(([w,c])=>{
+  entries.forEach(([w,c], idx)=>{
     const span = document.createElement('span');
-    const size = 12 + Math.round((c/max)*28); // 12px..40px
+    span.className = 'w'+(idx===0?' top1':'');
+    const size = 16 + Math.round((c/max)*30); // 16..46 px
     span.style.fontSize = size+'px';
-    span.title = `${c.toLocaleString('pt-BR')} ocorrências`;
+
+    // animações com pequenas variações por palavra
+    const rot  = (Math.random()*10-5).toFixed(2) + 'deg';
+    const dx   = (Math.random()*8-4).toFixed(1) + 'px';
+    const dy   = (Math.random()*8-4).toFixed(1) + 'px';
+    const delay= (Math.random()*0.45).toFixed(2) + 's';
+    span.style.setProperty('--rot', rot);
+    span.style.setProperty('--dx', dx);
+    span.style.setProperty('--dy', dy);
+    span.style.setProperty('--delay', delay);
+
     span.textContent = w;
+    span.dataset.count = c;
+
+    // clique = filtra oportunidades
+    span.addEventListener('click', ()=>{
+      qOportunidades.value = w;
+      renderBaratos(); renderCaros();
+      // rolar até a seção de oportunidades (opcional)
+      document.querySelector('.grid').scrollIntoView({ behavior:'smooth', block:'start' });
+    });
+
+    // tooltip
+    attachTooltip(span, `${w} — ${c.toLocaleString('pt-BR')} ocorrências`);
+
     cloud.appendChild(span);
   });
 }
 
+/* ========= Lista ordenada alternável ========= */
 function toggleWordList(){
   const box = document.getElementById('listaPalavras');
   const tb = document.querySelector('#tblPalavras tbody');
@@ -1018,7 +1099,37 @@ function toggleWordList(){
     box.style.display = 'none';
   }
 }
-/* ================= FIM Relatórios de Busca ================= */
+
+/* ========= Tooltip util ========= */
+function attachTooltip(el, text){
+  const tip = document.getElementById('wcTooltip');
+  let visible = false;
+
+  function show(e){
+    tip.textContent = text;
+    tip.style.display = 'block';
+    visible = true;
+    move(e);
+  }
+  function hide(){
+    tip.style.display = 'none';
+    visible = false;
+  }
+  function move(e){
+    if (!visible) return;
+    const pad = 12;
+    const x = (e.clientX||0) + pad;
+    const y = (e.clientY||0) + pad;
+    tip.style.left = x + 'px';
+    tip.style.top  = y + 'px';
+  }
+
+  el.addEventListener('mouseenter', show);
+  el.addEventListener('mousemove', move);
+  el.addEventListener('mouseleave', hide);
+}
+
+/* ================= FIM RELATÓRIOS DE BUSCA ================= */
 </script>
 </body>
 </html>
