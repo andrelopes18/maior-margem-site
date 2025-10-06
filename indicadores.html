@@ -27,9 +27,28 @@
     .toolbar input, .toolbar select { background:#0a0f14; color:#fff; border:1px solid #263241; border-radius:8px; padding:8px 10px; }
     .toolbar label { font-size:12px; color:#cfd8dc; }
 
-    /* Multiselect de sites */
-    #siteFilter { min-width:260px; max-width:360px; }
-    #siteFilter option { padding:4px 6px; }
+    /* Combobox de sites (multiselect custom) */
+    .combo { position:relative; }
+    .combo-btn {
+      display:flex; align-items:center; gap:8px;
+      background:#0a0f14; color:#fff; border:1px solid #263241; border-radius:8px; padding:8px 10px; cursor:pointer;
+      min-width:260px;
+    }
+    .combo-btn .tags { display:flex; gap:6px; flex-wrap:wrap; max-width:360px; overflow:hidden; }
+    .combo-btn .tags .t { font-size:12px; background:#12202b; border:1px solid #2b3b4b; border-radius:999px; padding:2px 8px; }
+    .combo-list {
+      position:absolute; top:calc(100% + 6px); left:0; z-index:999;
+      width:320px; max-height:240px; overflow:auto;
+      background:#0c1218; border:1px solid #2d3b4a; border-radius:10px; padding:8px;
+      box-shadow: 0 10px 26px rgba(0,0,0,.45);
+      display:none;
+    }
+    .combo-list .row { display:flex; align-items:center; gap:8px; padding:6px 4px; border-radius:8px; cursor:pointer; }
+    .combo-list .row:hover { background:#111a23; }
+    .combo-list input[type="checkbox"]{ accent-color:#00b140; }
+    .combo-list .row .name { flex:1; }
+    .combo-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:8px; }
+    .muted { color:#9aa0a6; font-size:12px; }
 
     /* KPIs */
     .kpis { display:grid; grid-template-columns: repeat(4, minmax(220px, 1fr)); gap:14px; }
@@ -40,7 +59,6 @@
     .card h3 { margin:0; font-size:14px; color:#bfe3ff; font-weight:600; display:flex; align-items:center; gap:8px; }
     .kpi { display:flex; align-items:flex-end; justify-content:space-between; margin-top:8px; gap:12px; }
     .kpi .val { font-size:28px; font-weight:800; letter-spacing: .3px; }
-    .muted { color:#9aa0a6; font-size:12px; }
     .spark { width:100%; height:54px; display:block; }
 
     .grid { display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin-top:14px; }
@@ -67,7 +85,6 @@
     .price.max { color:#ff5d5d; }
     .pill { font-size:12px; padding:2px 8px; border-radius:999px; border:1px solid #2d3b4a; background:#0f1620; color:#ddd; display:inline-block; }
 
-    .hint { font-size:12px; color:#9aa0a6; margin-top:6px; }
     .status { margin:8px 0; color:#aaa; font-size:12px; }
     .err { display:none; color:#ff5d5d; margin:8px 0; font-size:13px; }
 
@@ -167,10 +184,23 @@
       </select>
     </div>
 
-    <!-- NOVO: Filtro por sites selecionados -->
-    <div class="group">
-      <label for="siteFilter">Sites na comparação:</label>
-      <select id="siteFilter" multiple size="4" title="Selecione um ou mais sites. Se não selecionar nenhum, serão usados todos."></select>
+    <!-- NOVO: Combobox de sites -->
+    <div class="group combo" id="comboSites">
+      <button type="button" class="combo-btn" id="btnComboSites" aria-haspopup="listbox" aria-expanded="false">
+        <span class="muted">Sites na comparação:</span>
+        <span class="tags" id="comboTags"><span class="t">Todos</span></span>
+      </button>
+      <div class="combo-list" id="comboList" role="listbox" aria-multiselectable="true">
+        <div class="row" data-id="__ALL__">
+          <input type="checkbox" id="opt_all" checked />
+          <label class="name" for="opt_all">Todos (padrão)</label>
+        </div>
+        <div id="comboSitesRows"></div>
+        <div class="combo-actions">
+          <button type="button" class="btn ghost" id="btnComboCancel">Cancelar</button>
+          <button type="button" class="btn" id="btnComboApply">Aplicar</button>
+        </div>
+      </div>
     </div>
 
     <button id="btnRecarregar" class="btn" type="button">Recarregar</button>
@@ -379,10 +409,10 @@ if(!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY){ alert('CONFIG ausente (config.j
 const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth:{ persistSession:true, autoRefreshToken:true, detectSessionInUrl:true }});
 const VIEW = 'vw_precos_dinamica';
 
-/* ========= Padrões após ocultar filtros ========= */
-const DEFAULT_TOP_LIMIT = 100;     // substitui "Top" (oculto)
-const DEFAULT_OUTLIER_TOL = 0.50;  // substitui "Outliers" (oculto)
-const DEFAULT_VISIBLE_ROWS = 20;   // substitui "Visíveis" (oculto)
+/* ========= Defaults de filtros ocultos ========= */
+const DEFAULT_TOP_LIMIT = 100;
+const DEFAULT_OUTLIER_TOL = 0.50;
+const DEFAULT_VISIBLE_ROWS = 20;
 
 /* ========= Util ========= */
 const NA = '---';
@@ -391,7 +421,6 @@ const userChip = document.getElementById('userChip');
 const btnSair  = document.getElementById('btnSair');
 const statusEl = document.getElementById('status');
 const errEl    = document.getElementById('err');
-const siteFilter = document.getElementById('siteFilter');
 
 function setStatus(t){ statusEl.textContent = t||''; }
 function showErr(msg){ errEl.style.display='block'; errEl.textContent=msg; console.error(msg); }
@@ -403,8 +432,6 @@ function isFiniteNum(n){ return typeof n === 'number' && isFinite(n); }
 const dateFrom = document.getElementById('dateFrom');
 const dateTo   = document.getElementById('dateTo');
 const quickRange  = document.getElementById('quickRange');
-const qOportunidades = document.getElementById('qOportunidades'); // (continua existente se estiver no HTML)
-
 document.getElementById('btnRecarregar').addEventListener('click', reloadAll);
 quickRange.addEventListener('change', ()=>{
   const v = quickRange.value;
@@ -414,43 +441,68 @@ quickRange.addEventListener('change', ()=>{
   dateTo.value   = today.toISOString().slice(0,10);
   dateFrom.value = from.toISOString().slice(0,10);
 });
-if (qOportunidades){
-  qOportunidades.addEventListener('input', ()=>{ renderBaratos(); renderCaros(); });
-}
-siteFilter.addEventListener('change', async ()=>{
-  // Recarrega relatórios que dependem de sites
+const qOportunidades = document.getElementById('qOportunidades');
+if (qOportunidades){ qOportunidades.addEventListener('input', ()=>{ renderBaratos(); renderCaros(); }); }
+
+/* ========= Combobox state ========= */
+const comboBtn   = document.getElementById('btnComboSites');
+const comboList  = document.getElementById('comboList');
+const comboRows  = document.getElementById('comboSitesRows');
+const comboTags  = document.getElementById('comboTags');
+const optAll     = document.getElementById('opt_all');
+
+let siteMap = new Map();     // id -> nome
+let selectedSites = new Set(); // controla seleção (vazia = todos via optAll)
+
+comboBtn.addEventListener('click', ()=>{
+  const open = comboList.style.display === 'block';
+  comboList.style.display = open ? 'none' : 'block';
+  comboBtn.setAttribute('aria-expanded', String(!open));
+});
+document.getElementById('btnComboCancel').addEventListener('click', ()=>{
+  comboList.style.display = 'none';
+  comboBtn.setAttribute('aria-expanded','false');
+});
+document.getElementById('btnComboApply').addEventListener('click', async ()=>{
+  comboList.style.display = 'none';
+  comboBtn.setAttribute('aria-expanded','false');
+  updateComboTags();
   await Promise.all([ loadOportunidadesVsMin(), loadMaioresAlt() ]);
 });
-
-btnSair.addEventListener('click', async ()=>{
-  try{ await sb.auth.signOut(); } finally { localStorage.removeItem('mm_login_date'); location.href = CFG.SITE_URL || 'index.html'; }
+optAll.addEventListener('change', ()=>{
+  if (optAll.checked){
+    // Desmarca todos os sites individuais
+    selectedSites.clear();
+    comboRows.querySelectorAll('input[type="checkbox"]').forEach(ch=> ch.checked = false);
+  }
+});
+document.addEventListener('click', (e)=>{
+  if (!comboList.contains(e.target) && !comboBtn.contains(e.target)){
+    comboList.style.display = 'none';
+    comboBtn.setAttribute('aria-expanded','false');
+  }
 });
 
-/* ========= KPIs ========= */
-const kpiProdutos = document.getElementById('kpiProdutos');
-const kpiSites    = document.getElementById('kpiSites');
-const kpiEconomia = document.getElementById('kpiEconomia');
-const kpiVariacao = document.getElementById('kpiVariacao');
-
-const sparkProdutos = document.getElementById('sparkProdutos').getContext('2d');
-const sparkSites    = document.getElementById('sparkSites').getContext('2d');
-const sparkVariacao = document.getElementById('sparkVariacao').getContext('2d');
-
-function drawSpark(ctx, points){
-  const W = ctx.canvas.width, H = ctx.canvas.height;
-  ctx.clearRect(0,0,W,H);
-  if(!points || points.length<2){ ctx.fillStyle='#9aa0a6'; ctx.fillText('—', 8, H-10); return; }
-  const min = Math.min(...points), max = Math.max(...points);
-  const sx = (i)=> (i/(points.length-1))*(W-16)+8;
-  const sy = (v)=> H-8 - ((v-min)/(max-min||1))*(H-16);
-  ctx.strokeStyle='#00d084'; ctx.lineWidth=2;
-  ctx.beginPath();
-  points.forEach((v,i)=>{ const x=sx(i), y=sy(v); if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); });
-  ctx.stroke();
+function updateComboTags(){
+  comboTags.innerHTML = '';
+  if (optAll.checked || selectedSites.size === 0){
+    comboTags.innerHTML = '<span class="t">Todos</span>';
+    return;
+  }
+  const names = Array.from(selectedSites).map(id => siteMap.get(id) || String(id)).slice(0, 3);
+  names.forEach(n=>{
+    const span = document.createElement('span'); span.className='t'; span.textContent=n; comboTags.appendChild(span);
+  });
+  if (selectedSites.size > 3){
+    const more = document.createElement('span'); more.className='t'; more.textContent = `+${selectedSites.size-3}`; comboTags.appendChild(more);
+  }
+}
+function getSelectedSiteIds(){
+  if (optAll.checked || selectedSites.size===0) return null; // null = todos (padrão)
+  return Array.from(selectedSites);
 }
 
 /* ========= Dados em memória ========= */
-let siteMap = new Map(); // id -> nome
 let lastBaratos = [];
 let lastCaros   = [];
 let lastAlt     = [];
@@ -478,7 +530,7 @@ const collator = new Intl.Collator('pt-BR', { sensitivity:'base', numeric:true }
     planChip.textContent = 'Plano: ' + raw.charAt(0).toUpperCase()+raw.slice(1);
   }catch{}
 
-  await populateSiteFilter();
+  await populateSitesIntoCombo();
 
   const today = new Date(); const from = new Date(today.getTime() - 30*24*3600*1000);
   dateTo.value   = today.toISOString().slice(0,10);
@@ -489,21 +541,37 @@ const collator = new Intl.Collator('pt-BR', { sensitivity:'base', numeric:true }
   await reloadAll();
 })();
 
-async function populateSiteFilter(){
-  // Carrega sites e preenche o multiselect
+async function populateSitesIntoCombo(){
   const { data, error } = await sb.from('sites').select('id, nome').order('nome', { ascending:true });
   if (error){ console.warn('Falha ao carregar sites:', error.message||error); return; }
   siteMap = new Map((data||[]).map(s => [Number(s.id), s.nome || String(s.id)]));
-  siteFilter.innerHTML = '';
-  (data||[]).forEach(s => {
-    const opt = document.createElement('option');
-    opt.value = String(s.id);
-    opt.textContent = s.nome || String(s.id);
-    siteFilter.appendChild(opt);
+
+  comboRows.innerHTML = '';
+  (data||[]).forEach(s=>{
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.dataset.id = String(s.id);
+    row.innerHTML = `
+      <input type="checkbox" id="site_${s.id}" />
+      <label class="name" for="site_${s.id}">${(s.nome||String(s.id)).replace(/</g,'&lt;')}</label>
+    `;
+    const chk = row.querySelector('input');
+    chk.addEventListener('change', ()=>{
+      const id = Number(s.id);
+      if (chk.checked){ selectedSites.add(id); optAll.checked = false; }
+      else { selectedSites.delete(id); if (selectedSites.size===0) optAll.checked = true; }
+    });
+    row.addEventListener('click', (e)=>{ if (e.target.tagName !== 'INPUT') { chk.checked = !chk.checked; chk.dispatchEvent(new Event('change')); } });
+    comboRows.appendChild(row);
   });
+
+  // Padrão: Todos marcado
+  optAll.checked = true;
+  selectedSites.clear();
+  updateComboTags();
 }
 
-/* ========= Helpers ========= */
+/* ========= Período ========= */
 function getPeriod(){
   const f = dateFrom.value ? new Date(dateFrom.value+'T00:00:00') : null;
   const t = dateTo.value   ? new Date(dateTo.value  +'T23:59:59') : null;
@@ -514,10 +582,6 @@ function applyDateFilter(q){
   if (from) q = q.gte('data', from.toISOString());
   if (to)   q = q.lte('data', to.toISOString());
   return q;
-}
-function getSelectedSiteIds(){
-  const ids = Array.from(siteFilter.selectedOptions).map(o => Number(o.value)).filter(v=>!Number.isNaN(v));
-  return ids.length ? ids : null; // null = todos
 }
 
 /* ========= Carregamento ========= */
@@ -578,8 +642,8 @@ async function loadKpis(){
     kpiSites.textContent = totalSites.toLocaleString('pt-BR');
   }catch(e){ kpiSites.textContent = '—'; }
 
-  try{ const s1 = await seriesCountByDay('ean');     drawSpark(sparkProdutos, s1); }catch{}
-  try{ const s2 = await seriesCountByDay('site_id'); drawSpark(sparkSites, s2); }catch{}
+  try{ const s1 = await seriesCountByDay('ean');     drawSpark(document.getElementById('sparkProdutos').getContext('2d'), s1); }catch{}
+  try{ const s2 = await seriesCountByDay('site_id'); drawSpark(document.getElementById('sparkSites').getContext('2d'),    s2); }catch{}
 
   try{
     const { data } = await applyDateFilter(
@@ -599,17 +663,17 @@ async function loadKpis(){
         const la = last.get(k); if(isFiniteNum(la)){ sum += (la-fa)/Math.max(1e-9, fa); cnt++; series.push(Math.abs((la-fa)/Math.max(1e-9, fa))); }
       }
       const avg = cnt ? (sum/cnt)*100 : 0;
-      kpiVariacao.textContent = (avg>=0?'+':'')+avg.toFixed(1)+'%';
-      drawSpark(sparkVariacao, series.slice(-30));
+      document.getElementById('kpiVariacao').textContent = (avg>=0?'+':'')+avg.toFixed(1)+'%';
+      drawSpark(document.getElementById('sparkVariacao').getContext('2d'), series.slice(-30));
     }else{
-      kpiVariacao.textContent = '—';
+      document.getElementById('kpiVariacao').textContent = '—';
     }
-  }catch(e){ kpiVariacao.textContent = '—'; }
+  }catch(e){ document.getElementById('kpiVariacao').textContent = '—'; }
 
-  kpiEconomia.textContent = '—';
+  document.getElementById('kpiEconomia').textContent = '—';
 }
 
-/* ========= Oportunidades: MEU PREÇO vs MENOR CONCORRENTE (filtra por sites) ========= */
+/* ========= Oportunidades: MEU PREÇO vs MENOR CONCORRENTE (com filtro de sites) ========= */
 function median(nums){
   if (!nums.length) return NaN;
   const arr = nums.slice().sort((a,b)=>a-b);
@@ -646,7 +710,6 @@ async function loadOportunidadesVsMin(){
 
   const byEan = new Map();
   for (const r of (data||[])){
-    // Aplica filtro de site aqui
     const sid = Number(r.site_id);
     if (siteIds && !siteIds.includes(sid)) continue;
 
@@ -750,7 +813,7 @@ function renderCaros(){
   decorateHeaders('caros');
 }
 
-/* ========= Maiores alterações (aplica filtro de sites) ========= */
+/* ========= Maiores alterações (filtra por sites) ========= */
 async function loadMaioresAlt(){
   const lim = DEFAULT_TOP_LIMIT;
   const siteIds = getSelectedSiteIds(); // null = todos
@@ -813,7 +876,7 @@ function renderAlt(){
   decorateHeaders('alt');
 }
 
-/* ========= Região (opcional, não filtra) ========= */
+/* ========= Região (opcional) ========= */
 async function loadRegiao(){
   try{
     const { data: rs } = await sb.from('sites').select('id, regiao').limit(1);
@@ -927,7 +990,7 @@ function decorateHeaders(tableKey){
   if (th) th.classList.add(st.dir);
 }
 
-/* ========= Limite visual com rolagem (usa DEFAULT_VISIBLE_ROWS) ========= */
+/* ========= Limite visual com rolagem ========= */
 function applyVisibleHeights(){
   const vis = DEFAULT_VISIBLE_ROWS;
   ['wrapBaratos','wrapCaros','wrapAlt','wrapAbaixoCusto','wrapTopSearches','wrapWordList'].forEach(id=>{
@@ -947,32 +1010,75 @@ function applyVisibleHeights(){
 document.getElementById('btnAtualizarPesquisas').addEventListener('click', loadTopSearches);
 document.getElementById('btnListaPalavras').addEventListener('click', toggleWordList);
 
-/* === TOP 30 fixo em "Produtos mais pesquisados" === */
+/* === Produtos mais pesquisados (TOP 30) com descrição por EAN => (produtos_cliente -> cadastro_produtos -> '') === */
 async function loadTopSearches(){
-  const lim = 5000; // coletar amostra grande
+  const lim = 8000;
   const { data, error } = await sb.from('search_logs')
     .select('ean_query, desc_query, id')
     .order('id', { ascending:false })
     .limit(lim);
   if (error){ console.error(error); return; }
 
-  const counts = {};
+  // Contagem separando por EAN quando houver
+  const byEan = new Map(); // ean -> { ean, n }
+  const byDesc = new Map(); // term -> { term, n }
   for (const r of (data||[])){
-    const key = (r.ean_query || r.desc_query || '').trim().toLowerCase();
-    if (!key) continue;
-    if (!counts[key]) counts[key] = { ean: r.ean_query||'', desc: r.desc_query||'', n:0 };
-    counts[key].n++;
+    const e = (r.ean_query||'').trim();
+    const d = (r.desc_query||'').trim().toLowerCase();
+    if (e && /^\d{8,14}$/.test(e)){
+      const curr = byEan.get(e) || { ean: e, n: 0 };
+      curr.n++; byEan.set(e, curr);
+    } else if (d){
+      const curr = byDesc.get(d) || { term: d, n: 0 };
+      curr.n++; byDesc.set(d, curr);
+    }
   }
-  const arr = Object.values(counts).sort((a,b)=> b.n - a.n).slice(0, 30);
-  lastTopSearches = arr;
 
+  // Junta e ordena por frequência
+  const merged = [
+    ...Array.from(byEan.values()).map(x=>({ type:'ean', key:x.ean, n:x.n })),
+    ...Array.from(byDesc.values()).map(x=>({ type:'desc', key:x.term, n:x.n }))
+  ].sort((a,b)=> b.n - a.n).slice(0, 30);
+
+  // Busca descrições para EANs (produtos_cliente -> cadastro_produtos -> '')
+  const uniqueEans = merged.filter(x=>x.type==='ean').map(x=>x.key);
+  const descByEan = new Map();
+  if (uniqueEans.length){
+    // 1) produtos_cliente
+    try{
+      const { data: pc } = await sb.from('produtos_cliente').select('ean, descricao').in('ean', uniqueEans);
+      (pc||[]).forEach(r=>{
+        if (r && r.ean) descByEan.set(String(r.ean), r.descricao || '');
+      });
+    }catch{}
+    // Quais EANs faltam?
+    const missing = uniqueEans.filter(e => !descByEan.has(String(e)));
+    if (missing.length){
+      try{
+        const { data: cp } = await sb.from('cadastro_produtos').select('ean, descricao').in('ean', missing);
+        (cp||[]).forEach(r=>{
+          if (r && r.ean) descByEan.set(String(r.ean), r.descricao || '');
+        });
+      }catch{}
+    }
+  }
+
+  // Render
   const tb = document.querySelector('#tblPesquisas tbody'); tb.innerHTML='';
-  arr.forEach(r=>{
+  merged.forEach(item=>{
+    let ean='', desc='', n=item.n;
+    if (item.type==='ean'){
+      ean = item.key;
+      desc = descByEan.get(String(item.key)) || ''; // '' se não localizar
+    } else {
+      ean = '—';
+      desc = item.key; // termo pesquisado
+    }
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td class="mono">${r.ean || '—'}</td>
-      <td>${(r.desc||'—').replace(/</g,'&lt;')}</td>
-      <td class="right">${r.n.toLocaleString('pt-BR')}</td>
+      <td class="mono">${ean}</td>
+      <td>${desc ? desc.replace(/</g,'&lt;') : ''}</td>
+      <td class="right">${n.toLocaleString('pt-BR')}</td>
     `;
     tb.appendChild(tr);
   });
@@ -1090,7 +1196,6 @@ function installMinimizeButtons(){
     const content = panel.querySelector('.content');
     if (!hdr || !content) return;
 
-    // Cria container à direita se necessário
     let right = hdr.children[1];
     if (!right || right.tagName === 'H2'){
       right = document.createElement('div');
