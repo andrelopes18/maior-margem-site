@@ -41,7 +41,7 @@
 
     /* Painéis */
     .panel { background:#141c27; border:1px solid #314457; border-radius:14px; box-shadow: 0 10px 22px rgba(0,0,0,.40); }
-    .panel header { padding:12px 14px; border-bottom:1px solid #2b3b4b; display:flex; align-items:center; justify-content:space-between; }
+    .panel header { padding:12px 14px; border-bottom:1px solid #2b3b4b; display:flex; align-items:center; justify-content:space-between; gap:10px; }
     .panel header h2 { margin:0; font-size:16px; color:#d5ffd5; }
     .panel .content { padding:12px 14px; }
     .panel .empty { color:#9aa0a6; font-size:13px; }
@@ -76,6 +76,18 @@
     /* Fontes/diagnóstico */
     .source { margin-top:10px; font-size:12px; color:#9aa0a6; }
     .diag { margin-top:10px; font-size:12px; color:#ffb3b3; background:#2b1414; border:1px solid #6b2c2c; padding:8px 10px; border-radius:8px; display:none; }
+
+    /* ====== Word Cloud ====== */
+    .cloud-wrap { position: relative; }
+    #wordCloud { width:100%; height:380px; display:block; background: radial-gradient(1200px 500px at 20% -20%, rgba(0,177,64,.15), transparent 60%), radial-gradient(800px 450px at 110% 10%, rgba(0,204,255,.10), transparent 60%); border:1px solid #2d3b4a; border-radius:14px; box-shadow: 0 16px 30px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.03); }
+    .cloud-toolbar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .tooltip {
+      position:absolute; pointer-events:none; background:#0b1117; color:#e8f5ff; border:1px solid #284056;
+      padding:6px 8px; border-radius:8px; font-size:12px; box-shadow: 0 8px 18px rgba(0,0,0,.45); transform: translate(-50%, -120%); white-space:nowrap; display:none;
+    }
+    #wordList { display:none; margin-top:10px; }
+    #wordList table td:nth-child(1){ width:56px; }
+    #wordList table td:nth-child(2){ font-weight:600; }
   </style>
   <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="./config.js"></script>
@@ -282,13 +294,55 @@
     </div>
   </section>
 
+  <!-- ===== NOVOS RELATÓRIOS ===== -->
   <section class="grid">
+    <!-- Produtos mais pesquisados (Top 30) -->
     <div class="panel">
-      <header><h2>Preços por região</h2></header>
-      <div class="content" id="blocoRegiao">
-        <div class="empty">Inclua <span class="pill">regiao</span> na tabela <code>sites</code> (ou crie view <code>vw_preco_regiao</code>).</div>
-        <canvas id="chartRegiao" width="640" height="240" style="display:none;"></canvas>
-        <div class="source">Fontes: <code>vw_precos_dinamica</code> + <code>sites</code> (join por <em>site_id</em>)</div>
+      <header>
+        <h2>Produtos mais pesquisados — Top 30</h2>
+        <div class="pill">Fonte: <code>search_logs</code> | Enriquecimento: <code>cadastro_produtos</code></div>
+      </header>
+      <div class="content">
+        <div class="tablewrap" id="wrapTopSearchProducts">
+          <table id="tblTopSearchProducts">
+            <thead>
+            <tr>
+              <th>#</th>
+              <th>EAN</th>
+              <th>Descrição</th>
+              <th class="right">Buscas</th>
+            </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="hint">A descrição é substituída pela oficial de <code>cadastro_produtos</code> quando há correspondência por EAN.</div>
+      </div>
+    </div>
+
+    <!-- Nuvem de palavras + lista (Top 30) -->
+    <div class="panel">
+      <header>
+        <h2>Nuvem de palavras — Top 30</h2>
+        <div class="cloud-toolbar">
+          <button id="btnToggleWordList" class="btn" type="button">Mostrar lista ordenada</button>
+          <span class="pill">Interativo: passe o mouse para ver contagem</span>
+        </div>
+      </header>
+      <div class="content">
+        <div class="cloud-wrap">
+          <canvas id="wordCloud" width="900" height="380" aria-label="Nuvem de palavras"></canvas>
+          <div id="cloudTooltip" class="tooltip"></div>
+        </div>
+        <div id="wordList" class="tablewrap">
+          <table>
+            <thead>
+            <tr><th>#</th><th>Palavra</th><th class="right">Buscas</th></tr>
+            </thead>
+            <tbody id="wordListBody"></tbody>
+          </table>
+        </div>
+        <div class="hint">As palavras comuns (stopwords) são filtradas para destacar termos relevantes.</div>
       </div>
     </div>
   </section>
@@ -375,6 +429,18 @@ let lastCaros   = [];
 let lastAlt     = [];
 let lastAbaixo  = [];
 
+/* ========= Ranking de buscas / nuvem ========= */
+const TOP_N_CLOUD = 30;
+let topSearchProducts = [];   // [{ean, desc, count}]
+let topWords = [];            // [{word, count}]
+let cloudBounds = [];         // hit detection [{x,y,w,h,word,count}]
+const cloud = document.getElementById('wordCloud');
+const cloudCtx = cloud.getContext('2d', { alpha: true });
+const cloudTip = document.getElementById('cloudTooltip');
+const btnToggleWordList = document.getElementById('btnToggleWordList');
+const wordList = document.getElementById('wordList');
+const wordListBody = document.getElementById('wordListBody');
+
 const sortState = {
   baratos: { key:'gap_up', dir:'desc' },
   caros:   { key:'diff',   dir:'desc' },
@@ -415,7 +481,8 @@ async function reloadAll(){
       loadMaioresAlt(),
       loadRegiao(),
       watchAbaixoCusto(),
-      runDiagnosticsForOpportunities()
+      runDiagnosticsForOpportunities(),
+      loadSearchReports() // NOVO: relatórios de buscas (Top 30)
     ]);
     applyVisibleHeights();
     setStatus('Pronto.');
@@ -830,7 +897,7 @@ function decorateHeaders(tableKey){
 /* ========= Limite visual com rolagem ========= */
 function applyVisibleHeights(){
   const vis = Number(visibleRows.value||20);
-  ['wrapBaratos','wrapCaros','wrapAlt','wrapAbaixoCusto'].forEach(id=>{
+  ['wrapBaratos','wrapCaros','wrapAlt','wrapAbaixoCusto','wrapTopSearchProducts'].forEach(id=>{
     const wrap = document.getElementById(id);
     if (!wrap || wrap.style.display==='none') return;
     const table = wrap.querySelector('table');
@@ -877,6 +944,266 @@ async function runDiagnosticsForOpportunities(){
     diagCaros.style.display = 'block';
   }
 }
+
+/* ========= ===== NOVO: Relatórios de busca (Top 30) ===== ========= */
+function getPeriodISO(){
+  const {from,to} = getPeriod();
+  return {
+    fromISO: from ? from.toISOString() : null,
+    toISO: to ? to.toISOString() : null
+  };
+}
+
+function normalizeTerm(t){
+  return String(t||'')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'') // remove acentos
+    .replace(/[^\p{L}\p{N}\s-]/gu,' ') // keep letters, numbers, spaces, hyphen
+    .replace(/\s+/g,' ')
+    .trim();
+}
+function detectEAN(t){
+  const onlyDigits = String(t||'').replace(/\D/g,'');
+  return (/^\d{8,14}$/.test(onlyDigits)) ? onlyDigits : null;
+}
+
+const PT_STOPWORDS = new Set([
+  'a','o','os','as','um','uma','uns','umas','de','da','do','das','dos','e','ou','em','no','na','nos','nas','para','por','com','sem','ao','à','às','aos',
+  'que','qual','quais','se','ser','estar','ter','tem','é','nao','não','sim','mais','menos','como','onde','quando','porque','porquê','por que',
+  'preco','preço','valor','produto','produtos','marca','marcas'
+]);
+
+async function loadSearchReports(){
+  setStatus('Carregando relatórios de buscas…');
+  // 1) Ler logs do período
+  const { fromISO, toISO } = getPeriodISO();
+  let q = sb.from('search_logs').select('term,ean,ean_norm,created_at').order('created_at',{ascending:false});
+  if (fromISO) q = q.gte('created_at', fromISO);
+  if (toISO)   q = q.lte('created_at', toISO);
+  // Limite grande para contagem em memória (ajuste se necessário)
+  const { data: logs, error } = await q.limit(8000);
+  if (error) { console.warn('search_logs erro:', error.message||error); return; }
+
+  const prodCount = new Map(); // ean -> count
+  const wordsCount = new Map(); // word -> count
+
+  // 2) Contabilizar
+  for (const r of (logs||[])){
+    const rawTerm = r.term ?? '';
+    const ean = r.ean_norm || r.ean || detectEAN(rawTerm);
+    if (ean) {
+      prodCount.set(ean, (prodCount.get(ean)||0)+1);
+    }
+    // palavras
+    const norm = normalizeTerm(rawTerm);
+    if (norm){
+      for (const w of norm.split(' ')){
+        if (!w || PT_STOPWORDS.has(w) || /^\d+$/.test(w)) continue;
+        wordsCount.set(w, (wordsCount.get(w)||0)+1);
+      }
+    }
+  }
+
+  // 3) Top 30 produtos por EAN
+  const topEAN = Array.from(prodCount.entries())
+    .sort((a,b)=> b[1]-a[1])
+    .slice(0, TOP_N_CLOUD)
+    .map(([ean, count])=>({ ean, count, desc: NA }));
+
+  // 4) Enriquecer descrição por EAN
+  await enrichProductsByEAN(topEAN);
+
+  topSearchProducts = topEAN;
+
+  renderTopSearchProducts();
+
+  // 5) Top 30 palavras
+  topWords = Array.from(wordsCount.entries())
+    .map(([word,count])=>({ word, count }))
+    .sort((a,b)=> b.count - a.count)
+    .slice(0, TOP_N_CLOUD);
+
+  renderWordCloud();
+  renderWordList(false);
+}
+
+async function enrichProductsByEAN(arr){
+  if (!arr.length) return;
+  const eans = arr.map(x=>x.ean);
+
+  // Tentativa 1: coluna 'ean'
+  let { data: prodA, error: errA } = await sb.from('cadastro_produtos')
+    .select('ean, descricao').in('ean', eans).limit(2000);
+
+  // Tentativa 2 (fallback): coluna 'ean13'
+  let map = new Map();
+  if (prodA && prodA.length){
+    for (const p of prodA){ if (p && p.ean) map.set(String(p.ean), p.descricao||''); }
+  } else {
+    const { data: prodB } = await sb.from('cadastro_produtos')
+      .select('ean13, descricao').in('ean13', eans).limit(2000);
+    if (prodB && prodB.length){
+      for (const p of prodB){ if (p && p.ean13) map.set(String(p.ean13), p.descricao||''); }
+    }
+  }
+
+  for (const item of arr){
+    const desc = map.get(String(item.ean));
+    if (desc && desc.trim()) item.desc = desc.trim();
+  }
+}
+
+function renderTopSearchProducts(){
+  const tb = document.querySelector('#tblTopSearchProducts tbody');
+  tb.innerHTML = '';
+  topSearchProducts.forEach((r, i)=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${i+1}</td>
+      <td class="mono">${r.ean}</td>
+      <td>${(r.desc||NA).replace(/</g,'&lt;')}</td>
+      <td class="right">${r.count.toLocaleString('pt-BR')}</td>
+    `;
+    tb.appendChild(tr);
+  });
+  applyVisibleHeights();
+}
+
+/* ===== Nuvem de palavras em canvas (gradiente, sombra, leve rotação e tooltip) ===== */
+function wordHash(s){
+  let h=2166136261>>>0;
+  for (let i=0;i<s.length;i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h>>>0;
+}
+function pickFontSize(count, maxCount){
+  const minF = 14, maxF = 52;
+  if (!maxCount) return minF;
+  const t = Math.sqrt(count / maxCount); // suaviza
+  return Math.round(minF + (maxF - minF) * t);
+}
+function drawWord(ctx, text, x, y, fontSize, rotRad, gradHue, strength){
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(rotRad);
+  ctx.font = `600 ${fontSize}px Arial`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  // Sombra suave
+  ctx.shadowColor = 'rgba(0,0,0,0.45)';
+  ctx.shadowBlur = Math.max(6, fontSize*0.25);
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 2;
+
+  // Gradiente
+  const w = ctx.measureText(text).width;
+  const g = ctx.createLinearGradient(-w/2, -fontSize/2, w/2, fontSize/2);
+  const base = gradHue % 360;
+  g.addColorStop(0, `hsl(${(base)}, 85%, ${50+strength*10}%)`);
+  g.addColorStop(1, `hsl(${(base+40)%360}, 85%, ${65+strength*8}%)`);
+  ctx.fillStyle = g;
+
+  ctx.fillText(text, 0, 0);
+  ctx.restore();
+  return { w, h: fontSize }; // approx
+}
+function renderWordCloud(){
+  const W = cloud.width, H = cloud.height;
+  cloudCtx.clearRect(0,0,W,H);
+
+  const maxCount = topWords.length ? topWords[0].count : 1;
+  const center = { x: W/2, y: H/2 };
+
+  // layout espiral simples
+  cloudBounds = [];
+  const placed = [];
+  const collides = (box)=>{
+    return placed.some(p=>{
+      // eixo local sem rotação para colisão aproximada (AABB)
+      return !(box.x + box.w < p.x || box.x > p.x + p.w || box.y + box.h < p.y || box.y > p.y + p.h);
+    });
+  };
+
+  topWords.forEach((item, idx)=>{
+    const size = pickFontSize(item.count, maxCount);
+    const seed = wordHash(item.word);
+    const angle = ((seed % 1400) / 1400) * 14 - 7; // -7° .. +7°
+    const rot = angle * Math.PI / 180;
+    const hue = (seed % 360);
+    const strength = Math.min(1, item.count / maxCount);
+
+    // busca posição em espiral
+    const step = 8;
+    let a = 0, r = 0, x=0, y=0, w=0, h=0, tries=0;
+    // medir largura para estimar caixa
+    cloudCtx.font = `600 ${size}px Arial`;
+    const textWidth = cloudCtx.measureText(item.word).width;
+    const pad = 8;
+    do{
+      x = center.x + Math.cos(a) * r;
+      y = center.y + Math.sin(a) * r;
+      w = textWidth + pad*2; h = size + pad*2;
+      const box = { x: x - w/2, y: y - h/2, w, h };
+      if (!collides(box) && box.x>=4 && box.y>=4 && (box.x+box.w<=W-4) && (box.y+box.h<=H-4)){
+        // Desenha
+        drawWord(cloudCtx, item.word, x, y, size, rot, hue, strength);
+        placed.push(box);
+        cloudBounds.push({ ...box, word:item.word, count:item.count });
+        break;
+      }
+      a += 0.25;
+      r += step * (0.15 + (idx/topWords.length)*0.05);
+      tries++;
+    }while(tries<1600);
+    if (tries>=1600){
+      // fallback: desenha no rodapé se não couber
+      const fy = H - (size + 8);
+      const fx = Math.min(W - (textWidth/2 + 8), Math.max(textWidth/2 + 8, 8 + (idx*24)% (W-16)));
+      drawWord(cloudCtx, item.word, fx, fy, size, rot, hue, strength);
+      const box = { x: fx - (textWidth+pad*2)/2, y: fy - (size+pad*2)/2, w: textWidth+pad*2, h: size+pad*2 };
+      placed.push(box);
+      cloudBounds.push({ ...box, word:item.word, count:item.count });
+    }
+  });
+}
+
+function renderWordList(toggleNow=true){
+  if (toggleNow){
+    const show = wordList.style.display!=='block';
+    wordList.style.display = show ? 'block' : 'none';
+    btnToggleWordList.textContent = show ? 'Ocultar lista' : 'Mostrar lista ordenada';
+  }
+  // preencher lista
+  wordListBody.innerHTML = '';
+  topWords.forEach((w,i)=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${i+1}</td>
+      <td>${w.word.replace(/</g,'&lt;')}</td>
+      <td class="right">${w.count.toLocaleString('pt-BR')}</td>
+    `;
+    wordListBody.appendChild(tr);
+  });
+}
+btnToggleWordList.addEventListener('click', ()=> renderWordList(true));
+
+// Tooltip do canvas
+cloud.addEventListener('mousemove', (ev)=>{
+  const rect = cloud.getBoundingClientRect();
+  const x = ev.clientX - rect.left;
+  const y = ev.clientY - rect.top;
+  const hit = cloudBounds.find(b => x>=b.x && x<=b.x+b.w && y>=b.y && y<=b.y+b.h);
+  if (hit){
+    cloudTip.textContent = `${hit.word} — ${hit.count} busca${hit.count>1?'s':''}`;
+    cloudTip.style.left = `${ev.clientX - rect.left}px`;
+    cloudTip.style.top  = `${ev.clientY - rect.top}px`;
+    cloudTip.style.display = 'block';
+  } else {
+    cloudTip.style.display = 'none';
+  }
+});
+cloud.addEventListener('mouseleave', ()=>{ cloudTip.style.display='none'; });
+
 </script>
 </body>
 </html>
