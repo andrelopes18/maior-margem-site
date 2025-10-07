@@ -410,9 +410,9 @@ const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth
 const VIEW = 'vw_precos_dinamica';
 
 /* ========= Defaults de filtros ocultos ========= */
-const DEFAULT_TOP_LIMIT = 100;
+const DEFAULT_TOP_LIMIT = 10000;      // << aumentado para abranger mais itens
 const DEFAULT_OUTLIER_TOL = 0.50;
-const DEFAULT_VISIBLE_ROWS = 20;
+const DEFAULT_VISIBLE_ROWS = 30;      // << rolagem a partir de 30 itens
 
 /* ========= Util ========= */
 const NA = '---';
