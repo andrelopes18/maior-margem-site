@@ -423,9 +423,9 @@ const statusEl = document.getElementById('status');
 const errEl    = document.getElementById('err');
 
 function setStatus(t){ statusEl.textContent = t||''; }
-function showErr(msg){ errEl.style.display='block'; errEl.textContent=msg; console.error(msg); }
-function hideErr(){ errEl.style.display='none'; errEl.textContent=''; }
-function formatBRL(n){ try { return Number(n).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); } catch { return String(n); } }
+function showErr(msg){ errEl.style.display = 'block'; errEl.textContent = msg; console.error(msg); }
+function hideErr(){ errEl.style.display = 'none'; errEl.textContent = ''; }
+function formatBRL(n){ try { return Number(n).toLocaleString('pt-BR', { style:'currency', currency:'BRL' }); } catch { return String(n); } }
 function isFiniteNum(n){ return typeof n === 'number' && isFinite(n); }
 
 /* ========= Controles ========= */
@@ -673,6 +673,23 @@ async function loadKpis(){
   document.getElementById('kpiEconomia').textContent = '—';
 }
 
+/* ========= Desenho spark simples ========= */
+function drawSpark(ctx, arr){
+  if (!ctx || !arr || !arr.length) return;
+  const W = ctx.canvas.width, H = ctx.canvas.height, pad=6;
+  const max = Math.max(...arr), min = Math.min(...arr);
+  ctx.clearRect(0,0,W,H);
+  ctx.beginPath(); ctx.moveTo(pad, H-pad);
+  arr.forEach((v,i)=>{
+    const x = pad + i*(W-2*pad)/Math.max(1,arr.length-1);
+    const y = pad + (1 - (v-min)/Math.max(1,(max-min))) * (H-2*pad);
+    if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  });
+  ctx.strokeStyle = '#00b140';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+}
+
 /* ========= Oportunidades: MEU PREÇO vs MENOR CONCORRENTE (com filtro de sites) ========= */
 function median(nums){
   if (!nums.length) return NaN;
@@ -710,18 +727,21 @@ async function loadOportunidadesVsMin(){
 
   const byEan = new Map();
   for (const r of (data||[])){
-    const sid = Number(r.site_id);
-    if (siteIds && !siteIds.includes(sid)) continue;
-
     const e = String(r.ean);
     if (!byEan.has(e)) byEan.set(e, { ean:e, desc:r.descricao||'', my:null, market:[] });
     const obj = byEan.get(e);
 
+    // 1) SEMPRE capturar meu_preco (independente do site selecionado)
     const mp = Number(r.meu_preco);
     if (obj.my===null && isFiniteNum(mp)) obj.my = mp;
 
+    // 2) ADICIONAR concorrentes apenas se passarem no filtro de sites
+    const sid = Number(r.site_id);
     const pn = Number(r.preco_num);
-    if (isFiniteNum(pn)) obj.market.push({ price: pn, site: r.site_nome || sid });
+    const allowedSite = !siteIds || siteIds.includes(sid);
+    if (allowedSite && isFiniteNum(pn)) {
+      obj.market.push({ price: pn, site: r.site_nome || sid });
+    }
   }
 
   const baratos=[], caros=[];
