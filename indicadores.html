@@ -244,12 +244,7 @@
 
   <!-- OPORTUNIDADES -->
   <section class="grid" style="margin-top:14px;">
-    
-    <div class="toolbar" style="display:flex; gap:12px; align-items:center; margin:8px 0 4px 0;">
-      <label for="qOportunidades">Filtrar descrição:</label>
-      <input id="qOportunidades" type="text" placeholder="Digite parte da descrição..." style="flex:1; min-width:220px; padding:8px 10px; border:1px solid #263241; background:#0e141b; color:#e2e8f0; border-radius:8px;">
-    </div>
-<div class="panel">
+    <div class="panel">
       <header>
         <h2>Oportunidades — Eu sou o mais barato</h2>
         <div><span class="pill">Critério: <code>meu_preco &lt; menor_concorrente</code></span></div>
@@ -695,6 +690,33 @@ function drawSpark(ctx, arr){
   ctx.stroke();
 }
 
+
+/* === Fallback: busca "meu_preco" mais recente por EAN (sem filtro de período) === */
+async function fetchMyPriceMap(eanList){
+  const map = new Map();
+  if (!eanList || !eanList.length) return map;
+
+  // PostgREST não tem "distinct on", então buscamos um lote ordenado por data desc
+  // e pegamos o primeiro "meu_preco" válido por EAN.
+  const { data, error } = await sb
+    .from(VIEW)
+    .select('ean, meu_preco, data')
+    .in('ean', eanList)
+    .not('meu_preco','is',null)
+    .order('data', { ascending:false })
+    .limit(eanList.length * 10); // margem
+
+  if (error){ console.warn('fetchMyPriceMap error:', error.message||error); return map; }
+  for (const r of (data||[])){
+    const e = String(r.ean);
+    if (!map.has(e)){
+      const mp = Number(r.meu_preco);
+      if (isFiniteNum(mp) && mp>0) map.set(e, mp);
+    }
+  }
+  return map;
+}
+
 /* ========= Oportunidades: MEU PREÇO vs MENOR CONCORRENTE (com filtro de sites) ========= */
 function median(nums){
   if (!nums.length) return NaN;
@@ -718,40 +740,60 @@ function currentQuery(){
 }
 function appliesQuery(desc){ const q=currentQuery(); return !q || String(desc||'').toLowerCase().includes(q); }
 
+
 async function loadOportunidadesVsMin(){
   const lim = DEFAULT_TOP_LIMIT;
   const tol = DEFAULT_OUTLIER_TOL;
   const siteIds = getSelectedSiteIds(); // null = todos
 
-  const { data, error } = await applyDateFilter(
+  // 1) Busca preços dos concorrentes no período selecionado
+  const qry = applyDateFilter(
     sb.from(VIEW).select('ean, descricao, site_id, site_nome, preco_num, meu_preco, data')
-      .order('data',{ascending:false})
-      .limit(Math.max(20000, lim*100))
+      .not('preco_num','is',null)
+      .order('data', { ascending:false })
+      .limit(Math.max(30000, lim*200))
   );
+  const { data, error } = await qry;
   if (error) throw error;
 
+  // Agrupa por EAN para coletar mercados e tentativas de meu_preco do período
   const byEan = new Map();
   for (const r of (data||[])){
     const e = String(r.ean);
     if (!byEan.has(e)) byEan.set(e, { ean:e, desc:r.descricao||'', my:null, market:[] });
     const obj = byEan.get(e);
 
-    // 1) SEMPRE capturar meu_preco (independente do site selecionado)
-    const mp = Number(r.meu_preco);
-    if (obj.my===null && isFiniteNum(mp)) obj.my = mp;
-
-    // 2) ADICIONAR concorrentes apenas se passarem no filtro de sites
+    // Mercado (aplica filtro de sites)
     const sid = Number(r.site_id);
-    const pn = Number(r.preco_num);
+    const pn  = Number(r.preco_num);
     const allowedSite = !siteIds || siteIds.includes(sid);
-    if (allowedSite && isFiniteNum(pn)) {
-      obj.market.push({ price: pn, site: r.site_nome || sid, site_id: sid });
+    if (allowedSite && isFiniteNum(pn) && pn>0){
+      obj.market.push({ price: pn, site: r.site_nome || sid });
     }
+
+    // Meu preço (do período) — pode estar ausente
+    const mp = Number(r.meu_preco);
+    if (obj.my===null && isFiniteNum(mp) && mp>0) obj.my = mp;
   }
 
+  // 2) Fallback: para os EANs sem meu_preco no período, busca o mais recente (sem período)
+  const missingEans = Array.from(byEan.values()).filter(x=>x.my===null).map(x=>x.ean);
+  let myMap = new Map();
+  if (missingEans.length){
+    myMap = await fetchMyPriceMap(missingEans);
+  }
+
+  // 3) Calcula as oportunidades
   const baratos=[], caros=[];
   for (const obj of byEan.values()){
-    if (!isFiniteNum(obj.my)) continue;
+    // Aplica fallback se necessário
+    if (!isFiniteNum(obj.my) || obj.my<=0){
+      const mp = myMap.get(obj.ean);
+      if (isFiniteNum(mp) && mp>0) obj.my = mp;
+    }
+
+    if (!isFiniteNum(obj.my) || obj.my<=0) continue; // sem meu preço não dá pra comparar
+
     let market = filterValidCompetitors(obj.market);
     if (!market.length) continue;
 
@@ -765,7 +807,6 @@ async function loadOportunidadesVsMin(){
       const prox = nextAbove || minc;
       const gapUp = prox.price - obj.my;
       baratos.push({
-        next_site_id: (prox && prox.site_id) || null,
         ean: obj.ean, desc: obj.desc,
         my: obj.my,
         next: prox.price, next_site: prox.site,
@@ -774,7 +815,6 @@ async function loadOportunidadesVsMin(){
     } else if (obj.my > minc.price){
       const diff = obj.my - minc.price;
       caros.push({
-        min_site_id: (minc && minc.site_id) || null,
         ean: obj.ean, desc: obj.desc,
         my: obj.my,
         minc: minc.price, min_site: minc.site,
@@ -792,6 +832,7 @@ async function loadOportunidadesVsMin(){
   renderCaros();
 }
 
+
 /* ========= Render + Ordenação ========= */
 function sortArray(arr, key, dir){
   const m = dir==='desc' ? -1 : 1;
@@ -805,7 +846,7 @@ function sortArray(arr, key, dir){
 }
 function renderBaratos(){
   const st = sortState.baratos;
-  const raw = lastBaratos; const data = sortArray(raw.filter(r=>appliesQuery(r.desc)), st.key, st.dir);
+  const data = sortArray(lastBaratos, st.key, st.dir);
   const tb = document.querySelector('#tblMaisBaratos tbody'); tb.innerHTML='';
   data.forEach(r=>{
     const tr=document.createElement('tr');
@@ -813,7 +854,7 @@ function renderBaratos(){
       <td>${(r.desc||'').replace(/</g,'&lt;')}</td>
       <td class="mono">${r.ean}</td>
       <td class="right"><span class="price min">${formatBRL(r.my)}</span></td>
-      <td class="right" title="${r.next_site||''}"><a href="#" onclick="openPrice('${r.ean}', ${r.next_site_id||0}); return false;">${formatBRL(r.next)}</a></td>
+      <td class="right" title="${r.next_site||''}">${formatBRL(r.next)}</td>
       <td class="right">${formatBRL(r.gap_up)}</td>
     `;
     tb.appendChild(tr);
@@ -823,7 +864,7 @@ function renderBaratos(){
 }
 function renderCaros(){
   const st = sortState.caros;
-  const raw = lastCaros; const data = sortArray(raw.filter(r=>appliesQuery(r.desc)), st.key, st.dir);
+  const data = sortArray(lastCaros, st.key, st.dir);
   const tb = document.querySelector('#tblMaisCaros tbody'); tb.innerHTML='';
   data.forEach(r=>{
     const tr=document.createElement('tr');
@@ -831,7 +872,7 @@ function renderCaros(){
       <td>${(r.desc||'').replace(/</g,'&lt;')}</td>
       <td class="mono">${r.ean}</td>
       <td class="right"><span class="price max">${formatBRL(r.my)}</span></td>
-      <td class="right" title="${r.min_site||''}"><a href="#" onclick="openPrice('${r.ean}', ${r.min_site_id||0}); return false;">${formatBRL(r.minc)}</a></td>
+      <td class="right" title="${r.min_site||''}">${formatBRL(r.minc)}</td>
       <td class="right">${formatBRL(r.diff)}</td>
     `;
     tb.appendChild(tr);
@@ -1280,58 +1321,6 @@ function installMinimizeButtons(){
     right.appendChild(btn);
   });
 }
-
-/* === Clique no preço do concorrente: abrir site === */
-async function openPrice(ean, siteId){
-  try{
-    const url = await resolveProductUrl(ean, siteId);
-    if (url){ window.open(url, '_blank', 'noopener'); }
-    else { alert('Não foi possível localizar a URL do produto para este site.'); }
-  }catch(e){
-    console.warn('openPrice error', e);
-    alert('Falha ao abrir o link do produto.');
-  }
-}
-
-async function resolveProductUrl(ean, siteId){
-  const url1 = await tryFetchUrlFromSource(VIEW, ean, siteId);
-  if (url1) return url1;
-  const url2 = await tryFetchUrlFromSource('Precos', ean, siteId);
-  if (url2) return url2;
-  const { data, error } = await sb.from('sites').select('id, url_pesquisa, urlPesquisa, site, nome').eq('id', siteId).single();
-  if (error){ console.warn('Erro ao consultar sites:', error.message||error); }
-  const tpl = data && (data.url_pesquisa || data.urlPesquisa || '');
-  if (tpl){
-    if (tpl.includes('{QUERY}')) return tpl.replace('{QUERY}', encodeURIComponent(String(ean)));
-    if (tpl.includes('%s')) return tpl.replace('%s', encodeURIComponent(String(ean)));
-    return tpl + encodeURIComponent(String(ean));
-  }
-  const siteName = data && (data.nome || data.site) || '';
-  return `https://www.google.com/search?q=${encodeURIComponent(String(ean)+' '+siteName)}`;
-}
-
-async function tryFetchUrlFromSource(source, ean, siteId){
-  const urlCols = ['url', 'url_produto', 'product_url', 'link', 'href'];
-  let sel = sb.from(source).select(['ean','site_id','data'].concat(urlCols).join(',')).eq('ean', ean).eq('site_id', siteId).order('data',{ascending:false}).limit(1);
-  const { data, error } = await sel;
-  if (error){ console.warn('tryFetchUrlFromSource error:', source, error.message||error); return null; }
-  const row = (data||[])[0]; if (!row) return null;
-  for (const c of urlCols){ if (row[c] && typeof row[c]==='string') return row[c]; }
-  return null;
-}
-
-
-// Re-render ao digitar no filtro de descrição (sem nova consulta)
-document.addEventListener('DOMContentLoaded', ()=>{
-  const q = document.getElementById('qOportunidades');
-  if (!q) return;
-  let t=null;
-  q.addEventListener('input', ()=>{
-    clearTimeout(t);
-    t = setTimeout(()=>{ renderBaratos(); renderCaros(); }, 200);
-  });
-});
-
 </script>
 </body>
 </html>
