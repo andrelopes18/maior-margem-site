@@ -690,6 +690,33 @@ function drawSpark(ctx, arr){
   ctx.stroke();
 }
 
+
+/* === Fallback: busca "meu_preco" mais recente por EAN (sem filtro de período) === */
+async function fetchMyPriceMap(eanList){
+  const map = new Map();
+  if (!eanList || !eanList.length) return map;
+
+  // PostgREST não tem "distinct on", então buscamos um lote ordenado por data desc
+  // e pegamos o primeiro "meu_preco" válido por EAN.
+  const { data, error } = await sb
+    .from(VIEW)
+    .select('ean, meu_preco, data')
+    .in('ean', eanList)
+    .not('meu_preco','is',null)
+    .order('data', { ascending:false })
+    .limit(eanList.length * 10); // margem
+
+  if (error){ console.warn('fetchMyPriceMap error:', error.message||error); return map; }
+  for (const r of (data||[])){
+    const e = String(r.ean);
+    if (!map.has(e)){
+      const mp = Number(r.meu_preco);
+      if (isFiniteNum(mp) && mp>0) map.set(e, mp);
+    }
+  }
+  return map;
+}
+
 /* ========= Oportunidades: MEU PREÇO vs MENOR CONCORRENTE (com filtro de sites) ========= */
 function median(nums){
   if (!nums.length) return NaN;
@@ -713,40 +740,60 @@ function currentQuery(){
 }
 function appliesQuery(desc){ const q=currentQuery(); return !q || String(desc||'').toLowerCase().includes(q); }
 
+
 async function loadOportunidadesVsMin(){
   const lim = DEFAULT_TOP_LIMIT;
   const tol = DEFAULT_OUTLIER_TOL;
   const siteIds = getSelectedSiteIds(); // null = todos
 
-  const { data, error } = await applyDateFilter(
+  // 1) Busca preços dos concorrentes no período selecionado
+  const qry = applyDateFilter(
     sb.from(VIEW).select('ean, descricao, site_id, site_nome, preco_num, meu_preco, data')
-      .order('data',{ascending:false})
-      .limit(Math.max(20000, lim*100))
+      .not('preco_num','is',null)
+      .order('data', { ascending:false })
+      .limit(Math.max(30000, lim*200))
   );
+  const { data, error } = await qry;
   if (error) throw error;
 
+  // Agrupa por EAN para coletar mercados e tentativas de meu_preco do período
   const byEan = new Map();
   for (const r of (data||[])){
     const e = String(r.ean);
     if (!byEan.has(e)) byEan.set(e, { ean:e, desc:r.descricao||'', my:null, market:[] });
     const obj = byEan.get(e);
 
-    // 1) SEMPRE capturar meu_preco (independente do site selecionado)
-    const mp = Number(r.meu_preco);
-    if (obj.my===null && isFiniteNum(mp)) obj.my = mp;
-
-    // 2) ADICIONAR concorrentes apenas se passarem no filtro de sites
+    // Mercado (aplica filtro de sites)
     const sid = Number(r.site_id);
-    const pn = Number(r.preco_num);
+    const pn  = Number(r.preco_num);
     const allowedSite = !siteIds || siteIds.includes(sid);
-    if (allowedSite && isFiniteNum(pn)) {
+    if (allowedSite && isFiniteNum(pn) && pn>0){
       obj.market.push({ price: pn, site: r.site_nome || sid });
     }
+
+    // Meu preço (do período) — pode estar ausente
+    const mp = Number(r.meu_preco);
+    if (obj.my===null && isFiniteNum(mp) && mp>0) obj.my = mp;
   }
 
+  // 2) Fallback: para os EANs sem meu_preco no período, busca o mais recente (sem período)
+  const missingEans = Array.from(byEan.values()).filter(x=>x.my===null).map(x=>x.ean);
+  let myMap = new Map();
+  if (missingEans.length){
+    myMap = await fetchMyPriceMap(missingEans);
+  }
+
+  // 3) Calcula as oportunidades
   const baratos=[], caros=[];
   for (const obj of byEan.values()){
-    if (!isFiniteNum(obj.my)) continue;
+    // Aplica fallback se necessário
+    if (!isFiniteNum(obj.my) || obj.my<=0){
+      const mp = myMap.get(obj.ean);
+      if (isFiniteNum(mp) && mp>0) obj.my = mp;
+    }
+
+    if (!isFiniteNum(obj.my) || obj.my<=0) continue; // sem meu preço não dá pra comparar
+
     let market = filterValidCompetitors(obj.market);
     if (!market.length) continue;
 
@@ -784,6 +831,7 @@ async function loadOportunidadesVsMin(){
   renderBaratos();
   renderCaros();
 }
+
 
 /* ========= Render + Ordenação ========= */
 function sortArray(arr, key, dir){
