@@ -268,6 +268,7 @@
             </thead>
             <tbody></tbody>
           </table>
+<div id=\"srcBaratos\" class=\"source-info\"></div>
         </div>
       </div>
     </div>
@@ -291,6 +292,7 @@
             </thead>
             <tbody></tbody>
           </table>
+<div id=\"srcCaros\" class=\"source-info\"></div>
         </div>
       </div>
     </div>
@@ -1284,11 +1286,11 @@ function installMinimizeButtons(){
 (function(){
   try{
     const VIEW   = window.VIEW || 'vw_precos_dinamica';
-    let client   = window.sb;
+    let client   = (typeof sb !== 'undefined' && sb) ? sb : null;
     if (!client && window.CONFIG && window.supabase){
       try{ client = window.supabase.createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_ANON_KEY); }catch(e){}
     }
-    if (!client){ console.warn('[Indicadores FIX] Supabase indisponível.'); return; }
+    if (!client){ console.warn('[Indicadores LP-FIX] Supabase indisponível.'); return; }
 
     const _applyDateFilter = (typeof window.applyDateFilter === 'function') ? window.applyDateFilter : (q)=>q;
     const _getPeriod       = (typeof window.getPeriod       === 'function') ? window.getPeriod       : ()=>({from:null,to:null});
@@ -1297,156 +1299,192 @@ function installMinimizeButtons(){
     const DEFAULT_OUTLIER_TOL = (typeof window.DEFAULT_OUTLIER_TOL === 'number') ? window.DEFAULT_OUTLIER_TOL : 0.50;
     const DEFAULT_TOP_LIMIT   = (typeof window.DEFAULT_TOP_LIMIT   === 'number') ? window.DEFAULT_TOP_LIMIT   : 100;
 
+    const MY_SITE_IDS = (Array.isArray(window.CONFIG?.MY_SITE_IDS) && window.CONFIG.MY_SITE_IDS.length)
+      ? window.CONFIG.MY_SITE_IDS
+      : (window.CONFIG?.MY_SITE_ID != null ? [window.CONFIG.MY_SITE_ID] : null);
+
     function isFiniteNum(n){ return typeof n === 'number' && isFinite(n); }
     function formatBRL(n){ try { return Number(n).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); } catch { return String(n); } }
     function median(nums){ if(!nums.length) return NaN; const arr=nums.slice().sort((a,b)=>a-b); const m=Math.floor(arr.length/2); return arr.length%2?arr[m]:(arr[m-1]+arr[m])/2; }
     function filterOutliersAroundMedian(list, tol){
       if (!list.length) return list;
       const med = median(list.map(x=>x.price));
+      if (!isFinite(med)) return list;
       const lo = med*(1-tol), hi = med*(1+tol);
       const filtered = list.filter(x => x.price>=lo && x.price<=hi);
       return filtered.length ? filtered : list;
     }
     function filterValidCompetitors(list){ return list.filter(x => isFiniteNum(x.price) && x.price > 0); }
 
-    async function fetchLatestMyPrices(){
+    async function loadSitesMap(){
+      try{
+        const { data } = await client.from('sites').select('id,nome').limit(5000);
+        const map = new Map();
+        (data||[]).forEach(s=> map.set(Number(s.id), s.nome||String(s.id)));
+        return map;
+      }catch(e){ return new Map(); }
+    }
+
+    async function fetchMyFromLatestPrices(myIds){
+      if (!myIds || !myIds.length) return null;
       const { data, error } = await client
-        .from(VIEW).select('ean, descricao, meu_preco, data')
-        .not('meu_preco','is',null)
-        .order('ean', { ascending:true })
-        .order('data', { ascending:false })
-        .limit(60000);
-      if (error){ console.warn('[Indicadores FIX] erro myprice:', error.message||error); return new Map(); }
+        .from('latest_prices')
+        .select('ean, site_id, preco_num')
+        .in('site_id', myIds)
+        .not('preco_num','is',null)
+        .limit(100000);
+      if (error){ console.warn('[LP-FIX] erro latest_prices (my):', error.message||error); return null; }
       const map = new Map();
-      for (const r of (data||[])){
+      (data||[]).forEach(r=>{
         const e = String(r.ean);
-        if (!map.has(e)){
-          const mp = Number(r.meu_preco);
-          if (isFiniteNum(mp)){
-            map.set(e, { my: mp, desc: r.descricao || '', data: r.data });
-          }
-        }
-      }
+        const pn = Number(r.preco_num);
+        if (!isFiniteNum(pn)) return;
+        map.set(e, Math.min(map.get(e) ?? Infinity, pn));
+      });
       return map;
     }
 
-    function _renderTableFallback(sel, rows, cols){
-      const tb = document.querySelector(sel);
-      if (!tb) return;
-      tb.innerHTML = '';
-      rows.forEach(r=>{
-        const tr=document.createElement('tr');
-        tr.innerHTML = cols.map(c=>c(r)).join('');
-        tb.appendChild(tr);
+    async function fetchMyFromView(){
+      const { data, error } = await client
+        .from(VIEW).select('ean, descricao, meu_preco, data')
+        .not('meu_preco','is',null)
+        .order('ean',{ascending:true})
+        .order('data',{ascending:false})
+        .limit(60000);
+      if (error){ console.warn('[LP-FIX] erro view(meu_preco):', error.message||error); return null; }
+      const map = new Map();
+      (data||[]).forEach(r=>{
+        const e = String(r.ean);
+        const mp = Number(r.meu_preco);
+        if (!isFiniteNum(mp)) return;
+        if (!map.has(e)) map.set(e, mp);
       });
+      return map;
     }
 
-    function showSources(divId, diag, tol){
-      const el = document.getElementById(divId);
-      if (!el || !diag) return;
-      const fmtDate = (d)=> d ? new Date(d).toISOString().slice(0,10) : '—';
-      const p = _getPeriod();
-      const sites = Array.isArray(diag.filtros.sites) ? diag.filtros.sites.join(', ') : (diag.filtros.sites || 'TODOS');
-      el.innerHTML =
-        '<div><strong>Tabelas:</strong> <code>'+diag.tabelas.join('</code>, <code>')+'</code></div>'+
-        '<div><strong>Colunas consultadas:</strong> <code>'+diag.colunas.join('</code>, <code>')+'</code></div>'+
-        '<div><strong>Período filtros (concorrentes):</strong> '+fmtDate(p.from)+' a '+fmtDate(p.to)+'</div>'+
-        '<div><strong>Sites selecionados:</strong> '+sites+'</div>'+
-        '<div><strong>Regra outliers:</strong> ±'+Math.round((tol||0.50)*100)+'% em torno da mediana</div>'+
-        '<div><strong>Notas:</strong> <em>meu_preco</em> é sempre o mais recente (sem filtro de data); concorrentes respeitam o período.</div>'+
-        '<div style="margin-top:6px;"><strong>Diagnóstico (contagem):</strong> eans analisados: '+(diag.contagem.eans_analisados||0)+' • sem meu_preco: '+(diag.contagem.eans_sem_meu_preco||0)+' • sem concorrente: '+(diag.contagem.eans_sem_concorrente||0)+' • resultados: '+(diag.contagem.resultados||0)+'</div>';
+    async function fetchCompetitorsUnion(siteIds, myIds, sitesMap){
+      const byEan = new Map();
+      function add(ean, sid, price){
+        if (!isFiniteNum(price)) return;
+        if (myIds && myIds.includes(sid)) return;
+        if (!byEan.has(ean)) byEan.set(ean, new Map());
+        const mm = byEan.get(ean);
+        if (!mm.has(sid)) mm.set(sid, { price, site: sitesMap.get(sid) || String(sid) });
+      }
+
+      try{
+        let qv = client.from(VIEW).select('ean, site_id, preco_num, data');
+        qv = _applyDateFilter(qv);
+        const { data: dv } = await qv.limit(80000);
+        (dv||[]).forEach(r=>{
+          const e = String(r.ean);
+          const sid = Number(r.site_id);
+          if (siteIds && Array.isArray(siteIds) && !siteIds.includes(sid)) return;
+          add(e, sid, Number(r.preco_num));
+        });
+      }catch(e){ console.warn('[LP-FIX] concorrentes VIEW falhou:', e?.message||e); }
+
+      try{
+        let ql = client.from('latest_prices').select('ean, site_id, preco_num');
+        if (siteIds && Array.isArray(siteIds) && siteIds.length) ql = ql.in('site_id', siteIds);
+        const { data: dl } = await ql.limit(80000);
+        (dl||[]).forEach(r=>{
+          const e = String(r.ean);
+          const sid = Number(r.site_id);
+          const pn = Number(r.preco_num);
+          if (!isFiniteNum(pn)) return;
+          if (myIds && myIds.includes(sid)) return;
+          if (!byEan.has(e)) byEan.set(e, new Map());
+          byEan.get(e).set(sid, { price: pn, site: (sid && sid.toString) ? sid.toString() : String(sid) });
+        });
+      }catch(e){ console.warn('[LP-FIX] concorrentes latest_prices falhou:', e?.message||e); }
+
+      return byEan;
     }
 
     window.loadOportunidadesVsMin = async function(){
       const tol = DEFAULT_OUTLIER_TOL;
       const lim = DEFAULT_TOP_LIMIT;
       const siteIds = _getSiteIds();
+      const sitesMap = await loadSitesMap();
 
-      const myMap = await fetchLatestMyPrices();
-
-      let q = client.from(VIEW).select('ean, descricao, site_id, site_nome, preco_num, data')
-        .not('preco_num','is',null)
-        .order('data',{ascending:false})
-        .limit(60000);
-      q = _applyDateFilter(q);
-      const { data, error } = await q;
-      if (error){ console.error('[Indicadores FIX] erro concorrentes:', error); throw error; }
-
-      const byEan = new Map();
-      for (const r of (data||[])){
-        const sid = Number(r.site_id);
-        if (siteIds && Array.isArray(siteIds) && !siteIds.includes(sid)) continue;
-        const e = String(r.ean);
-        if (!byEan.has(e)) byEan.set(e, { ean:e, desc: myMap.get(e)?.desc || r.descricao || '', my: myMap.get(e)?.my ?? null, market: [] });
-        const obj = byEan.get(e);
-        const pn = Number(r.preco_num);
-        if (isFiniteNum(pn)){ obj.market.push({ price: pn, site: r.site_nome || sid }); }
+      let myMap = null, mySource = 'view';
+      if (MY_SITE_IDS && MY_SITE_IDS.length){
+        myMap = await fetchMyFromLatestPrices(MY_SITE_IDS);
+        mySource = 'latest_prices';
       }
+      if (!myMap || myMap.size === 0){
+        myMap = await fetchMyFromView();
+        mySource = 'view';
+      }
+
+      const marketByEan = await fetchCompetitorsUnion(siteIds, MY_SITE_IDS||null, sitesMap);
 
       const baratos=[], caros=[];
       let countNoMy=0, countNoMarket=0, countAll=0;
 
-      for (const obj of byEan.values()){
+      marketByEan.forEach((siteMap, ean)=>{
         countAll++;
-        if (!isFiniteNum(obj.my)){ countNoMy++; continue; }
-        let market = filterValidCompetitors(obj.market);
-        if (!market.length){ countNoMarket++; continue; }
-        market = filterOutliersAroundMedian(market, tol).sort((a,b)=>a.price-b.price);
-        if (!market.length){ countNoMarket++; continue; }
-
+        const my = myMap ? myMap.get(String(ean)) : null;
+        if (!isFinite(my)){ countNoMy++; return; }
+        const arr = Array.from(siteMap.values());
+        let market = arr.filter(x => isFinite(x.price) && x.price > 0);
+        if (!market.length){ countNoMarket++; return; }
+        // outliers
+        (function(){
+          const medArr = market.map(x=>x.price).slice().sort((a,b)=>a-b);
+          const med = medArr.length ? (medArr.length%2?medArr[(medArr.length-1)/2]:(medArr[medArr.length/2-1]+medArr[medArr.length/2])/2) : NaN;
+          if (isFinite(med)){
+            const lo = med*(1-tol), hi = med*(1+tol);
+            const filt = market.filter(x=> x.price>=lo && x.price<=hi);
+            if (filt.length) market = filt;
+          }
+        })();
+        market.sort((a,b)=>a.price-b.price);
         const minc = market[0];
-        const nextAbove = market.find(x => x.price > obj.my) || null;
-
-        if (obj.my < minc.price){
+        const nextAbove = market.find(x => x.price > my) || null;
+        if (my < minc.price){
           const prox = nextAbove || minc;
-          const gapUp = prox.price - obj.my;
-          baratos.push({ ean: obj.ean, desc: obj.desc, my: obj.my, next: prox.price, next_site: prox.site, gap_up: gapUp });
-        } else if (obj.my > minc.price){
-          const diff = obj.my - minc.price;
-          caros.push({ ean: obj.ean, desc: obj.desc, my: obj.my, minc: minc.price, min_site: minc.site, diff });
+          baratos.push({ ean, desc: '', my, next: prox.price, next_site: prox.site, gap_up: prox.price - my });
+        } else if (my > minc.price){
+          caros.push({ ean, desc: '', my, minc: minc.price, min_site: minc.site, diff: my - minc.price });
         }
-      }
+      });
 
       baratos.sort((a,b)=> b.gap_up - a.gap_up);
       caros.sort((a,b)=> b.diff   - a.diff);
-      const outBar = baratos.slice(0, lim);
-      const outCar = caros.slice(0, lim);
 
-      if (Array.isArray(window.lastBaratos)) window.lastBaratos = outBar;
-      if (Array.isArray(window.lastCaros))   window.lastCaros   = outCar;
+      if (Array.isArray(window.lastBaratos)) window.lastBaratos = baratos.slice(0, lim);
+      if (Array.isArray(window.lastCaros))   window.lastCaros   = caros.slice(0, lim);
 
       if (typeof window.renderBaratos === 'function'){ window.renderBaratos(); }
-      else {
-        _renderTableFallback('#tblMaisBaratos tbody', outBar, [
-          r=>'<td>'+ (r.desc||'').replace(/</g,'&lt;') +'</td>',
-          r=>'<td class="mono">'+ r.ean +'</td>',
-          r=>'<td class="right"><span class="price min">'+ formatBRL(r.my) +'</span></td>',
-          r=>'<td class="right" title="'+(r.next_site||'')+'">'+ formatBRL(r.next) +'</td>',
-          r=>'<td class="right">'+ formatBRL(r.gap_up) +'</td>'
-        ]);
-      }
       if (typeof window.renderCaros === 'function'){ window.renderCaros(); }
-      else {
-        _renderTableFallback('#tblMaisCaros tbody', outCar, [
-          r=>'<td>'+ (r.desc||'').replace(/</g,'&lt;') +'</td>',
-          r=>'<td class="mono">'+ r.ean +'</td>',
-          r=>'<td class="right"><span class="price max">'+ formatBRL(r.my) +'</span></td>',
-          r=>'<td class="right" title="'+(r.min_site||'')+'">'+ formatBRL(r.minc) +'</td>',
-          r=>'<td class="right">'+ formatBRL(r.diff) +'</td>'
-        ]);
-      }
 
+      const p = _getPeriod();
+      const srcTables = ['sites', 'latest_prices', (mySource==='view'?VIEW:null)].filter(Boolean);
       const diag = {
-        tabelas: ['vw_precos_dinamica','sites'],
-        colunas: ['ean','descricao','site_id','site_nome','preco_num','meu_preco','data'],
-        filtros: { periodo: _getPeriod(), sites: siteIds || 'TODOS' },
-        contagem: { eans_analisados: countAll, eans_sem_meu_preco: countNoMy, eans_sem_concorrente: countNoMarket, resultados: outBar.length + outCar.length }
+        tabelas: Array.from(new Set(srcTables)),
+        colunas: ['ean','site_id','preco_num','data','site_nome','meu_preco'],
+        filtros: { periodo: p, sites: siteIds || 'TODOS', my_source: mySource, comp_source: 'view+latest_prices' },
+        contagem: { eans_analisados: countAll, eans_sem_meu_preco: countNoMy, eans_sem_concorrente: countNoMarket, resultados: (baratos.length + caros.length) }
       };
-      window.diagBaratos = diag; window.diagCaros = diag;
-      showSources('srcBaratos', diag, tol);
-      showSources('srcCaros',   diag, tol);
+      const fmtDate = (d)=> d ? new Date(d).toISOString().slice(0,10) : '—';
+      function renderDiag(divId){
+        const el = document.getElementById(divId); if (!el) return;
+        const sites = Array.isArray(diag.filtros.sites) ? diag.filtros.sites.join(', ') : diag.filtros.sites;
+        el.innerHTML =
+          '<div><strong>Tabelas:</strong> <code>'+diag.tabelas.join('</code>, <code>')+'</code></div>'+
+          '<div><strong>Colunas consultadas:</strong> <code>'+diag.colunas.join('</code>, <code>')+'</code></div>'+
+          '<div><strong>Período (aplicado na VIEW):</strong> '+fmtDate(p.from)+' a '+fmtDate(p.to)+'</div>'+
+          '<div><strong>Sites selecionados:</strong> '+sites+'</div>'+
+          '<div><strong>Fontes:</strong> meu_preco = <code>'+diag.filtros.my_source+'</code>; concorrentes = <code>'+diag.filtros.comp_source+'</code></div>'+
+          '<div><strong>Regra outliers:</strong> ±'+Math.round(DEFAULT_OUTLIER_TOL*100)+'% em torno da mediana</div>'+
+          '<div style="margin-top:6px;"><strong>Diagnóstico (contagem):</strong> eans analisados: '+diag.contagem.eans_analisados+' • sem meu_preco: '+diag.contagem.eans_sem_meu_preco+' • sem concorrente: '+diag.contagem.eans_sem_concorrente+' • resultados: '+diag.contagem.resultados+'</div>';
+      }
+      renderDiag('srcBaratos');
+      renderDiag('srcCaros');
     };
-  }catch(e){ console.error('[Indicadores FIX] override falhou:', e); }
+  }catch(e){ console.error('[Indicadores LP-FIX] override falhou:', e); }
 })();
 </script>
 
