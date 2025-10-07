@@ -152,12 +152,7 @@
       border:1px solid #2d3b4a; border-radius:8px; font-size:12px;
       display:none; box-shadow: 0 8px 22px rgba(0,0,0,.55);
     }
-  
-    /* Fonte/diagnóstico do relatório */
-    .source-info{ margin-top:8px; font-size:12px; color:#9aa0a6; border-top:1px dashed #2d3b4a; padding-top:8px; }
-    .source-info code{ color:#d7eaff; }
-    
-</style>
+  </style>
   <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="./config.js"></script>
 </head>
@@ -268,7 +263,6 @@
             </thead>
             <tbody></tbody>
           </table>
-<div id=\"srcBaratos\" class=\"source-info\"></div>
         </div>
       </div>
     </div>
@@ -292,7 +286,6 @@
             </thead>
             <tbody></tbody>
           </table>
-<div id=\"srcCaros\" class=\"source-info\"></div>
         </div>
       </div>
     </div>
@@ -1281,212 +1274,5 @@ function installMinimizeButtons(){
   });
 }
 </script>
-
-<script>
-(function(){
-  try{
-    const VIEW   = window.VIEW || 'vw_precos_dinamica';
-    let client   = (typeof sb !== 'undefined' && sb) ? sb : null;
-    if (!client && window.CONFIG && window.supabase){
-      try{ client = window.supabase.createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_ANON_KEY); }catch(e){}
-    }
-    if (!client){ console.warn('[Indicadores LP-FIX] Supabase indisponível.'); return; }
-
-    const _applyDateFilter = (typeof window.applyDateFilter === 'function') ? window.applyDateFilter : (q)=>q;
-    const _getPeriod       = (typeof window.getPeriod       === 'function') ? window.getPeriod       : ()=>({from:null,to:null});
-    const _getSiteIds      = (typeof window.getSelectedSiteIds === 'function') ? window.getSelectedSiteIds : ()=>null;
-
-    const DEFAULT_OUTLIER_TOL = (typeof window.DEFAULT_OUTLIER_TOL === 'number') ? window.DEFAULT_OUTLIER_TOL : 0.50;
-    const DEFAULT_TOP_LIMIT   = (typeof window.DEFAULT_TOP_LIMIT   === 'number') ? window.DEFAULT_TOP_LIMIT   : 100;
-
-    const MY_SITE_IDS = (Array.isArray(window.CONFIG?.MY_SITE_IDS) && window.CONFIG.MY_SITE_IDS.length)
-      ? window.CONFIG.MY_SITE_IDS
-      : (window.CONFIG?.MY_SITE_ID != null ? [window.CONFIG.MY_SITE_ID] : null);
-
-    function isFiniteNum(n){ return typeof n === 'number' && isFinite(n); }
-    function formatBRL(n){ try { return Number(n).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); } catch { return String(n); } }
-    function median(nums){ if(!nums.length) return NaN; const arr=nums.slice().sort((a,b)=>a-b); const m=Math.floor(arr.length/2); return arr.length%2?arr[m]:(arr[m-1]+arr[m])/2; }
-    function filterOutliersAroundMedian(list, tol){
-      if (!list.length) return list;
-      const med = median(list.map(x=>x.price));
-      if (!isFinite(med)) return list;
-      const lo = med*(1-tol), hi = med*(1+tol);
-      const filtered = list.filter(x => x.price>=lo && x.price<=hi);
-      return filtered.length ? filtered : list;
-    }
-    function filterValidCompetitors(list){ return list.filter(x => isFiniteNum(x.price) && x.price > 0); }
-
-    async function loadSitesMap(){
-      try{
-        const { data } = await client.from('sites').select('id,nome').limit(5000);
-        const map = new Map();
-        (data||[]).forEach(s=> map.set(Number(s.id), s.nome||String(s.id)));
-        return map;
-      }catch(e){ return new Map(); }
-    }
-
-    async function fetchMyFromLatestPrices(myIds){
-      if (!myIds || !myIds.length) return null;
-      const { data, error } = await client
-        .from('latest_prices')
-        .select('ean, site_id, preco_num')
-        .in('site_id', myIds)
-        .not('preco_num','is',null)
-        .limit(100000);
-      if (error){ console.warn('[LP-FIX] erro latest_prices (my):', error.message||error); return null; }
-      const map = new Map();
-      (data||[]).forEach(r=>{
-        const e = String(r.ean);
-        const pn = Number(r.preco_num);
-        if (!isFiniteNum(pn)) return;
-        map.set(e, Math.min(map.get(e) ?? Infinity, pn));
-      });
-      return map;
-    }
-
-    async function fetchMyFromView(){
-      const { data, error } = await client
-        .from(VIEW).select('ean, descricao, meu_preco, data')
-        .not('meu_preco','is',null)
-        .order('ean',{ascending:true})
-        .order('data',{ascending:false})
-        .limit(60000);
-      if (error){ console.warn('[LP-FIX] erro view(meu_preco):', error.message||error); return null; }
-      const map = new Map();
-      (data||[]).forEach(r=>{
-        const e = String(r.ean);
-        const mp = Number(r.meu_preco);
-        if (!isFiniteNum(mp)) return;
-        if (!map.has(e)) map.set(e, mp);
-      });
-      return map;
-    }
-
-    async function fetchCompetitorsUnion(siteIds, myIds, sitesMap){
-      const byEan = new Map();
-      function add(ean, sid, price){
-        if (!isFiniteNum(price)) return;
-        if (myIds && myIds.includes(sid)) return;
-        if (!byEan.has(ean)) byEan.set(ean, new Map());
-        const mm = byEan.get(ean);
-        if (!mm.has(sid)) mm.set(sid, { price, site: sitesMap.get(sid) || String(sid) });
-      }
-
-      try{
-        let qv = client.from(VIEW).select('ean, site_id, preco_num, data');
-        qv = _applyDateFilter(qv);
-        const { data: dv } = await qv.limit(80000);
-        (dv||[]).forEach(r=>{
-          const e = String(r.ean);
-          const sid = Number(r.site_id);
-          if (siteIds && Array.isArray(siteIds) && !siteIds.includes(sid)) return;
-          add(e, sid, Number(r.preco_num));
-        });
-      }catch(e){ console.warn('[LP-FIX] concorrentes VIEW falhou:', e?.message||e); }
-
-      try{
-        let ql = client.from('latest_prices').select('ean, site_id, preco_num');
-        if (siteIds && Array.isArray(siteIds) && siteIds.length) ql = ql.in('site_id', siteIds);
-        const { data: dl } = await ql.limit(80000);
-        (dl||[]).forEach(r=>{
-          const e = String(r.ean);
-          const sid = Number(r.site_id);
-          const pn = Number(r.preco_num);
-          if (!isFiniteNum(pn)) return;
-          if (myIds && myIds.includes(sid)) return;
-          if (!byEan.has(e)) byEan.set(e, new Map());
-          byEan.get(e).set(sid, { price: pn, site: (sid && sid.toString) ? sid.toString() : String(sid) });
-        });
-      }catch(e){ console.warn('[LP-FIX] concorrentes latest_prices falhou:', e?.message||e); }
-
-      return byEan;
-    }
-
-    window.loadOportunidadesVsMin = async function(){
-      const tol = DEFAULT_OUTLIER_TOL;
-      const lim = DEFAULT_TOP_LIMIT;
-      const siteIds = _getSiteIds();
-      const sitesMap = await loadSitesMap();
-
-      let myMap = null, mySource = 'view';
-      if (MY_SITE_IDS && MY_SITE_IDS.length){
-        myMap = await fetchMyFromLatestPrices(MY_SITE_IDS);
-        mySource = 'latest_prices';
-      }
-      if (!myMap || myMap.size === 0){
-        myMap = await fetchMyFromView();
-        mySource = 'view';
-      }
-
-      const marketByEan = await fetchCompetitorsUnion(siteIds, MY_SITE_IDS||null, sitesMap);
-
-      const baratos=[], caros=[];
-      let countNoMy=0, countNoMarket=0, countAll=0;
-
-      marketByEan.forEach((siteMap, ean)=>{
-        countAll++;
-        const my = myMap ? myMap.get(String(ean)) : null;
-        if (!isFinite(my)){ countNoMy++; return; }
-        const arr = Array.from(siteMap.values());
-        let market = arr.filter(x => isFinite(x.price) && x.price > 0);
-        if (!market.length){ countNoMarket++; return; }
-        // outliers
-        (function(){
-          const medArr = market.map(x=>x.price).slice().sort((a,b)=>a-b);
-          const med = medArr.length ? (medArr.length%2?medArr[(medArr.length-1)/2]:(medArr[medArr.length/2-1]+medArr[medArr.length/2])/2) : NaN;
-          if (isFinite(med)){
-            const lo = med*(1-tol), hi = med*(1+tol);
-            const filt = market.filter(x=> x.price>=lo && x.price<=hi);
-            if (filt.length) market = filt;
-          }
-        })();
-        market.sort((a,b)=>a.price-b.price);
-        const minc = market[0];
-        const nextAbove = market.find(x => x.price > my) || null;
-        if (my < minc.price){
-          const prox = nextAbove || minc;
-          baratos.push({ ean, desc: '', my, next: prox.price, next_site: prox.site, gap_up: prox.price - my });
-        } else if (my > minc.price){
-          caros.push({ ean, desc: '', my, minc: minc.price, min_site: minc.site, diff: my - minc.price });
-        }
-      });
-
-      baratos.sort((a,b)=> b.gap_up - a.gap_up);
-      caros.sort((a,b)=> b.diff   - a.diff);
-
-      if (Array.isArray(window.lastBaratos)) window.lastBaratos = baratos.slice(0, lim);
-      if (Array.isArray(window.lastCaros))   window.lastCaros   = caros.slice(0, lim);
-
-      if (typeof window.renderBaratos === 'function'){ window.renderBaratos(); }
-      if (typeof window.renderCaros === 'function'){ window.renderCaros(); }
-
-      const p = _getPeriod();
-      const srcTables = ['sites', 'latest_prices', (mySource==='view'?VIEW:null)].filter(Boolean);
-      const diag = {
-        tabelas: Array.from(new Set(srcTables)),
-        colunas: ['ean','site_id','preco_num','data','site_nome','meu_preco'],
-        filtros: { periodo: p, sites: siteIds || 'TODOS', my_source: mySource, comp_source: 'view+latest_prices' },
-        contagem: { eans_analisados: countAll, eans_sem_meu_preco: countNoMy, eans_sem_concorrente: countNoMarket, resultados: (baratos.length + caros.length) }
-      };
-      const fmtDate = (d)=> d ? new Date(d).toISOString().slice(0,10) : '—';
-      function renderDiag(divId){
-        const el = document.getElementById(divId); if (!el) return;
-        const sites = Array.isArray(diag.filtros.sites) ? diag.filtros.sites.join(', ') : diag.filtros.sites;
-        el.innerHTML =
-          '<div><strong>Tabelas:</strong> <code>'+diag.tabelas.join('</code>, <code>')+'</code></div>'+
-          '<div><strong>Colunas consultadas:</strong> <code>'+diag.colunas.join('</code>, <code>')+'</code></div>'+
-          '<div><strong>Período (aplicado na VIEW):</strong> '+fmtDate(p.from)+' a '+fmtDate(p.to)+'</div>'+
-          '<div><strong>Sites selecionados:</strong> '+sites+'</div>'+
-          '<div><strong>Fontes:</strong> meu_preco = <code>'+diag.filtros.my_source+'</code>; concorrentes = <code>'+diag.filtros.comp_source+'</code></div>'+
-          '<div><strong>Regra outliers:</strong> ±'+Math.round(DEFAULT_OUTLIER_TOL*100)+'% em torno da mediana</div>'+
-          '<div style="margin-top:6px;"><strong>Diagnóstico (contagem):</strong> eans analisados: '+diag.contagem.eans_analisados+' • sem meu_preco: '+diag.contagem.eans_sem_meu_preco+' • sem concorrente: '+diag.contagem.eans_sem_concorrente+' • resultados: '+diag.contagem.resultados+'</div>';
-      }
-      renderDiag('srcBaratos');
-      renderDiag('srcCaros');
-    };
-  }catch(e){ console.error('[Indicadores LP-FIX] override falhou:', e); }
-})();
-</script>
-
 </body>
 </html>
