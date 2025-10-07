@@ -152,7 +152,12 @@
       border:1px solid #2d3b4a; border-radius:8px; font-size:12px;
       display:none; box-shadow: 0 8px 22px rgba(0,0,0,.55);
     }
-  </style>
+  
+    /* Fonte/diagnóstico do relatório */
+    .source-info{ margin-top:8px; font-size:12px; color:#9aa0a6; border-top:1px dashed #2d3b4a; padding-top:8px; }
+    .source-info code{ color:#d7eaff; }
+    
+</style>
   <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="./config.js"></script>
 </head>
@@ -1274,5 +1279,176 @@ function installMinimizeButtons(){
   });
 }
 </script>
+
+<script>
+(function(){
+  try{
+    const VIEW   = window.VIEW || 'vw_precos_dinamica';
+    let client   = window.sb;
+    if (!client && window.CONFIG && window.supabase){
+      try{ client = window.supabase.createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_ANON_KEY); }catch(e){}
+    }
+    if (!client){ console.warn('[Indicadores FIX] Supabase indisponível.'); return; }
+
+    const _applyDateFilter = (typeof window.applyDateFilter === 'function') ? window.applyDateFilter : (q)=>q;
+    const _getPeriod       = (typeof window.getPeriod       === 'function') ? window.getPeriod       : ()=>({from:null,to:null});
+    const _getSiteIds      = (typeof window.getSelectedSiteIds === 'function') ? window.getSelectedSiteIds : ()=>null;
+
+    const DEFAULT_OUTLIER_TOL = (typeof window.DEFAULT_OUTLIER_TOL === 'number') ? window.DEFAULT_OUTLIER_TOL : 0.50;
+    const DEFAULT_TOP_LIMIT   = (typeof window.DEFAULT_TOP_LIMIT   === 'number') ? window.DEFAULT_TOP_LIMIT   : 100;
+
+    function isFiniteNum(n){ return typeof n === 'number' && isFinite(n); }
+    function formatBRL(n){ try { return Number(n).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); } catch { return String(n); } }
+    function median(nums){ if(!nums.length) return NaN; const arr=nums.slice().sort((a,b)=>a-b); const m=Math.floor(arr.length/2); return arr.length%2?arr[m]:(arr[m-1]+arr[m])/2; }
+    function filterOutliersAroundMedian(list, tol){
+      if (!list.length) return list;
+      const med = median(list.map(x=>x.price));
+      const lo = med*(1-tol), hi = med*(1+tol);
+      const filtered = list.filter(x => x.price>=lo && x.price<=hi);
+      return filtered.length ? filtered : list;
+    }
+    function filterValidCompetitors(list){ return list.filter(x => isFiniteNum(x.price) && x.price > 0); }
+
+    async function fetchLatestMyPrices(){
+      const { data, error } = await client
+        .from(VIEW).select('ean, descricao, meu_preco, data')
+        .not('meu_preco','is',null)
+        .order('ean', { ascending:true })
+        .order('data', { ascending:false })
+        .limit(60000);
+      if (error){ console.warn('[Indicadores FIX] erro myprice:', error.message||error); return new Map(); }
+      const map = new Map();
+      for (const r of (data||[])){
+        const e = String(r.ean);
+        if (!map.has(e)){
+          const mp = Number(r.meu_preco);
+          if (isFiniteNum(mp)){
+            map.set(e, { my: mp, desc: r.descricao || '', data: r.data });
+          }
+        }
+      }
+      return map;
+    }
+
+    function _renderTableFallback(sel, rows, cols){
+      const tb = document.querySelector(sel);
+      if (!tb) return;
+      tb.innerHTML = '';
+      rows.forEach(r=>{
+        const tr=document.createElement('tr');
+        tr.innerHTML = cols.map(c=>c(r)).join('');
+        tb.appendChild(tr);
+      });
+    }
+
+    function showSources(divId, diag, tol){
+      const el = document.getElementById(divId);
+      if (!el || !diag) return;
+      const fmtDate = (d)=> d ? new Date(d).toISOString().slice(0,10) : '—';
+      const p = _getPeriod();
+      const sites = Array.isArray(diag.filtros.sites) ? diag.filtros.sites.join(', ') : (diag.filtros.sites || 'TODOS');
+      el.innerHTML =
+        '<div><strong>Tabelas:</strong> <code>'+diag.tabelas.join('</code>, <code>')+'</code></div>'+
+        '<div><strong>Colunas consultadas:</strong> <code>'+diag.colunas.join('</code>, <code>')+'</code></div>'+
+        '<div><strong>Período filtros (concorrentes):</strong> '+fmtDate(p.from)+' a '+fmtDate(p.to)+'</div>'+
+        '<div><strong>Sites selecionados:</strong> '+sites+'</div>'+
+        '<div><strong>Regra outliers:</strong> ±'+Math.round((tol||0.50)*100)+'% em torno da mediana</div>'+
+        '<div><strong>Notas:</strong> <em>meu_preco</em> é sempre o mais recente (sem filtro de data); concorrentes respeitam o período.</div>'+
+        '<div style="margin-top:6px;"><strong>Diagnóstico (contagem):</strong> eans analisados: '+(diag.contagem.eans_analisados||0)+' • sem meu_preco: '+(diag.contagem.eans_sem_meu_preco||0)+' • sem concorrente: '+(diag.contagem.eans_sem_concorrente||0)+' • resultados: '+(diag.contagem.resultados||0)+'</div>';
+    }
+
+    window.loadOportunidadesVsMin = async function(){
+      const tol = DEFAULT_OUTLIER_TOL;
+      const lim = DEFAULT_TOP_LIMIT;
+      const siteIds = _getSiteIds();
+
+      const myMap = await fetchLatestMyPrices();
+
+      let q = client.from(VIEW).select('ean, descricao, site_id, site_nome, preco_num, data')
+        .not('preco_num','is',null)
+        .order('data',{ascending:false})
+        .limit(60000);
+      q = _applyDateFilter(q);
+      const { data, error } = await q;
+      if (error){ console.error('[Indicadores FIX] erro concorrentes:', error); throw error; }
+
+      const byEan = new Map();
+      for (const r of (data||[])){
+        const sid = Number(r.site_id);
+        if (siteIds && Array.isArray(siteIds) && !siteIds.includes(sid)) continue;
+        const e = String(r.ean);
+        if (!byEan.has(e)) byEan.set(e, { ean:e, desc: myMap.get(e)?.desc || r.descricao || '', my: myMap.get(e)?.my ?? null, market: [] });
+        const obj = byEan.get(e);
+        const pn = Number(r.preco_num);
+        if (isFiniteNum(pn)){ obj.market.push({ price: pn, site: r.site_nome || sid }); }
+      }
+
+      const baratos=[], caros=[];
+      let countNoMy=0, countNoMarket=0, countAll=0;
+
+      for (const obj of byEan.values()){
+        countAll++;
+        if (!isFiniteNum(obj.my)){ countNoMy++; continue; }
+        let market = filterValidCompetitors(obj.market);
+        if (!market.length){ countNoMarket++; continue; }
+        market = filterOutliersAroundMedian(market, tol).sort((a,b)=>a.price-b.price);
+        if (!market.length){ countNoMarket++; continue; }
+
+        const minc = market[0];
+        const nextAbove = market.find(x => x.price > obj.my) || null;
+
+        if (obj.my < minc.price){
+          const prox = nextAbove || minc;
+          const gapUp = prox.price - obj.my;
+          baratos.push({ ean: obj.ean, desc: obj.desc, my: obj.my, next: prox.price, next_site: prox.site, gap_up: gapUp });
+        } else if (obj.my > minc.price){
+          const diff = obj.my - minc.price;
+          caros.push({ ean: obj.ean, desc: obj.desc, my: obj.my, minc: minc.price, min_site: minc.site, diff });
+        }
+      }
+
+      baratos.sort((a,b)=> b.gap_up - a.gap_up);
+      caros.sort((a,b)=> b.diff   - a.diff);
+      const outBar = baratos.slice(0, lim);
+      const outCar = caros.slice(0, lim);
+
+      if (Array.isArray(window.lastBaratos)) window.lastBaratos = outBar;
+      if (Array.isArray(window.lastCaros))   window.lastCaros   = outCar;
+
+      if (typeof window.renderBaratos === 'function'){ window.renderBaratos(); }
+      else {
+        _renderTableFallback('#tblMaisBaratos tbody', outBar, [
+          r=>'<td>'+ (r.desc||'').replace(/</g,'&lt;') +'</td>',
+          r=>'<td class="mono">'+ r.ean +'</td>',
+          r=>'<td class="right"><span class="price min">'+ formatBRL(r.my) +'</span></td>',
+          r=>'<td class="right" title="'+(r.next_site||'')+'">'+ formatBRL(r.next) +'</td>',
+          r=>'<td class="right">'+ formatBRL(r.gap_up) +'</td>'
+        ]);
+      }
+      if (typeof window.renderCaros === 'function'){ window.renderCaros(); }
+      else {
+        _renderTableFallback('#tblMaisCaros tbody', outCar, [
+          r=>'<td>'+ (r.desc||'').replace(/</g,'&lt;') +'</td>',
+          r=>'<td class="mono">'+ r.ean +'</td>',
+          r=>'<td class="right"><span class="price max">'+ formatBRL(r.my) +'</span></td>',
+          r=>'<td class="right" title="'+(r.min_site||'')+'">'+ formatBRL(r.minc) +'</td>',
+          r=>'<td class="right">'+ formatBRL(r.diff) +'</td>'
+        ]);
+      }
+
+      const diag = {
+        tabelas: ['vw_precos_dinamica','sites'],
+        colunas: ['ean','descricao','site_id','site_nome','preco_num','meu_preco','data'],
+        filtros: { periodo: _getPeriod(), sites: siteIds || 'TODOS' },
+        contagem: { eans_analisados: countAll, eans_sem_meu_preco: countNoMy, eans_sem_concorrente: countNoMarket, resultados: outBar.length + outCar.length }
+      };
+      window.diagBaratos = diag; window.diagCaros = diag;
+      showSources('srcBaratos', diag, tol);
+      showSources('srcCaros',   diag, tol);
+    };
+  }catch(e){ console.error('[Indicadores FIX] override falhou:', e); }
+})();
+</script>
+
 </body>
 </html>
