@@ -184,7 +184,13 @@
       </select>
     </div>
 
-    <!-- NOVO: Combobox de sites -->
+    <!-- NOVO: filtro de descrição para “Mais baratos” e “Mais caros” (server-side) -->
+    <div class="group">
+      <label for="qOportunidades">Descrição:</label>
+      <input id="qOportunidades" type="text" placeholder="Filtrar por descrição…" />
+    </div>
+
+    <!-- Combobox de sites -->
     <div class="group combo" id="comboSites">
       <button type="button" class="combo-btn" id="btnComboSites" aria-haspopup="listbox" aria-expanded="false">
         <span class="muted">Sites na comparação:</span>
@@ -410,29 +416,9 @@ const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth
 const VIEW = 'vw_precos_dinamica';
 
 /* ========= Defaults de filtros ocultos ========= */
-const DEFAULT_TOP_LIMIT = 10000;      // abranger tudo e cortar só no fim
-const DEFAULT_OUTLIER_TOL = 0.50;
-const DEFAULT_VISIBLE_ROWS = 30;      // rolagem a partir de 30 itens
-
-/* >>>>>>> NOVO (mínima intervenção): paginação segura para consultas grandes */
-const PAGE_SIZE = 1000;   // limite típico do PostgREST
-const MAX_PAGES = 15;     // até 60k registros por consulta
-
-async function fetchAllPaged(builderFn, pageSize = PAGE_SIZE, maxPages = MAX_PAGES){
-  const acc = [];
-  for (let p=0; p<maxPages; p++){
-    const from = p*pageSize;
-    const to   = from + pageSize - 1;
-    let q = builderFn().range(from, to);
-    const { data, error } = await q;
-    if (error) throw error;
-    if (!data || !data.length) break;
-    acc.push(...data);
-    if (data.length < pageSize) break;
-  }
-  return acc;
-}
-/* <<<<<<<< fim paginação */
+const DEFAULT_TOP_LIMIT = 100;
+const DEFAULT_OUTLIER_TOL = 0.50; // filtro não-visível para outliers (±50% da mediana)
+const DEFAULT_VISIBLE_ROWS = 15;  // manter 15 linhas visíveis nas Oportunidades
 
 /* ========= Util ========= */
 const NA = '---';
@@ -462,7 +448,17 @@ quickRange.addEventListener('change', ()=>{
   dateFrom.value = from.toISOString().slice(0,10);
 });
 const qOportunidades = document.getElementById('qOportunidades');
-if (qOportunidades){ qOportunidades.addEventListener('input', ()=>{ renderBaratos(); renderCaros(); }); }
+
+// >>> ALTERAÇÃO: filtro de descrição dispara nova consulta (server-side) com debounce
+let qDebounce = 0;
+if (qOportunidades){
+  qOportunidades.addEventListener('input', ()=>{
+    clearTimeout(qDebounce);
+    qDebounce = setTimeout(()=>{
+      loadOportunidadesVsMin(true); // força recarregar com filtro na BASE
+    }, 400);
+  });
+}
 
 /* ========= Combobox state ========= */
 const comboBtn   = document.getElementById('btnComboSites');
@@ -487,11 +483,10 @@ document.getElementById('btnComboApply').addEventListener('click', async ()=>{
   comboList.style.display = 'none';
   comboBtn.setAttribute('aria-expanded','false');
   updateComboTags();
-  await Promise.all([ loadOportunidadesVsMin(), loadMaioresAlt() ]);
+  await Promise.all([ loadOportunidadesVsMin(true), loadMaioresAlt() ]);
 });
 optAll.addEventListener('change', ()=>{
   if (optAll.checked){
-    // Desmarca todos os sites individuais
     selectedSites.clear();
     comboRows.querySelectorAll('input[type="checkbox"]').forEach(ch=> ch.checked = false);
   }
@@ -604,647 +599,6 @@ function applyDateFilter(q){
   return q;
 }
 
-/* === Fallback: busca "meu_preco" mais recente por EAN (sem filtro de período) — agora com paginação mínima === */
-async function fetchMyPriceMap(eanList){
-  const map = new Map();
-  if (!eanList || !eanList.length) return map;
-
-  const need = new Set(eanList.map(String));
-  for (let p=0; p<MAX_PAGES && need.size>0; p++){
-    const from = p * PAGE_SIZE;
-    const to   = from + PAGE_SIZE - 1;
-    const { data, error } = await sb
-      .from(VIEW)
-      .select('ean, meu_preco, data')
-      .in('ean', Array.from(need))
-      .not('meu_preco','is',null)
-      .order('data', { ascending:false })
-      .range(from, to);
-    if (error) { console.warn('fetchMyPriceMap error:', error.message||error); break; }
-    if (!data || !data.length) break;
-
-    for (const r of data){
-      const e = String(r.ean);
-      if (!map.has(e)){
-        const mp = Number(r.meu_preco);
-        if (isFiniteNum(mp) && mp>0){
-          map.set(e, mp);
-          need.delete(e);
-        }
-      }
-    }
-    if (data.length < PAGE_SIZE) break;
-  }
-  return map;
-}
-
-/* ========= Oportunidades: MEU PREÇO vs MENOR CONCORRENTE (com paginação e filtro de sites no servidor) ========= */
-function median(nums){
-  if (!nums.length) return NaN;
-  const arr = nums.slice().sort((a,b)=>a-b);
-  const m = Math.floor(arr.length/2);
-  return arr.length%2 ? arr[m] : (arr[m-1]+arr[m])/2;
-}
-function filterOutliersAroundMedian(list, tol){
-  if (!list.length) return list;
-  const med = median(list.map(x=>x.price));
-  const lo = med*(1-tol), hi = med*(1+tol);
-  const filtered = list.filter(x => x.price>=lo && x.price<=hi);
-  return filtered.length ? filtered : list;
-}
-function filterValidCompetitors(list){
-  return list.filter(x => isFiniteNum(x.price) && x.price > 0);
-}
-function currentQuery(){
-  const el = document.getElementById('qOportunidades');
-  return el ? (el.value||'').trim().toLowerCase() : '';
-}
-function appliesQuery(desc){ const q=currentQuery(); return !q || String(desc||'').toLowerCase().includes(q); }
-
-async function loadOportunidadesVsMin(){
-  const lim = DEFAULT_TOP_LIMIT;
-  const tol = DEFAULT_OUTLIER_TOL;
-  const siteIds = getSelectedSiteIds(); // null = todos
-
-  const cols = 'ean, descricao, site_id, site_nome, preco_num, meu_preco, data';
-
-  // >>>>>> troca apenas a obtenção de dados (antes era 1 chamada com .limit)
-  const rows = await fetchAllPaged(() => {
-    let q = applyDateFilter(
-      sb.from(VIEW).select(cols).not('preco_num','is',null)
-    ).order('data', { ascending:false });
-    if (siteIds) q = q.in('site_id', siteIds); // filtro de sites no servidor
-    return q;
-  });
-  // <<<<<< fim da troca — o restante do algoritmo permanece igual
-
-  // Agrupa por EAN para coletar mercados e tentativas de meu_preco do período
-  const byEan = new Map();
-  for (const r of (rows||[])){
-    const e = String(r.ean);
-    if (!byEan.has(e)) byEan.set(e, { ean:e, desc:r.descricao||'', my:null, market:[] });
-    const obj = byEan.get(e);
-
-    // Mercado
-    const sid = Number(r.site_id);
-    const pn  = Number(r.preco_num);
-    if (isFiniteNum(pn) && pn>0){
-      obj.market.push({ price: pn, site: r.site_nome || sid });
-    }
-
-    // Meu preço (do período) — pode estar ausente
-    const mp = Number(r.meu_preco);
-    if (obj.my===null && isFiniteNum(mp) && mp>0) obj.my = mp;
-  }
-
-  // 2) Fallback: para os EANs sem meu_preco no período, busca o mais recente (sem período)
-  const missingEans = Array.from(byEan.values()).filter(x=>x.my===null).map(x=>x.ean);
-  let myMap = new Map();
-  if (missingEans.length){
-    myMap = await fetchMyPriceMap(missingEans);
-  }
-
-  // 3) Calcula as oportunidades
-  const baratos=[], caros=[];
-  for (const obj of byEan.values()){
-    // Aplica fallback se necessário
-    if (!isFiniteNum(obj.my) || obj.my<=0){
-      const mp = myMap.get(obj.ean);
-      if (isFiniteNum(mp) && mp>0) obj.my = mp;
-    }
-
-    if (!isFiniteNum(obj.my) || obj.my<=0) continue; // sem meu preço não dá pra comparar
-
-    let market = filterValidCompetitors(obj.market);
-    if (!market.length) continue;
-
-    market = filterOutliersAroundMedian(market, tol).sort((a,b)=>a.price-b.price);
-    if (!market.length) continue;
-
-    const minc = market[0];
-    const nextAbove = market.find(x => x.price > obj.my) || null;
-
-    if (obj.my < minc.price){
-      const prox = nextAbove || minc;
-      const gapUp = prox.price - obj.my;
-      baratos.push({
-        ean: obj.ean, desc: obj.desc,
-        my: obj.my,
-        next: prox.price, next_site: prox.site,
-        gap_up: gapUp
-      });
-    } else if (obj.my > minc.price){
-      const diff = obj.my - minc.price;
-      caros.push({
-        ean: obj.ean, desc: obj.desc,
-        my: obj.my,
-        minc: minc.price, min_site: minc.site,
-        diff
-      });
-    }
-  }
-
-  baratos.sort((a,b)=> b.gap_up - a.gap_up);
-  caros.sort((a,b)=> b.diff   - a.diff);
-
-  lastBaratos = baratos.slice(0, lim).filter(r=>appliesQuery(r.desc));
-  lastCaros   = caros.slice(0, lim).filter(r=>appliesQuery(r.desc));
-  renderBaratos();
-  renderCaros();
-}
-
-
-/* ========= Render + Ordenação ========= */
-function sortArray(arr, key, dir){
-  const m = dir==='desc' ? -1 : 1;
-  return arr.slice().sort((a,b)=>{
-    const va = a[key], vb = b[key];
-    if (typeof va === 'number' && typeof vb === 'number'){
-      return (va - vb) * m;
-    }
-    return collator.compare(String(va??''), String(vb??'')) * m;
-  });
-}
-function renderBaratos(){
-  const st = sortState.baratos;
-  const data = sortArray(lastBaratos, st.key, st.dir);
-  const tb = document.querySelector('#tblMaisBaratos tbody'); tb.innerHTML='';
-  data.forEach(r=>{
-    const tr=document.createElement('tr');
-    tr.innerHTML = `
-      <td>${(r.desc||'').replace(/</g,'&lt;')}</td>
-      <td class="mono">${r.ean}</td>
-      <td class="right"><span class="price min">${formatBRL(r.my)}</span></td>
-      <td class="right" title="${r.next_site||''}">${formatBRL(r.next)}</td>
-      <td class="right">${formatBRL(r.gap_up)}</td>
-    `;
-    tb.appendChild(tr);
-  });
-  applyVisibleHeights();
-  decorateHeaders('baratos');
-}
-function renderCaros(){
-  const st = sortState.caros;
-  const data = sortArray(lastCaros, st.key, st.dir);
-  const tb = document.querySelector('#tblMaisCaros tbody'); tb.innerHTML='';
-  data.forEach(r=>{
-    const tr=document.createElement('tr');
-    tr.innerHTML = `
-      <td>${(r.desc||'').replace(/</g,'&lt;')}</td>
-      <td class="mono">${r.ean}</td>
-      <td class="right"><span class="price max">${formatBRL(r.my)}</span></td>
-      <td class="right" title="${r.min_site||''}">${formatBRL(r.minc)}</td>
-      <td class="right">${formatBRL(r.diff)}</td>
-    `;
-    tb.appendChild(tr);
-  });
-  applyVisibleHeights();
-  decorateHeaders('caros');
-}
-
-/* ========= Maiores alterações (mesma UI; só muda a coleta para paginar + filtrar no servidor) ========= */
-async function loadMaioresAlt(){
-  const lim = DEFAULT_TOP_LIMIT;
-  const siteIds = getSelectedSiteIds(); // null = todos
-  const cols = 'ean, descricao, site_id, site_nome, preco_num, data';
-
-  const rows = await fetchAllPaged(() => {
-    let q = applyDateFilter(
-      sb.from(VIEW).select(cols).not('preco_num','is',null)
-    ).order('data',{ascending:true});
-    if (siteIds) q = q.in('site_id', siteIds);
-    return q;
-  });
-
-  const key = (r)=> String(r.ean)+'|'+String(r.site_id);
-  const first = new Map(), last = new Map(), descBy = new Map(), siteBy = new Map();
-  for (const r of (rows||[])){
-    const k=key(r), pn=Number(r.preco_num); if(!isFinite(pn)) continue;
-    if (!first.has(k)) first.set(k, pn);
-    last.set(k, pn);
-    descBy.set(String(r.ean), r.descricao||'');
-    siteBy.set(String(r.site_id), r.site_nome||r.site_id);
-  }
-  const arr=[];
-  for (const [k, fa] of first){
-    const la = last.get(k);
-    if (!isFiniteNum(la)) continue;
-    const delta = la - fa;
-    if (delta === 0) continue;
-    const [ean, site_id] = k.split('|');
-    const perc  = fa ? (delta/fa)*100 : 0;
-    arr.push({
-      ean, site: siteBy.get(site_id)||site_id, desc: descBy.get(ean)||'',
-      prev: fa, curr: la, delta, perc
-    });
-  }
-  arr.sort((a,b)=> Math.abs(b.perc) - Math.abs(a.perc));
-  lastAlt = arr.slice(0, lim);
-  renderAlt();
-}
-function renderAlt(){
-  const st = sortState.alt;
-  const data = sortArray(lastAlt, st.key, st.dir);
-  const tb = document.querySelector('#tblMaioresAlt tbody'); tb.innerHTML='';
-  data.forEach(r=>{
-    const tr=document.createElement('tr');
-    tr.innerHTML = `
-      <td>${(r.desc||'').replace(/</g,'&lt;')}</td>
-      <td class="mono">${r.ean}</td>
-      <td>${r.site||NA}</td>
-      <td class="right">${formatBRL(r.prev)}</td>
-      <td class="right">${formatBRL(r.curr)}</td>
-      <td class="right">${formatBRL(r.delta)}</td>
-      <td class="right">${(r.perc>=0?'+':'')+r.perc.toFixed(1)}%</td>
-    `;
-    tb.appendChild(tr);
-  });
-  applyVisibleHeights();
-  decorateHeaders('alt');
-}
-
-/* ========= Região (opcional) ========= */
-async function loadRegiao(){
-  try{
-    const { data: rs } = await sb.from('sites').select('id, regiao').limit(1);
-    if (!(rs && rs.length && rs[0].regiao)) return;
-
-    const {from,to} = getPeriod();
-    const rows = await fetchAllPaged(() => sb.from(VIEW)
-      .select('preco_num, site_id, data')
-      .gte('data',from.toISOString()).lte('data',to.toISOString())
-      .not('preco_num','is',null)
-      .order('data',{ascending:true})
-    );
-
-    const { data: allSites } = await sb.from('sites').select('id, regiao').not('regiao','is',null);
-    const m = new Map((allSites||[]).map(s=>[Number(s.id), String(s.regiao)]));
-
-    const mapReg = new Map();
-    (rows||[]).forEach(r=>{
-      const reg = m.get(Number(r.site_id)); if(!reg) return;
-      const pn = Number(r.preco_num); if(!isFinite(pn)) return;
-      if(!mapReg.has(reg)) mapReg.set(reg, []); mapReg.get(reg).push(pn);
-    });
-    if (!mapReg.size) return;
-
-    const pares = Array.from(mapReg.entries()).map(([reg, arr])=>[reg, arr.reduce((a,b)=>a+b,0)/arr.length]);
-    const canvas = document.getElementById('chartRegiao');
-    const ctx = canvas.getContext('2d');
-    document.querySelector('#blocoRegiao .empty').style.display='none';
-    canvas.style.display='block';
-    const W=canvas.width, H=canvas.height, pad=30;
-    ctx.clearRect(0,0,0,0);
-    ctx.fillStyle='#00b140';
-    const max = Math.max(...pares.map(p=>p[1]));
-    const bw = (W - pad*2)/Math.max(1,pares.length);
-    pares.forEach((p,i)=>{
-      const h = (p[1]/(max||1))*(H-pad*2);
-      ctx.fillRect(pad + i*bw + 6, H-pad - h, bw-12, h);
-      ctx.fillStyle='#9aa0a6'; ctx.font='12px Arial';
-      ctx.fillText(p[0], pad + i*bw + 6, H-pad+14);
-      ctx.fillStyle='#00b140';
-    });
-  }catch(e){
-    console.warn('regiao falhou:', e?.message||e);
-  }
-}
-
-/* ========= Abaixo do custo (opcional) ========= */
-async function watchAbaixoCusto(){
-  try{
-    const { data: probe } = await sb.from(VIEW).select('ean, meu_custo, meu_preco').limit(1);
-    if (probe && probe.length && (probe[0].meu_custo!=null || probe[0].meu_preco!=null)){
-      const {from,to} = getPeriod();
-      const rows = await fetchAllPaged(() => sb.from(VIEW)
-        .select('ean, descricao, meu_custo, meu_preco, data')
-        .gte('data',from.toISOString()).lte('data',to.toISOString())
-        .order('data',{ascending:false})
-      );
-      const list = (rows||[])
-        .filter(r=>isFiniteNum(Number(r.meu_custo))&&isFiniteNum(Number(r.meu_preco))&&Number(r.meu_preco)<Number(r.meu_custo))
-        .map(r=>({ ean:r.ean, desc:r.descricao||'', meu_custo:Number(r.meu_custo), meu_preco:Number(r.meu_preco), delta:Number(r.meu_preco)-Number(r.meu_custo) }));
-      lastAbaixo = list;
-      renderAbaixo();
-    }
-  }catch{}
-}
-function renderAbaixo(){
-  const st = sortState.abaixo;
-  const data = sortArray(lastAbaixo, st.key, st.dir);
-  const wrap = document.getElementById('wrapAbaixoCusto');
-  const empty = document.querySelector('#blocoAbaixoCusto .empty');
-  if (!data.length){ wrap.style.display='none'; empty.style.display='block'; return; }
-  empty.style.display='none'; wrap.style.display='block';
-  const tb = document.querySelector('#tblAbaixoCusto tbody'); tb.innerHTML='';
-  data.forEach(r=>{
-    const tr=document.createElement('tr');
-    tr.innerHTML = `
-      <td>${(r.desc||'').replace(/</g,'&lt;')}</td>
-      <td class="mono">${r.ean}</td>
-      <td class="right">${formatBRL(r.meu_custo)}</td>
-      <td class="right">${formatBRL(r.meu_preco)}</td>
-      <td class="right">${formatBRL(r.delta)}</td>
-    `;
-    tb.appendChild(tr);
-  });
-  applyVisibleHeights();
-  decorateHeaders('abaixo');
-}
-
-/* ========= Ordenação (UI) ========= */
-function bindSortingHandlers(){
-  document.querySelectorAll('th.sortable').forEach(th=>{
-    th.addEventListener('click', ()=>{
-      const table = th.getAttribute('data-table');
-      const col   = th.getAttribute('data-col');
-      const st = sortState[table];
-      if (!st) return;
-      if (st.key === col){
-        st.dir = st.dir==='asc' ? 'desc' : 'asc';
-      } else {
-        st.key = col;
-        st.dir = (col==='desc' || col==='ean') ? 'asc' : 'desc';
-      }
-      switch(table){
-        case 'baratos': renderBaratos(); break;
-        case 'caros':   renderCaros();   break;
-        case 'alt':     renderAlt();     break;
-        case 'abaixo':  renderAbaixo();  break;
-      }
-    });
-  });
-}
-function decorateHeaders(tableKey){
-  document.querySelectorAll(`th.sortable[data-table="${tableKey}"]`).forEach(th=>{
-    th.classList.remove('asc','desc');
-  });
-  const st = sortState[tableKey];
-  const th = document.querySelector(`th.sortable[data-table="${tableKey}"][data-col="${st.key}"]`);
-  if (th) th.classList.add(st.dir);
-}
-
-/* ========= Limite visual com rolagem ========= */
-function applyVisibleHeights(){
-  const vis = DEFAULT_VISIBLE_ROWS;
-  ['wrapBaratos','wrapCaros','wrapAlt','wrapAbaixoCusto','wrapTopSearches','wrapWordList'].forEach(id=>{
-    const wrap = document.getElementById(id);
-    if (!wrap || wrap.style.display==='none') return;
-    const table = wrap.querySelector('table');
-    const thead = table ? table.querySelector('thead') : null;
-    const row   = table ? table.querySelector('tbody tr') : null;
-    const headH = thead ? thead.getBoundingClientRect().height : 40;
-    const rowH  = row ? row.getBoundingClientRect().height : 38;
-    wrap.style.maxHeight = (headH + rowH * vis + 6) + 'px';
-    wrap.style.overflow = 'auto';
-  });
-}
-
-/* ================= RELATÓRIOS DE BUSCA ================= */
-document.getElementById('btnAtualizarPesquisas').addEventListener('click', loadTopSearches);
-document.getElementById('btnListaPalavras').addEventListener('click', toggleWordList);
-
-/* === Produtos mais pesquisados (TOP 30) — mantém sua lógica original enriquecendo descrição por EAN === */
-async function loadTopSearches(){
-  const lim = 8000;
-  const { data, error } = await sb.from('search_logs')
-    .select('ean_query, desc_query, id')
-    .order('id', { ascending:false })
-    .limit(lim);
-  if (error){ console.error(error); return; }
-
-  // Contagem separando por EAN quando houver
-  const byEan = new Map(); // ean -> { ean, n }
-  const byDesc = new Map(); // term -> { term, n }
-  for (const r of (data||[])){
-    const e = (r.ean_query||'').trim();
-    const d = (r.desc_query||'').trim().toLowerCase();
-    if (e && /^\d{8,14}$/.test(e)){
-      const curr = byEan.get(e) || { ean: e, n: 0 };
-      curr.n++; byEan.set(e, curr);
-    } else if (d){
-      const curr = byDesc.get(d) || { term: d, n: 0 };
-      curr.n++; byDesc.set(d, curr);
-    }
-  }
-
-  // Junta e ordena por frequência
-  const merged = [
-    ...Array.from(byEan.values()).map(x=>({ type:'ean', key:x.ean, n:x.n })),
-    ...Array.from(byDesc.values()).map(x=>({ type:'desc', key:x.term, n:x.n }))
-  ].sort((a,b)=> b.n - a.n).slice(0, 30);
-
-  // Busca descrições para EANs (produtos_cliente -> cadastro_produtos -> '')
-  const uniqueEansRaw = merged.filter(x=>x.type==='ean').map(x=>x.key);
-  const onlyDigits = (s)=> (s||'').replace(/\D+/g,'');
-  const toCandidates = (code)=>{
-    const d = onlyDigits(code);
-    const out = new Set();
-    if (!d) return out;
-    out.add(d);
-    if (d.length === 12) out.add('0'+d);
-    if (d.length === 14 && d.startsWith('0')) out.add(d.slice(1));
-    if (d.length < 13) out.add(d.padStart(13,'0'));
-    if (d.length > 13) out.add(d.slice(-13));
-    return out;
-  };
-  const candidateToOriginal = new Map();
-  const candidates = new Set();
-  uniqueEansRaw.forEach(e=>{
-    toCandidates(e).forEach(c=>{ candidates.add(c); if(!candidateToOriginal.has(c)) candidateToOriginal.set(c, e); });
-  });
-
-  const descByEan = new Map();
-  if (candidates.size){
-    const candArr = Array.from(candidates);
-    try{
-      const { data: pc } = await sb.from('produtos_cliente').select('ean13, descricao').in('ean13', candArr);
-      (pc||[]).forEach(r=>{
-        if (r && r.ean13){
-          const orig = candidateToOriginal.get(String(r.ean13)) || String(r.ean13);
-          if (!descByEan.has(orig)) descByEan.set(orig, r.descricao || '');
-        }
-      });
-    }catch{}
-    const missing = uniqueEansRaw.filter(e => !descByEan.has(String(e)));
-    if (missing.length){
-      const moreCandidates = new Set();
-      missing.forEach(e=> toCandidates(e).forEach(c=> moreCandidates.add(c)));
-      const moreArr = Array.from(moreCandidates);
-      try{
-        const { data: cp } = await sb.from('cadastro_produtos').select('ean1, descricao').in('ean1', moreArr);
-        (cp||[]).forEach(r=>{
-          if (r && r.ean1){
-            const orig = candidateToOriginal.get(String(r.ean1)) || String(r.ean1);
-            if (!descByEan.has(orig)) descByEan.set(orig, r.descricao || '');
-          }
-        });
-      }catch{}
-    }
-  }
-
-  // Render
-  const tb = document.querySelector('#tblPesquisas tbody'); tb.innerHTML='';
-  merged.forEach(item=>{
-    let ean='', desc='', n=item.n;
-    if (item.type==='ean'){
-      ean = item.key;
-      desc = descByEan.get(String(item.key)) || '';
-    } else {
-      ean = '—';
-      desc = item.key;
-    }
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td class="mono">${ean}</td>
-      <td>${desc ? desc.replace(/</g,'&lt;') : ''}</td>
-      <td class="right">${n.toLocaleString('pt-BR')}</td>
-    `;
-    tb.appendChild(tr);
-  });
-  applyVisibleHeights();
-}
-
-/* ========= NUVEM DE PALAVRAS (ANIMADA, máx 30) ========= */
-async function loadWordCloud(){
-  const lim = 10000;
-  const { data, error } = await sb.from('search_logs')
-    .select('desc_query, id')
-    .order('id', { ascending:false })
-    .limit(lim);
-  if (error){ console.error(error); return; }
-
-  const stop = new Set(['de','da','do','das','dos','para','com','sem','por','uma','uns','umas','que','e','ou','em','na','no','nas','nos']);
-  const freq = new Map();
-  (data||[]).forEach(r=>{
-    const txt = (r.desc_query||'').toLowerCase();
-    txt.split(/[\s,.;:/\\\-+()]+/).forEach(w=>{
-      if(!w || w.length<3 || stop.has(w)) return;
-      freq.set(w, (freq.get(w)||0)+1);
-    });
-  });
-
-  const entries = Array.from(freq.entries()).sort((a,b)=> b[1]-a[1]).slice(0, 30);
-  lastWordList = entries;
-
-  const cloud = document.getElementById('wordCloud');
-  cloud.innerHTML='';
-
-  const max = entries.length ? entries[0][1] : 1;
-  entries.forEach(([w,c], idx)=>{
-    const span = document.createElement('span');
-    span.className = 'w'+(idx===0?' top1':'');
-    const size = 16 + Math.round((c/max)*30);
-    span.style.fontSize = size+'px';
-
-    const rot  = (Math.random()*10-5).toFixed(2) + 'deg';
-    const dx   = (Math.random()*8-4).toFixed(1) + 'px';
-    const dy   = (Math.random()*8-4).toFixed(1) + 'px';
-    const delay= (Math.random()*0.45).toFixed(2) + 's';
-    span.style.setProperty('--rot', rot);
-    span.style.setProperty('--dx', dx);
-    span.style.setProperty('--dy', dy);
-    span.style.setProperty('--delay', delay);
-
-    span.textContent = w;
-    span.dataset.count = c;
-
-    span.addEventListener('click', ()=>{
-      const el = document.getElementById('qOportunidades');
-      if (el){ el.value = w; }
-      renderBaratos(); renderCaros();
-      document.querySelector('.grid').scrollIntoView({ behavior:'smooth', block:'start' });
-    });
-
-    attachTooltip(span, `${w} — ${c.toLocaleString('pt-BR')} ocorrências`);
-
-    cloud.appendChild(span);
-  });
-}
-
-/* ========= Lista ordenada alternável ========= */
-function toggleWordList(){
-  const box = document.getElementById('listaPalavras');
-  const tb = document.querySelector('#tblPalavras tbody');
-  if (box.style.display === 'none'){
-    box.style.display = 'block';
-    tb.innerHTML='';
-    lastWordList.forEach(([w,c])=>{
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${w}</td><td class="right">${c.toLocaleString('pt-BR')}</td>`;
-      tb.appendChild(tr);
-    });
-    applyVisibleHeights();
-  }else{
-    box.style.display = 'none';
-  }
-}
-
-/* ========= Tooltip util ========= */
-function attachTooltip(el, text){
-  const tip = document.getElementById('wcTooltip');
-  let visible = false;
-
-  function show(e){
-    tip.textContent = text;
-    tip.style.display = 'block';
-    visible = true;
-    move(e);
-  }
-  function hide(){
-    tip.style.display = 'none';
-    visible = false;
-  }
-  function move(e){
-    if (!visible) return;
-    const pad = 12;
-    const x = (e.clientX||0) + pad;
-    const y = (e.clientY||0) + pad;
-    tip.style.left = x + 'px';
-    tip.style.top  = y + 'px';
-  }
-
-  el.addEventListener('mouseenter', show);
-  el.addEventListener('mousemove', move);
-  el.addEventListener('mouseleave', hide);
-}
-
-/* ========= Botão de minimizar em TODOS os painéis ========= */
-function installMinimizeButtons(){
-  document.querySelectorAll('.panel').forEach(panel=>{
-    const hdr = panel.querySelector('header');
-    const content = panel.querySelector('.content');
-    if (!hdr || !content) return;
-
-    let right = hdr.children[1];
-    if (!right || right.tagName === 'H2'){
-      right = document.createElement('div');
-      hdr.appendChild(right);
-    }
-
-    const btn = document.createElement('button');
-    btn.className = 'btn btn-min';
-    btn.type = 'button';
-    btn.title = 'Minimizar/expandir';
-    btn.setAttribute('aria-expanded','true');
-    btn.textContent = '–';
-    btn.addEventListener('click', ()=>{
-      const collapsed = content.style.display !== 'none' && content.offsetParent !== null;
-      if (collapsed){
-        content.style.display = 'none';
-        btn.textContent = '+';
-        btn.setAttribute('aria-expanded','false');
-      } else {
-        content.style.display = 'block';
-        btn.textContent = '–';
-        btn.setAttribute('aria-expanded','true');
-        applyVisibleHeights();
-      }
-    });
-    right.appendChild(btn);
-  });
-}
-
 /* ========= Carregamento ========= */
 async function reloadAll(){
   hideErr();
@@ -1253,7 +607,7 @@ async function reloadAll(){
     await loadKpis();
     setStatus('Carregando Oportunidades e Relatórios…');
     await Promise.all([
-      loadOportunidadesVsMin(),
+      loadOportunidadesVsMin(true),
       loadMaioresAlt(),
       loadRegiao(),
       watchAbaixoCusto(),
@@ -1268,7 +622,7 @@ async function reloadAll(){
   }
 }
 
-/* ========= KPIs (mantidos) ========= */
+/* ========= KPIs ========= */
 async function countRows(table){
   const { count, error } = await sb.from(table).select('*', { count:'exact', head:true });
   if (error) throw error;
@@ -1349,6 +703,621 @@ function drawSpark(ctx, arr){
   ctx.strokeStyle = '#00b140';
   ctx.lineWidth = 2;
   ctx.stroke();
+}
+
+
+/* === Fallback: busca "meu_preco" mais recente por EAN (sem filtro de período) === */
+async function fetchMyPriceMap(eanList){
+  const map = new Map();
+  if (!eanList || !eanList.length) return map;
+
+  const { data, error } = await sb
+    .from(VIEW)
+    .select('ean, meu_preco, data')
+    .in('ean', eanList)
+    .not('meu_preco','is',null)
+    .order('data', { ascending:false })
+    .limit(eanList.length * 10); // margem
+
+  if (error){ console.warn('fetchMyPriceMap error:', error.message||error); return map; }
+  for (const r of (data||[])){
+    const e = String(r.ean);
+    if (!map.has(e)){
+      const mp = Number(r.meu_preco);
+      if (isFiniteNum(mp) && mp>0) map.set(e, mp);
+    }
+  }
+  return map;
+}
+
+/* ========= Oportunidades: MEU PREÇO vs MENOR CONCORRENTE (server-side description filter) ========= */
+function median(nums){
+  if (!nums.length) return NaN;
+  const arr = nums.slice().sort((a,b)=>a-b);
+  const m = Math.floor(arr.length/2);
+  return arr.length%2 ? arr[m] : (arr[m-1]+arr[m])/2;
+}
+function filterOutliersAroundMedian(list, tol){
+  if (!list.length) return list;
+  const med = median(list.map(x=>x.price));
+  const lo = med*(1-tol), hi = med*(1+tol);
+  const filtered = list.filter(x => x.price>=lo && x.price<=hi);
+  return filtered.length ? filtered : list;
+}
+function filterValidCompetitors(list){
+  return list.filter(x => isFiniteNum(x.price) && x.price > 0);
+}
+function currentQuery(){ const el = document.getElementById('qOportunidades'); return el ? (el.value||'').trim() : ''; }
+
+async function loadOportunidadesVsMin(){
+  const lim = DEFAULT_TOP_LIMIT;
+  const tol = DEFAULT_OUTLIER_TOL;
+  const siteIds = getSelectedSiteIds(); // null = todos
+  const qDesc = currentQuery();
+
+  // 1) Busca preços dos concorrentes no período selecionado COM filtro de descrição NA BASE
+  let qry = applyDateFilter(
+    sb.from(VIEW).select('ean, descricao, site_id, site_nome, preco_num, meu_preco, data')
+      .not('preco_num','is',null)
+      .order('data', { ascending:false })
+  );
+  if (siteIds) qry = qry.in('site_id', siteIds);
+  if (qDesc)   qry = qry.ilike('descricao', `%${qDesc}%`); // <<<<<< filtro servidor
+
+  const { data, error } = await qry.limit(Math.max(30000, lim*200));
+  if (error) throw error;
+
+  // Agrupa por EAN para coletar mercados e tentativas de meu_preco do período
+  const byEan = new Map();
+  for (const r of (data||[])){
+    const e = String(r.ean);
+    if (!byEan.has(e)) byEan.set(e, { ean:e, desc:r.descricao||'', my:null, market:[] });
+    const obj = byEan.get(e);
+
+    const sid = Number(r.site_id);
+    const pn  = Number(r.preco_num);
+    const allowedSite = !siteIds || siteIds.includes(sid);
+    if (allowedSite && isFiniteNum(pn) && pn>0){
+      obj.market.push({ price: pn, site: r.site_nome || sid });
+    }
+
+    const mp = Number(r.meu_preco);
+    if (obj.my===null && isFiniteNum(mp) && mp>0) obj.my = mp;
+  }
+
+  // 2) Fallback: para os EANs sem meu_preco no período, busca o mais recente (sem período)
+  const missingEans = Array.from(byEan.values()).filter(x=>x.my===null).map(x=>x.ean);
+  let myMap = new Map();
+  if (missingEans.length){
+    myMap = await fetchMyPriceMap(missingEans);
+  }
+
+  // 3) Calcula as oportunidades
+  const baratos=[], caros=[];
+  for (const obj of byEan.values()){
+    if (!isFiniteNum(obj.my) || obj.my<=0){
+      const mp = myMap.get(obj.ean);
+      if (isFiniteNum(mp) && mp>0) obj.my = mp;
+    }
+
+    if (!isFiniteNum(obj.my) || obj.my<=0) continue;
+    let market = filterValidCompetitors(obj.market);
+    if (!market.length) continue;
+
+    market = filterOutliersAroundMedian(market, tol).sort((a,b)=>a.price-b.price);
+    if (!market.length) continue;
+
+    const minc = market[0];
+    const nextAbove = market.find(x => x.price > obj.my) || null;
+
+    if (obj.my < minc.price){
+      const prox = nextAbove || minc;
+      const gapUp = prox.price - obj.my;
+      baratos.push({
+        ean: obj.ean, desc: obj.desc, my: obj.my,
+        next: prox.price, next_site: prox.site,
+        gap_up: gapUp
+      });
+    } else if (obj.my > minc.price){
+      const diff = obj.my - minc.price;
+      caros.push({
+        ean: obj.ean, desc: obj.desc, my: obj.my,
+        minc: minc.price, min_site: minc.site,
+        diff
+      });
+    }
+  }
+
+  baratos.sort((a,b)=> b.gap_up - a.gap_up);
+  caros.sort((a,b)=> b.diff   - a.diff);
+
+  lastBaratos = baratos.slice(0, lim);
+  lastCaros   = caros.slice(0, lim);
+  renderBaratos();
+  renderCaros();
+}
+
+
+/* ========= Render + Ordenação ========= */
+function sortArray(arr, key, dir){
+  const m = dir==='desc' ? -1 : 1;
+  return arr.slice().sort((a,b)=>{
+    const va = a[key], vb = b[key];
+    if (typeof va === 'number' && typeof vb === 'number'){
+      return (va - vb) * m;
+    }
+    return collator.compare(String(va??''), String(vb??'')) * m;
+  });
+}
+function renderBaratos(){
+  const st = sortState.baratos;
+  const data = sortArray(lastBaratos, st.key, st.dir);
+  const tb = document.querySelector('#tblMaisBaratos tbody'); tb.innerHTML='';
+  data.forEach(r=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = `
+      <td>${(r.desc||'').replace(/</g,'&lt;')}</td>
+      <td class="mono">${r.ean}</td>
+      <td class="right"><span class="price min">${formatBRL(r.my)}</span></td>
+      <td class="right" title="${r.next_site||''}">${formatBRL(r.next)}</td>
+      <td class="right">${formatBRL(r.gap_up)}</td>
+    `;
+    tb.appendChild(tr);
+  });
+  applyVisibleHeights();
+  decorateHeaders('baratos');
+}
+function renderCaros(){
+  const st = sortState.caros;
+  const data = sortArray(lastCaros, st.key, st.dir);
+  const tb = document.querySelector('#tblMaisCaros tbody'); tb.innerHTML='';
+  data.forEach(r=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = `
+      <td>${(r.desc||'').replace(/</g,'&lt;')}</td>
+      <td class="mono">${r.ean}</td>
+      <td class="right"><span class="price max">${formatBRL(r.my)}</span></td>
+      <td class="right" title="${r.min_site||''}">${formatBRL(r.minc)}</td>
+      <td class="right">${formatBRL(r.diff)}</td>
+    `;
+    tb.appendChild(tr);
+  });
+  applyVisibleHeights();
+  decorateHeaders('caros');
+}
+
+/* ========= Maiores alterações (inalterado) ========= */
+async function loadMaioresAlt(){
+  const lim = DEFAULT_TOP_LIMIT;
+  const siteIds = getSelectedSiteIds(); // null = todos
+
+  const { data, error } = await applyDateFilter(
+    sb.from(VIEW).select('ean, descricao, site_id, site_nome, preco_num, data')
+      .not('preco_num','is',null)
+      .order('data',{ascending:true})
+      .limit(Math.max(12000, lim*50))
+  );
+  if (error) throw error;
+
+  const key = (r)=> String(r.ean)+'|'+String(r.site_id);
+  const first = new Map(), last = new Map(), descBy = new Map(), siteBy = new Map();
+  for (const r of (data||[])){
+    const sid = Number(r.site_id);
+    if (siteIds && !siteIds.includes(sid)) continue;
+
+    const k=key(r), pn=Number(r.preco_num); if(!isFinite(pn)) continue;
+    if (!first.has(k)) first.set(k, pn);
+    last.set(k, pn);
+    descBy.set(String(r.ean), r.descricao||'');
+    siteBy.set(String(r.site_id), r.site_nome||r.site_id);
+  }
+  const arr=[];
+  for (const [k, fa] of first){
+    const la = last.get(k);
+    if (!isFiniteNum(la)) continue;
+    const delta = la - fa;
+    if (delta === 0) continue;
+    const [ean, site_id] = k.split('|');
+    const perc  = fa ? (delta/fa)*100 : 0;
+    arr.push({
+      ean, site: siteBy.get(site_id)||site_id, desc: descBy.get(ean)||'',
+      prev: fa, curr: la, delta, perc
+    });
+  }
+  arr.sort((a,b)=> Math.abs(b.perc) - Math.abs(a.perc));
+  lastAlt = arr.slice(0, lim);
+  renderAlt();
+}
+function renderAlt(){
+  const st = sortState.alt;
+  const data = sortArray(lastAlt, st.key, st.dir);
+  const tb = document.querySelector('#tblMaioresAlt tbody'); tb.innerHTML='';
+  data.forEach(r=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = `
+      <td>${(r.desc||'').replace(/</g,'&lt;')}</td>
+      <td class="mono">${r.ean}</td>
+      <td>${r.site||NA}</td>
+      <td class="right">${formatBRL(r.prev)}</td>
+      <td class="right">${formatBRL(r.curr)}</td>
+      <td class="right">${formatBRL(r.delta)}</td>
+      <td class="right">${(r.perc>=0?'+':'')+r.perc.toFixed(1)}%</td>
+    `;
+    tb.appendChild(tr);
+  });
+  applyVisibleHeights();
+  decorateHeaders('alt');
+}
+
+/* ========= Região (inalterado) ========= */
+async function loadRegiao(){
+  try{
+    const { data: rs } = await sb.from('sites').select('id, regiao').limit(1);
+    if (!(rs && rs.length && rs[0].regiao)) return;
+
+    const {from,to} = getPeriod();
+    const { data } = await sb.from(VIEW).select('preco_num, site_id, data')
+      .gte('data',from.toISOString()).lte('data',to.toISOString())
+      .not('preco_num','is',null).limit(10000);
+
+    const { data: allSites } = await sb.from('sites').select('id, regiao').not('regiao','is',null);
+    const m = new Map((allSites||[]).map(s=>[Number(s.id), String(s.regiao)]));
+
+    const mapReg = new Map();
+    (data||[]).forEach(r=>{
+      const reg = m.get(Number(r.site_id)); if(!reg) return;
+      const pn = Number(r.preco_num); if(!isFinite(pn)) return;
+      if(!mapReg.has(reg)) mapReg.set(reg, []); mapReg.get(reg).push(pn);
+    });
+    if (!mapReg.size) return;
+
+    const pares = Array.from(mapReg.entries()).map(([reg, arr])=>[reg, arr.reduce((a,b)=>a+b,0)/arr.length]);
+    const canvas = document.getElementById('chartRegiao');
+    const ctx = canvas.getContext('2d');
+    document.querySelector('#blocoRegiao .empty').style.display='none';
+    canvas.style.display='block';
+    const W=canvas.width, H=canvas.height, pad=30;
+    ctx.clearRect(0,0,0,0);
+    ctx.fillStyle='#00b140';
+    const max = Math.max(...pares.map(p=>p[1]));
+    const bw = (W - pad*2)/Math.max(1,pares.length);
+    pares.forEach((p,i)=>{
+      const h = (p[1]/(max||1))*(H-pad*2);
+      ctx.fillRect(pad + i*bw + 6, H-pad - h, bw-12, h);
+      ctx.fillStyle='#9aa0a6'; ctx.font='12px Arial';
+      ctx.fillText(p[0], pad + i*bw + 6, H-pad+14);
+      ctx.fillStyle='#00b140';
+    });
+  }catch(e){
+    console.warn('regiao falhou:', e?.message||e);
+  }
+}
+
+/* ========= Abaixo do custo (inalterado) ========= */
+async function watchAbaixoCusto(){
+  try{
+    const { data: probe } = await sb.from(VIEW).select('ean, meu_custo, meu_preco').limit(1);
+    if (probe && probe.length && (probe[0].meu_custo!=null || probe[0].meu_preco!=null)){
+      const {from,to} = getPeriod();
+      const { data } = await sb.from(VIEW).select('ean, descricao, meu_custo, meu_preco, data')
+        .gte('data',from.toISOString()).lte('data',to.toISOString()).limit(10000);
+      const rows = (data||[]).filter(r=>isFiniteNum(r.meu_custo)&&isFiniteNum(r.meu_preco)&&r.meu_preco<r.meu_custo)
+        .map(r=>({ ean:r.ean, desc:r.descricao||'', meu_custo:Number(r.meu_custo), meu_preco:Number(r.meu_preco), delta:Number(r.meu_preco)-Number(r.meu_custo) }));
+      lastAbaixo = rows;
+      renderAbaixo();
+    }
+  }catch{}
+}
+function renderAbaixo(){
+  const st = sortState.abaixo;
+  const data = sortArray(lastAbaixo, st.key, st.dir);
+  const wrap = document.getElementById('wrapAbaixoCusto');
+  const empty = document.querySelector('#blocoAbaixoCusto .empty');
+  if (!data.length){ wrap.style.display='none'; empty.style.display='block'; return; }
+  empty.style.display='none'; wrap.style.display='block';
+  const tb = document.querySelector('#tblAbaixoCusto tbody'); tb.innerHTML='';
+  data.forEach(r=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = `
+      <td>${(r.desc||'').replace(/</g,'&lt;')}</td>
+      <td class="mono">${r.ean}</td>
+      <td class="right">${formatBRL(r.meu_custo)}</td>
+      <td class="right">${formatBRL(r.meu_preco)}</td>
+      <td class="right">${formatBRL(r.delta)}</td>
+    `;
+    tb.appendChild(tr);
+  });
+  applyVisibleHeights();
+  decorateHeaders('abaixo');
+}
+
+/* ========= Ordenação (UI) ========= */
+function bindSortingHandlers(){
+  document.querySelectorAll('th.sortable').forEach(th=>{
+    th.addEventListener('click', ()=>{
+      const table = th.getAttribute('data-table');
+      const col   = th.getAttribute('data-col');
+      const st = sortState[table];
+      if (!st) return;
+      if (st.key === col){
+        st.dir = st.dir==='asc' ? 'desc' : 'asc';
+      } else {
+        st.key = col;
+        st.dir = (col==='desc' || col==='ean') ? 'asc' : 'desc';
+      }
+      switch(table){
+        case 'baratos': renderBaratos(); break;
+        case 'caros':   renderCaros();   break;
+        case 'alt':     renderAlt();     break;
+        case 'abaixo':  renderAbaixo();  break;
+      }
+    });
+  });
+}
+function decorateHeaders(tableKey){
+  document.querySelectorAll(`th.sortable[data-table="${tableKey}"]`).forEach(th=>{
+    th.classList.remove('asc','desc');
+  });
+  const st = sortState[tableKey];
+  const th = document.querySelector(`th.sortable[data-table="${tableKey}"][data-col="${st.key}"]`);
+  if (th) th.classList.add(st.dir);
+}
+
+/* ========= Limite visual com rolagem ========= */
+function applyVisibleHeights(){
+  const vis = DEFAULT_VISIBLE_ROWS;
+  ['wrapBaratos','wrapCaros','wrapAlt','wrapAbaixoCusto','wrapTopSearches','wrapWordList'].forEach(id=>{
+    const wrap = document.getElementById(id);
+    if (!wrap || wrap.style.display==='none') return;
+    const table = wrap.querySelector('table');
+    const thead = table ? table.querySelector('thead') : null;
+    const row   = table ? table.querySelector('tbody tr') : null;
+    const headH = thead ? thead.getBoundingClientRect().height : 40;
+    const rowH  = row ? row.getBoundingClientRect().height : 38;
+    wrap.style.maxHeight = (headH + rowH * vis + 6) + 'px';
+    wrap.style.overflow = 'auto';
+  });
+}
+
+/* ================= RELATÓRIOS DE BUSCA (inalterados) ================= */
+document.getElementById('btnAtualizarPesquisas').addEventListener('click', loadTopSearches);
+document.getElementById('btnListaPalavras').addEventListener('click', toggleWordList);
+
+/* === Produtos mais pesquisados (TOP 30) com enriquecimento por EAN === */
+async function loadTopSearches(){
+  const lim = 8000;
+  const { data, error } = await sb.from('search_logs')
+    .select('ean_query, desc_query, id')
+    .order('id', { ascending:false })
+    .limit(lim);
+  if (error){ console.error(error); return; }
+
+  const byEan = new Map();
+  const byDesc = new Map();
+  for (const r of (data||[])){
+    const e = (r.ean_query||'').trim();
+    const d = (r.desc_query||'').trim().toLowerCase();
+    if (e && /^\d{8,14}$/.test(e)){
+      const curr = byEan.get(e) || { ean: e, n: 0 };
+      curr.n++; byEan.set(e, curr);
+    } else if (d){
+      const curr = byDesc.get(d) || { term: d, n: 0 };
+      curr.n++; byDesc.set(d, curr);
+    }
+  }
+
+  const merged = [
+    ...Array.from(byEan.values()).map(x=>({ type:'ean', key:x.ean, n:x.n })),
+    ...Array.from(byDesc.values()).map(x=>({ type:'desc', key:x.term, n:x.n }))
+  ].sort((a,b)=> b.n - a.n).slice(0, 30);
+
+  const uniqueEansRaw = merged.filter(x=>x.type==='ean').map(x=>x.key);
+  const onlyDigits = (s)=> (s||'').replace(/\D+/g,'');
+  const toCandidates = (code)=>{
+    const d = onlyDigits(code);
+    const out = new Set();
+    if (!d) return out;
+    out.add(d);
+    if (d.length === 12) out.add('0'+d);
+    if (d.length === 14 && d.startsWith('0')) out.add(d.slice(1));
+    if (d.length < 13) out.add(d.padStart(13,'0'));
+    if (d.length > 13) out.add(d.slice(-13));
+    return out;
+  };
+  const candidateToOriginal = new Map();
+  const candidates = new Set();
+  uniqueEansRaw.forEach(e=>{
+    toCandidates(e).forEach(c=>{ candidates.add(c); if(!candidateToOriginal.has(c)) candidateToOriginal.set(c, e); });
+  });
+
+  const descByEan = new Map();
+  if (candidates.size){
+    const candArr = Array.from(candidates);
+    try{
+      const { data: pc } = await sb.from('produtos_cliente').select('ean13, descricao').in('ean13', candArr);
+      (pc||[]).forEach(r=>{
+        if (r && r.ean13){
+          const orig = candidateToOriginal.get(String(r.ean13)) || String(r.ean13);
+          if (!descByEan.has(orig)) descByEan.set(orig, r.descricao || '');
+        }
+      });
+    }catch{}
+    const missing = uniqueEansRaw.filter(e => !descByEan.has(String(e)));
+    if (missing.length){
+      const moreCandidates = new Set();
+      missing.forEach(e=> toCandidates(e).forEach(c=> moreCandidates.add(c)));
+      const moreArr = Array.from(moreCandidates);
+      try{
+        const { data: cp } = await sb.from('cadastro_produtos').select('ean1, descricao').in('ean1', moreArr);
+        (cp||[]).forEach(r=>{
+          if (r && r.ean1){
+            const orig = candidateToOriginal.get(String(r.ean1)) || String(r.ean1);
+            if (!descByEan.has(orig)) descByEan.set(orig, r.descricao || '');
+          }
+        });
+      }catch{}
+    }
+  }
+
+  const tb = document.querySelector('#tblPesquisas tbody'); tb.innerHTML='';
+  merged.forEach(item=>{
+    let ean='', desc='', n=item.n;
+    if (item.type==='ean'){
+      ean = item.key;
+      desc = descByEan.get(String(item.key)) || '';
+    } else {
+      ean = '—';
+      desc = item.key;
+    }
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="mono">${ean}</td>
+      <td>${desc ? desc.replace(/</g,'&lt;') : ''}</td>
+      <td class="right">${n.toLocaleString('pt-BR')}</td>
+    `;
+    tb.appendChild(tr);
+  });
+  applyVisibleHeights();
+}
+
+/* ========= NUVEM DE PALAVRAS ========= */
+async function loadWordCloud(){
+  const lim = 10000;
+  const { data, error } = await sb.from('search_logs')
+    .select('desc_query, id')
+    .order('id', { ascending:false })
+    .limit(lim);
+  if (error){ console.error(error); return; }
+
+  const stop = new Set(['de','da','do','das','dos','para','com','sem','por','uma','uns','umas','que','e','ou','em','na','no','nas','nos']);
+  const freq = new Map();
+  (data||[]).forEach(r=>{
+    const txt = (r.desc_query||'').toLowerCase();
+    txt.split(/[\s,.;:/\\\-+()]+/).forEach(w=>{
+      if(!w || w.length<3 || stop.has(w)) return;
+      freq.set(w, (freq.get(w)||0)+1);
+    });
+  });
+
+  const entries = Array.from(freq.entries()).sort((a,b)=> b[1]-a[1]).slice(0, 30);
+  lastWordList = entries;
+
+  const cloud = document.getElementById('wordCloud');
+  cloud.innerHTML='';
+
+  const max = entries.length ? entries[0][1] : 1;
+  entries.forEach(([w,c], idx)=>{
+    const span = document.createElement('span');
+    span.className = 'w'+(idx===0?' top1':'');
+    const size = 16 + Math.round((c/max)*30);
+    span.style.fontSize = size+'px';
+
+    const rot  = (Math.random()*10-5).toFixed(2) + 'deg';
+    const dx   = (Math.random()*8-4).toFixed(1) + 'px';
+    const dy   = (Math.random()*8-4).toFixed(1) + 'px';
+    const delay= (Math.random()*0.45).toFixed(2) + 's';
+    span.style.setProperty('--rot', rot);
+    span.style.setProperty('--dx', dx);
+    span.style.setProperty('--dy', dy);
+    span.style.setProperty('--delay', delay);
+
+    span.textContent = w;
+    span.dataset.count = c;
+
+    span.addEventListener('click', ()=>{
+      const el = document.getElementById('qOportunidades');
+      if (el){ el.value = w; }
+      loadOportunidadesVsMin(true);
+      document.querySelector('.grid').scrollIntoView({ behavior:'smooth', block:'start' });
+    });
+
+    attachTooltip(span, `${w} — ${c.toLocaleString('pt-BR')} ocorrências`);
+
+    cloud.appendChild(span);
+  });
+}
+
+/* ========= Lista ordenada alternável ========= */
+function toggleWordList(){
+  const box = document.getElementById('listaPalavras');
+  const tb = document.querySelector('#tblPalavras tbody');
+  if (box.style.display === 'none'){
+    box.style.display = 'block';
+    tb.innerHTML='';
+    lastWordList.forEach(([w,c])=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${w}</td><td class="right">${c.toLocaleString('pt-BR')}</td>`;
+      tb.appendChild(tr);
+    });
+    applyVisibleHeights();
+  }else{
+    box.style.display = 'none';
+  }
+}
+
+/* ========= Tooltip util ========= */
+function attachTooltip(el, text){
+  const tip = document.getElementById('wcTooltip');
+  let visible = false;
+
+  function show(e){
+    tip.textContent = text;
+    tip.style.display = 'block';
+    visible = true;
+    move(e);
+  }
+  function hide(){
+    tip.style.display = 'none';
+    visible = false;
+  }
+  function move(e){
+    if (!visible) return;
+    const pad = 12;
+    const x = (e.clientX||0) + pad;
+    const y = (e.clientY||0) + pad;
+    tip.style.left = x + 'px';
+    tip.style.top  = y + 'px';
+  }
+
+  el.addEventListener('mouseenter', show);
+  el.addEventListener('mousemove', move);
+  el.addEventListener('mouseleave', hide);
+}
+
+/* ========= Botão de minimizar (inalterado) ========= */
+function installMinimizeButtons(){
+  document.querySelectorAll('.panel').forEach(panel=>{
+    const hdr = panel.querySelector('header');
+    const content = panel.querySelector('.content');
+    if (!hdr || !content) return;
+
+    let right = hdr.children[1];
+    if (!right || right.tagName === 'H2'){
+      right = document.createElement('div');
+      hdr.appendChild(right);
+    }
+
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-min';
+    btn.type = 'button';
+    btn.title = 'Minimizar/expandir';
+    btn.setAttribute('aria-expanded','true');
+    btn.textContent = '–';
+    btn.addEventListener('click', ()=>{
+      const collapsed = content.style.display !== 'none' && content.offsetParent !== null;
+      if (collapsed){
+        content.style.display = 'none';
+        btn.textContent = '+';
+        btn.setAttribute('aria-expanded','false');
+      } else {
+        content.style.display = 'block';
+        btn.textContent = '–';
+        btn.setAttribute('aria-expanded','true');
+        applyVisibleHeights();
+      }
+    });
+    right.appendChild(btn);
+  });
 }
 </script>
 </body>
