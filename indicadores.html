@@ -412,11 +412,11 @@ const VIEW = 'vw_precos_dinamica';
 /* ========= Defaults de filtros ocultos ========= */
 const DEFAULT_TOP_LIMIT = 10000;      // abranger tudo e cortar só no fim
 const DEFAULT_OUTLIER_TOL = 0.50;
-const DEFAULT_VISIBLE_ROWS = 30;      // rolagem a partir de 30 itens
+const DEFAULT_VISIBLE_ROWS = 15;      // rolagem a partir de 30 itens
 
 /* >>>>>>> NOVO (mínima intervenção): paginação segura para consultas grandes */
 const PAGE_SIZE = 1000;   // limite típico do PostgREST
-const MAX_PAGES = 60;     // até 60k registros por consulta
+const MAX_PAGES = 15;     // até 60k registros por consulta
 
 async function fetchAllPaged(builderFn, pageSize = PAGE_SIZE, maxPages = MAX_PAGES){
   const acc = [];
