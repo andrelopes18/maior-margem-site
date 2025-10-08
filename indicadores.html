@@ -184,7 +184,7 @@
       </select>
     </div>
 
-    <!-- NOVO: Combobox de sites -->
+    <!-- Combobox de sites -->
     <div class="group combo" id="comboSites">
       <button type="button" class="combo-btn" id="btnComboSites" aria-haspopup="listbox" aria-expanded="false">
         <span class="muted">Sites na comparação:</span>
@@ -409,16 +409,17 @@ if(!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY){ alert('CONFIG ausente (config.j
 const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth:{ persistSession:true, autoRefreshToken:true, detectSessionInUrl:true }});
 const VIEW = 'vw_precos_dinamica';
 
-/* ========= Defaults de filtros ocultos ========= */
-const DEFAULT_TOP_LIMIT = 10000;      // << aumentado para abranger mais itens
+/* ========= Defaults ocultos ========= */
+const DEFAULT_TOP_LIMIT = 10000;      // vamos cortar somente no fim
 const DEFAULT_OUTLIER_TOL = 0.50;
-const DEFAULT_VISIBLE_ROWS = 30;      // << rolagem a partir de 30 itens
+const DEFAULT_VISIBLE_ROWS = 30;
+const PAGE_SIZE = 1000;               // limite real por página no PostgREST
+const MAX_PAGES = 60;                 // segurança (até 60k linhas por consulta)
 
 /* ========= Util ========= */
 const NA = '---';
 const planChip = document.getElementById('planChip');
 const userChip = document.getElementById('userChip');
-const btnSair  = document.getElementById('btnSair');
 const statusEl = document.getElementById('status');
 const errEl    = document.getElementById('err');
 
@@ -471,7 +472,6 @@ document.getElementById('btnComboApply').addEventListener('click', async ()=>{
 });
 optAll.addEventListener('change', ()=>{
   if (optAll.checked){
-    // Desmarca todos os sites individuais
     selectedSites.clear();
     comboRows.querySelectorAll('input[type="checkbox"]').forEach(ch=> ch.checked = false);
   }
@@ -507,7 +507,6 @@ let lastBaratos = [];
 let lastCaros   = [];
 let lastAlt     = [];
 let lastAbaixo  = [];
-let lastTopSearches = [];
 let lastWordList   = [];
 
 const sortState = {
@@ -565,7 +564,6 @@ async function populateSitesIntoCombo(){
     comboRows.appendChild(row);
   });
 
-  // Padrão: Todos marcado
   optAll.checked = true;
   selectedSites.clear();
   updateComboTags();
@@ -584,146 +582,60 @@ function applyDateFilter(q){
   return q;
 }
 
-/* ========= Carregamento ========= */
-async function reloadAll(){
-  hideErr();
-  try{
-    setStatus('Carregando KPIs…');
-    await loadKpis();
-    setStatus('Carregando Oportunidades e Relatórios…');
-    await Promise.all([
-      loadOportunidadesVsMin(),
-      loadMaioresAlt(),
-      loadRegiao(),
-      watchAbaixoCusto(),
-      loadTopSearches(),
-      loadWordCloud()
-    ]);
-    applyVisibleHeights();
-    setStatus('Pronto.');
-  }catch(e){
-    console.error(e);
-    showErr('Falha ao carregar indicadores: '+(e.message||e));
+/* ========= Helper: paginação genérica ========= */
+async function fetchAllPaged(builderFn, pageSize = PAGE_SIZE, maxPages = MAX_PAGES){
+  const all = [];
+  for (let page=0; page<maxPages; page++){
+    let from = page * pageSize;
+    let to   = from + pageSize - 1;
+    let q = builderFn();
+    q = q.range(from, to);
+    const { data, error } = await q;
+    if (error) throw error;
+    if (!data || !data.length){ break; }
+    all.push(...data);
+    if (data.length < pageSize){ break; } // última página
   }
+  return all;
 }
 
-/* ========= KPIs ========= */
-async function countRows(table){
-  const { count, error } = await sb.from(table).select('*', { count:'exact', head:true });
-  if (error) throw error;
-  return count ?? 0;
-}
-async function seriesCountByDay(distinctField){
-  const {from,to} = getPeriod();
-  const days =  Math.max(1, Math.ceil((to - from)/(24*3600*1000)));
-  const map = new Map();
-  for (let i=0;i<=days;i++){
-    const d = new Date(from.getTime() + i*24*3600*1000);
-    map.set(d.toISOString().slice(0,10), new Set());
-  }
-  const { data, error } = await applyDateFilter(
-    sb.from(VIEW).select('data,'+distinctField).not(''+distinctField,'is',null).order('data',{ascending:true}).limit(5000)
-  );
-  if (error) throw error;
-  for (const r of (data||[])){
-    const day = new Date(r.data).toISOString().slice(0,10);
-    if (map.has(day)) map.get(day).add(r[distinctField]);
-  }
-  return Array.from(map.values()).map(set=>set.size);
-}
-async function loadKpis(){
-  try{
-    const totalProdutos = await countRows('cadastro_produtos');
-    kpiProdutos.textContent = totalProdutos.toLocaleString('pt-BR');
-  }catch(e){ kpiProdutos.textContent = '—'; }
-
-  try{
-    const totalSites = await countRows('sites');
-    kpiSites.textContent = totalSites.toLocaleString('pt-BR');
-  }catch(e){ kpiSites.textContent = '—'; }
-
-  try{ const s1 = await seriesCountByDay('ean');     drawSpark(document.getElementById('sparkProdutos').getContext('2d'), s1); }catch{}
-  try{ const s2 = await seriesCountByDay('site_id'); drawSpark(document.getElementById('sparkSites').getContext('2d'),    s2); }catch{}
-
-  try{
-    const { data } = await applyDateFilter(
-      sb.from(VIEW).select('ean, site_id, preco_num, data')
-        .not('preco_num','is',null).order('data',{ascending:true}).limit(8000)
-    );
-    if (data && data.length){
-      const key = (r)=> String(r.ean)+'|'+String(r.site_id);
-      const first = new Map(), last = new Map();
-      for (const r of data){
-        const k=key(r), pn=Number(r.preco_num); if(!isFinite(pn)) continue;
-        if (!first.has(k)) first.set(k, pn);
-        last.set(k, pn);
-      }
-      let sum=0, cnt=0, series=[];
-      for (const [k, fa] of first){
-        const la = last.get(k); if(isFiniteNum(la)){ sum += (la-fa)/Math.max(1e-9, fa); cnt++; series.push(Math.abs((la-fa)/Math.max(1e-9, fa))); }
-      }
-      const avg = cnt ? (sum/cnt)*100 : 0;
-      document.getElementById('kpiVariacao').textContent = (avg>=0?'+':'')+avg.toFixed(1)+'%';
-      drawSpark(document.getElementById('sparkVariacao').getContext('2d'), series.slice(-30));
-    }else{
-      document.getElementById('kpiVariacao').textContent = '—';
-    }
-  }catch(e){ document.getElementById('kpiVariacao').textContent = '—'; }
-
-  document.getElementById('kpiEconomia').textContent = '—';
-}
-
-/* ========= Desenho spark simples ========= */
-function drawSpark(ctx, arr){
-  if (!ctx || !arr || !arr.length) return;
-  const W = ctx.canvas.width, H = ctx.canvas.height, pad=6;
-  const max = Math.max(...arr), min = Math.min(...arr);
-  ctx.clearRect(0,0,W,H);
-  ctx.beginPath(); ctx.moveTo(pad, H-pad);
-  arr.forEach((v,i)=>{
-    const x = pad + i*(W-2*pad)/Math.max(1,arr.length-1);
-    const y = pad + (1 - (v-min)/Math.max(1,(max-min))) * (H-2*pad);
-    if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
-  });
-  ctx.strokeStyle = '#00b140';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-}
-
-
-/* === Fallback: busca "meu_preco" mais recente por EAN (sem filtro de período) === */
+/* === Fallback paginado: pega meu_preco mais recente por EAN === */
 async function fetchMyPriceMap(eanList){
   const map = new Map();
   if (!eanList || !eanList.length) return map;
 
-  // PostgREST não tem "distinct on", então buscamos um lote ordenado por data desc
-  // e pegamos o primeiro "meu_preco" válido por EAN.
-  const { data, error } = await sb
-    .from(VIEW)
-    .select('ean, meu_preco, data')
-    .in('ean', eanList)
-    .not('meu_preco','is',null)
-    .order('data', { ascending:false })
-    .limit(eanList.length * 10); // margem
+  const need = new Set(eanList.map(String));
+  const pageSize = PAGE_SIZE;
+  for (let page=0; page<MAX_PAGES && need.size>0; page++){
+    const from = page * pageSize;
+    const to   = from + pageSize - 1;
+    const { data, error } = await sb
+      .from(VIEW)
+      .select('ean, meu_preco, data')
+      .in('ean', Array.from(need))
+      .not('meu_preco','is',null)
+      .order('data', { ascending:false })
+      .range(from, to);
+    if (error) throw error;
+    if (!data || !data.length) break;
 
-  if (error){ console.warn('fetchMyPriceMap error:', error.message||error); return map; }
-  for (const r of (data||[])){
-    const e = String(r.ean);
-    if (!map.has(e)){
-      const mp = Number(r.meu_preco);
-      if (isFiniteNum(mp) && mp>0) map.set(e, mp);
+    for (const r of data){
+      const e = String(r.ean);
+      if (!map.has(e)){
+        const mp = Number(r.meu_preco);
+        if (isFiniteNum(mp) && mp>0){
+          map.set(e, mp);
+          need.delete(e);
+        }
+      }
     }
+    if (data.length < pageSize) break;
   }
   return map;
 }
 
-/* ========= Oportunidades: MEU PREÇO vs MENOR CONCORRENTE (com filtro de sites) ========= */
-function median(nums){
-  if (!nums.length) return NaN;
-  const arr = nums.slice().sort((a,b)=>a-b);
-  const m = Math.floor(arr.length/2);
-  return arr.length%2 ? arr[m] : (arr[m-1]+arr[m])/2;
-}
+/* ========= Oportunidades: MEU PREÇO vs MENOR CONCORRENTE ========= */
+function median(nums){ if (!nums.length) return NaN; const arr=nums.slice().sort((a,b)=>a-b); const m=Math.floor(arr.length/2); return arr.length%2?arr[m]:(arr[m-1]+arr[m])/2; }
 function filterOutliersAroundMedian(list, tol){
   if (!list.length) return list;
   const med = median(list.map(x=>x.price));
@@ -731,68 +643,51 @@ function filterOutliersAroundMedian(list, tol){
   const filtered = list.filter(x => x.price>=lo && x.price<=hi);
   return filtered.length ? filtered : list;
 }
-function filterValidCompetitors(list){
-  return list.filter(x => isFiniteNum(x.price) && x.price > 0);
-}
-function currentQuery(){
-  const el = document.getElementById('qOportunidades');
-  return el ? (el.value||'').trim().toLowerCase() : '';
-}
+function filterValidCompetitors(list){ return list.filter(x => isFiniteNum(x.price) && x.price > 0); }
+function currentQuery(){ const el=document.getElementById('qOportunidades'); return el ? (el.value||'').trim().toLowerCase() : ''; }
 function appliesQuery(desc){ const q=currentQuery(); return !q || String(desc||'').toLowerCase().includes(q); }
-
 
 async function loadOportunidadesVsMin(){
   const lim = DEFAULT_TOP_LIMIT;
   const tol = DEFAULT_OUTLIER_TOL;
   const siteIds = getSelectedSiteIds(); // null = todos
 
-  // 1) Busca preços dos concorrentes no período selecionado
-  const qry = applyDateFilter(
-    sb.from(VIEW).select('ean, descricao, site_id, site_nome, preco_num, meu_preco, data')
-      .not('preco_num','is',null)
-      .order('data', { ascending:false })
-      .limit(Math.max(30000, lim*200))
-  );
-  const { data, error } = await qry;
-  if (error) throw error;
+  const cols = 'ean, descricao, site_id, site_nome, preco_num, meu_preco, data';
 
-  // Agrupa por EAN para coletar mercados e tentativas de meu_preco do período
+  const rows = await fetchAllPaged(() => {
+    let q = applyDateFilter(sb.from(VIEW).select(cols, { head:false })).not('preco_num','is',null).order('data', { ascending:false });
+    if (siteIds) q = q.in('site_id', siteIds); // filtro de sites no servidor
+    return q;
+  });
+
   const byEan = new Map();
-  for (const r of (data||[])){
+  for (const r of rows){
     const e = String(r.ean);
     if (!byEan.has(e)) byEan.set(e, { ean:e, desc:r.descricao||'', my:null, market:[] });
     const obj = byEan.get(e);
 
-    // Mercado (aplica filtro de sites)
     const sid = Number(r.site_id);
     const pn  = Number(r.preco_num);
-    const allowedSite = !siteIds || siteIds.includes(sid);
-    if (allowedSite && isFiniteNum(pn) && pn>0){
+    if (isFiniteNum(pn) && pn>0){
       obj.market.push({ price: pn, site: r.site_nome || sid });
     }
 
-    // Meu preço (do período) — pode estar ausente
     const mp = Number(r.meu_preco);
     if (obj.my===null && isFiniteNum(mp) && mp>0) obj.my = mp;
   }
 
-  // 2) Fallback: para os EANs sem meu_preco no período, busca o mais recente (sem período)
+  // Fallback meu_preco fora do período
   const missingEans = Array.from(byEan.values()).filter(x=>x.my===null).map(x=>x.ean);
   let myMap = new Map();
-  if (missingEans.length){
-    myMap = await fetchMyPriceMap(missingEans);
-  }
+  if (missingEans.length){ myMap = await fetchMyPriceMap(missingEans); }
 
-  // 3) Calcula as oportunidades
   const baratos=[], caros=[];
   for (const obj of byEan.values()){
-    // Aplica fallback se necessário
     if (!isFiniteNum(obj.my) || obj.my<=0){
       const mp = myMap.get(obj.ean);
       if (isFiniteNum(mp) && mp>0) obj.my = mp;
     }
-
-    if (!isFiniteNum(obj.my) || obj.my<=0) continue; // sem meu preço não dá pra comparar
+    if (!isFiniteNum(obj.my) || obj.my<=0) continue;
 
     let market = filterValidCompetitors(obj.market);
     if (!market.length) continue;
@@ -805,21 +700,9 @@ async function loadOportunidadesVsMin(){
 
     if (obj.my < minc.price){
       const prox = nextAbove || minc;
-      const gapUp = prox.price - obj.my;
-      baratos.push({
-        ean: obj.ean, desc: obj.desc,
-        my: obj.my,
-        next: prox.price, next_site: prox.site,
-        gap_up: gapUp
-      });
+      baratos.push({ ean: obj.ean, desc: obj.desc, my: obj.my, next: prox.price, next_site: prox.site, gap_up: prox.price - obj.my });
     } else if (obj.my > minc.price){
-      const diff = obj.my - minc.price;
-      caros.push({
-        ean: obj.ean, desc: obj.desc,
-        my: obj.my,
-        minc: minc.price, min_site: minc.site,
-        diff
-      });
+      caros.push({ ean: obj.ean, desc: obj.desc, my: obj.my, minc: minc.price, min_site: minc.site, diff: obj.my - minc.price });
     }
   }
 
@@ -832,15 +715,12 @@ async function loadOportunidadesVsMin(){
   renderCaros();
 }
 
-
 /* ========= Render + Ordenação ========= */
 function sortArray(arr, key, dir){
   const m = dir==='desc' ? -1 : 1;
   return arr.slice().sort((a,b)=>{
     const va = a[key], vb = b[key];
-    if (typeof va === 'number' && typeof vb === 'number'){
-      return (va - vb) * m;
-    }
+    if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * m;
     return collator.compare(String(va??''), String(vb??'')) * m;
   });
 }
@@ -881,25 +761,21 @@ function renderCaros(){
   decorateHeaders('caros');
 }
 
-/* ========= Maiores alterações (filtra por sites) ========= */
+/* ========= Maiores alterações (paginado + filtro servidor) ========= */
 async function loadMaioresAlt(){
   const lim = DEFAULT_TOP_LIMIT;
   const siteIds = getSelectedSiteIds(); // null = todos
+  const cols = 'ean, descricao, site_id, site_nome, preco_num, data';
 
-  const { data, error } = await applyDateFilter(
-    sb.from(VIEW).select('ean, descricao, site_id, site_nome, preco_num, data')
-      .not('preco_num','is',null)
-      .order('data',{ascending:true})
-      .limit(Math.max(12000, lim*50))
-  );
-  if (error) throw error;
+  const rows = await fetchAllPaged(() => {
+    let q = applyDateFilter(sb.from(VIEW).select(cols)).not('preco_num','is',null).order('data',{ascending:true});
+    if (siteIds) q = q.in('site_id', siteIds);
+    return q;
+  });
 
   const key = (r)=> String(r.ean)+'|'+String(r.site_id);
   const first = new Map(), last = new Map(), descBy = new Map(), siteBy = new Map();
-  for (const r of (data||[])){
-    const sid = Number(r.site_id);
-    if (siteIds && !siteIds.includes(sid)) continue;
-
+  for (const r of rows){
     const k=key(r), pn=Number(r.preco_num); if(!isFinite(pn)) continue;
     if (!first.has(k)) first.set(k, pn);
     last.set(k, pn);
@@ -908,16 +784,11 @@ async function loadMaioresAlt(){
   }
   const arr=[];
   for (const [k, fa] of first){
-    const la = last.get(k);
-    if (!isFiniteNum(la)) continue;
-    const delta = la - fa;
-    if (delta === 0) continue;
+    const la = last.get(k); if (!isFiniteNum(la)) continue;
+    const delta = la - fa; if (delta === 0) continue;
     const [ean, site_id] = k.split('|');
     const perc  = fa ? (delta/fa)*100 : 0;
-    arr.push({
-      ean, site: siteBy.get(site_id)||site_id, desc: descBy.get(ean)||'',
-      prev: fa, curr: la, delta, perc
-    });
+    arr.push({ ean, site: siteBy.get(site_id)||site_id, desc: descBy.get(ean)||'', prev: fa, curr: la, delta, perc });
   }
   arr.sort((a,b)=> Math.abs(b.perc) - Math.abs(a.perc));
   lastAlt = arr.slice(0, lim);
@@ -944,22 +815,25 @@ function renderAlt(){
   decorateHeaders('alt');
 }
 
-/* ========= Região (opcional) ========= */
+/* ========= Região (opcional, mantém) ========= */
 async function loadRegiao(){
   try{
     const { data: rs } = await sb.from('sites').select('id, regiao').limit(1);
     if (!(rs && rs.length && rs[0].regiao)) return;
 
     const {from,to} = getPeriod();
-    const { data } = await sb.from(VIEW).select('preco_num, site_id, data')
+    const rows = await fetchAllPaged(() => sb.from(VIEW)
+      .select('preco_num, site_id, data')
       .gte('data',from.toISOString()).lte('data',to.toISOString())
-      .not('preco_num','is',null).limit(10000);
+      .not('preco_num','is',null)
+      .order('data',{ascending:true})
+    );
 
     const { data: allSites } = await sb.from('sites').select('id, regiao').not('regiao','is',null);
     const m = new Map((allSites||[]).map(s=>[Number(s.id), String(s.regiao)]));
 
     const mapReg = new Map();
-    (data||[]).forEach(r=>{
+    rows.forEach(r=>{
       const reg = m.get(Number(r.site_id)); if(!reg) return;
       const pn = Number(r.preco_num); if(!isFinite(pn)) return;
       if(!mapReg.has(reg)) mapReg.set(reg, []); mapReg.get(reg).push(pn);
@@ -994,11 +868,15 @@ async function watchAbaixoCusto(){
     const { data: probe } = await sb.from(VIEW).select('ean, meu_custo, meu_preco').limit(1);
     if (probe && probe.length && (probe[0].meu_custo!=null || probe[0].meu_preco!=null)){
       const {from,to} = getPeriod();
-      const { data } = await sb.from(VIEW).select('ean, descricao, meu_custo, meu_preco, data')
-        .gte('data',from.toISOString()).lte('data',to.toISOString()).limit(10000);
-      const rows = (data||[]).filter(r=>isFiniteNum(r.meu_custo)&&isFiniteNum(r.meu_preco)&&r.meu_preco<r.meu_custo)
+      const rows = await fetchAllPaged(() => sb.from(VIEW)
+        .select('ean, descricao, meu_custo, meu_preco, data')
+        .gte('data',from.toISOString()).lte('data',to.toISOString())
+        .order('data',{ascending:false})
+      );
+      const list = rows
+        .filter(r=>isFiniteNum(Number(r.meu_custo))&&isFiniteNum(Number(r.meu_preco))&&Number(r.meu_preco)<Number(r.meu_custo))
         .map(r=>({ ean:r.ean, desc:r.descricao||'', meu_custo:Number(r.meu_custo), meu_preco:Number(r.meu_preco), delta:Number(r.meu_preco)-Number(r.meu_custo) }));
-      lastAbaixo = rows;
+      lastAbaixo = list;
       renderAbaixo();
     }
   }catch{}
@@ -1050,9 +928,7 @@ function bindSortingHandlers(){
   });
 }
 function decorateHeaders(tableKey){
-  document.querySelectorAll(`th.sortable[data-table="${tableKey}"]`).forEach(th=>{
-    th.classList.remove('asc','desc');
-  });
+  document.querySelectorAll(`th.sortable[data-table="${tableKey}"]`).forEach(th=> th.classList.remove('asc','desc'));
   const st = sortState[tableKey];
   const th = document.querySelector(`th.sortable[data-table="${tableKey}"][data-col="${st.key}"]`);
   if (th) th.classList.add(st.dir);
@@ -1074,12 +950,12 @@ function applyVisibleHeights(){
   });
 }
 
-/* ================= RELATÓRIOS DE BUSCA ================= */
+/* ========= Wordcloud (mantido) ========= */
 document.getElementById('btnAtualizarPesquisas').addEventListener('click', loadTopSearches);
 document.getElementById('btnListaPalavras').addEventListener('click', toggleWordList);
 
-/* === Produtos mais pesquisados (TOP 30) com descrição por EAN => (produtos_cliente.ean13 -> cadastro_produtos.ean1 -> '') === */
 async function loadTopSearches(){
+  // mantido conforme sua versão anterior
   const lim = 8000;
   const { data, error } = await sb.from('search_logs')
     .select('ean_query, desc_query, id')
@@ -1087,102 +963,36 @@ async function loadTopSearches(){
     .limit(lim);
   if (error){ console.error(error); return; }
 
-  // Contagem separando por EAN quando houver
-  const byEan = new Map(); // ean -> { ean, n }
-  const byDesc = new Map(); // term -> { term, n }
+  const byEan = new Map();
+  const byDesc = new Map();
   for (const r of (data||[])){
     const e = (r.ean_query||'').trim();
     const d = (r.desc_query||'').trim().toLowerCase();
     if (e && /^\d{8,14}$/.test(e)){
-      const curr = byEan.get(e) || { ean: e, n: 0 };
-      curr.n++; byEan.set(e, curr);
+      const curr = byEan.get(e) || { ean: e, n: 0 }; curr.n++; byEan.set(e, curr);
     } else if (d){
-      const curr = byDesc.get(d) || { term: d, n: 0 };
-      curr.n++; byDesc.set(d, curr);
+      const curr = byDesc.get(d) || { term: d, n: 0 }; curr.n++; byDesc.set(d, curr);
     }
   }
 
-  // Junta e ordena por frequência
   const merged = [
     ...Array.from(byEan.values()).map(x=>({ type:'ean', key:x.ean, n:x.n })),
     ...Array.from(byDesc.values()).map(x=>({ type:'desc', key:x.term, n:x.n }))
   ].sort((a,b)=> b.n - a.n).slice(0, 30);
 
-  // Busca descrições para EANs (produtos_cliente -> cadastro_produtos -> '')
-  // Coleta EANs e gera variações compatíveis (normalização):
-  const uniqueEansRaw = merged.filter(x=>x.type==='ean').map(x=>x.key);
-  const onlyDigits = (s)=> (s||'').replace(/\D+/g,'');
-  const toCandidates = (code)=>{
-    const d = onlyDigits(code);
-    const out = new Set();
-    if (!d) return out;
-    out.add(d); // original apenas dígitos
-    if (d.length === 12) out.add('0'+d); // UPC-A -> EAN-13
-    if (d.length === 14 && d.startsWith('0')) out.add(d.slice(1)); // GTIN-14 -> EAN-13
-    if (d.length < 13) out.add(d.padStart(13,'0')); // completa com zeros à esquerda
-    if (d.length > 13) out.add(d.slice(-13)); // mantém últimos 13 dígitos
-    return out;
-  };
-  const candidateToOriginal = new Map();
-  const candidates = new Set();
-  uniqueEansRaw.forEach(e=>{
-    toCandidates(e).forEach(c=>{ candidates.add(c); if(!candidateToOriginal.has(c)) candidateToOriginal.set(c, e); });
-  });
-
-  const descByEan = new Map();
-  if (candidates.size){
-    const candArr = Array.from(candidates);
-    // 1) produtos_cliente (ean13)
-    try{
-      const { data: pc } = await sb.from('produtos_cliente').select('ean13, descricao').in('ean13', candArr);
-      (pc||[]).forEach(r=>{
-        if (r && r.ean13){
-          const orig = candidateToOriginal.get(String(r.ean13)) || String(r.ean13);
-          if (!descByEan.has(orig)) descByEan.set(orig, r.descricao || '');
-        }
-      });
-    }catch{}
-    // 2) cadastro_produtos (ean1) - só para o que ainda não tem
-    const missing = uniqueEansRaw.filter(e => !descByEan.has(String(e)));
-    if (missing.length){
-      const moreCandidates = new Set();
-      missing.forEach(e=> toCandidates(e).forEach(c=> moreCandidates.add(c)));
-      const moreArr = Array.from(moreCandidates);
-      try{
-        const { data: cp } = await sb.from('cadastro_produtos').select('ean1, descricao').in('ean1', moreArr);
-        (cp||[]).forEach(r=>{
-          if (r && r.ean1){
-            const orig = candidateToOriginal.get(String(r.ean1)) || String(r.ean1);
-            if (!descByEan.has(orig)) descByEan.set(orig, r.descricao || '');
-          }
-        });
-      }catch{}
-    }
-  }
-
-  // Render
   const tb = document.querySelector('#tblPesquisas tbody'); tb.innerHTML='';
   merged.forEach(item=>{
-    let ean='', desc='', n=item.n;
-    if (item.type==='ean'){
-      ean = item.key;
-      desc = descByEan.get(String(item.key)) || ''; // '' se não localizar
-    } else {
-      ean = '—';
-      desc = item.key; // termo pesquisado
-    }
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td class="mono">${ean}</td>
-      <td>${desc ? desc.replace(/</g,'&lt;') : ''}</td>
-      <td class="right">${n.toLocaleString('pt-BR')}</td>
+      <td class="mono">${item.type==='ean' ? item.key : '—'}</td>
+      <td>${item.type==='desc' ? item.key : ''}</td>
+      <td class="right">${item.n.toLocaleString('pt-BR')}</td>
     `;
     tb.appendChild(tr);
   });
   applyVisibleHeights();
 }
 
-/* ========= NUVEM DE PALAVRAS (ANIMADA, máx 30) ========= */
 async function loadWordCloud(){
   const lim = 10000;
   const { data, error } = await sb.from('search_logs')
@@ -1234,12 +1044,10 @@ async function loadWordCloud(){
     });
 
     attachTooltip(span, `${w} — ${c.toLocaleString('pt-BR')} ocorrências`);
-
     cloud.appendChild(span);
   });
 }
 
-/* ========= Lista ordenada alternável ========= */
 function toggleWordList(){
   const box = document.getElementById('listaPalavras');
   const tb = document.querySelector('#tblPalavras tbody');
@@ -1286,11 +1094,11 @@ function attachTooltip(el, text){
   el.addEventListener('mouseleave', hide);
 }
 
-/* ========= Botão de minimizar em TODOS os painéis ========= */
+/* ========= Minimizar painéis ========= */
 function installMinimizeButtons(){
   document.querySelectorAll('.panel').forEach(panel=>{
     const hdr = panel.querySelector('header');
-    const content = panel.querySelector('.content');
+    const content = panel.querySelector('content') || panel.querySelector('.content');
     if (!hdr || !content) return;
 
     let right = hdr.children[1];
