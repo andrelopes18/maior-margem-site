@@ -184,7 +184,13 @@
       </select>
     </div>
 
-    <!-- NOVO: Combobox de sites -->
+    <!-- NOVO: filtro de descrição para “Mais baratos” e “Mais caros” -->
+    <div class="group">
+      <label for="qOportunidades">Descrição:</label>
+      <input id="qOportunidades" type="text" placeholder="Filtrar por descrição…" />
+    </div>
+
+    <!-- Combobox de sites -->
     <div class="group combo" id="comboSites">
       <button type="button" class="combo-btn" id="btnComboSites" aria-haspopup="listbox" aria-expanded="false">
         <span class="muted">Sites na comparação:</span>
@@ -411,7 +417,7 @@ const VIEW = 'vw_precos_dinamica';
 
 /* ========= Defaults de filtros ocultos ========= */
 const DEFAULT_TOP_LIMIT = 100;
-const DEFAULT_OUTLIER_TOL = 0.50;
+const DEFAULT_OUTLIER_TOL = 0.50; // filtro não-visível para outliers (±50% da mediana)
 const DEFAULT_VISIBLE_ROWS = 15;
 
 /* ========= Util ========= */
@@ -717,7 +723,7 @@ async function fetchMyPriceMap(eanList){
   return map;
 }
 
-/* ========= Oportunidades: MEU PREÇO vs MENOR CONCORRENTE (com filtro de sites) ========= */
+/* ========= Oportunidades: MEU PREÇO vs MENOR CONCORRENTE (com filtro de sites + outliers) ========= */
 function median(nums){
   if (!nums.length) return NaN;
   const arr = nums.slice().sort((a,b)=>a-b);
