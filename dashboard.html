@@ -571,9 +571,13 @@ function createPriceCell(item, label, isLocked, minLabel, maxLabel){
     if (!d.valid){
       const span=document.createElement('span');
       span.className='price';
-      span.title = (item.analysis?.mean!=null)
-        ? `Filtrado por discrepância (>±${Math.round(OUTLIER_TOL*100)}% da média ${formatBRL(item.analysis.mean)})`
-        : 'Preço indisponível';
+      if (d.precoRaw === null || d.precoRaw === undefined || String(d.precoRaw).trim() === '') {
+      span.title = 'Preço não encontrado (indisponível no site)';
+    } else if (item.analysis?.mean!=null) {
+      span.title = `Filtrado por discrepância (>±${Math.round(OUTLIER_TOL*100)}% da média ${formatBRL(item.analysis.mean)})`;
+    } else {
+      span.title = 'Preço indisponível';
+    }
       span.textContent=NA;
       td.appendChild(span);
       return td;
