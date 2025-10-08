@@ -94,9 +94,6 @@
     #chartPopover header { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
     #chartPopover .close { background:transparent; border:1px solid #333; color:#ddd; padding:2px 8px; border-radius:6px; cursor:pointer; }
     #chartPopover .msg { font-size:12px; color:#9aa0a6; }
-
-    /* dica sutil para o clique direito nos '---' */
-    .na-hint { border-bottom:1px dotted #6b6b6b; cursor:context-menu; }
   </style>
   <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="./config.js"></script>
@@ -190,7 +187,7 @@
 /* ========= Debug ========= */
 const dbgWrap = document.getElementById('dbgWrap');
 const dbg = document.getElementById('dbg');
-function dlog(o){ try{ dbg.textContent += (typeof o==='string' ? o : JSON.stringify(o,null,2)) + "\n"; dbg.scrollTop = dbg.scrollHeight; }catch{} }
+function dlog(o){ try{ dbg.textContent += (typeof o==='string' ? o : JSON.stringify(o,null,2)) + "\\n"; dbg.scrollTop = dbg.scrollHeight; }catch{} }
 addEventListener('keydown', (e)=>{ if (e.ctrlKey && e.altKey && (e.key==='d'||e.key==='D')) dbgWrap.style.display = (dbgWrap.style.display==='none'||!dbgWrap.style.display)?'block':'none'; });
 
 /* ========= Erros ========= */
@@ -290,8 +287,8 @@ function ensureDescIndex(item){
   if (!item) return;
   if (!item._tokNeeds || item._descCached !== item.desc){
     item._descCached = item.desc || '';
-    item._tokNeeds = false;
     item._tok = normTokens(item._descCached);
+    item._tokNeeds = false;
   }
 }
 
@@ -305,6 +302,7 @@ async function refreshFavsFromDB(){
   renderFavs();
   updateFavHeight();
   updateCounts();
+  // Carrega os dados dos favoritos mesmo sem rolar a lista geral
   try{ await fetchFavsDirect(); }catch(_){}
 }
 async function addFavorite(ean){
@@ -545,48 +543,6 @@ function buildSearchUrlByLabel(label, ean){
   return tpl.replace(/{ean}/gi, enc);
 }
 
-/* ========= NOVO: Helper — validação de URL ========= */
-function isValidHttpUrl(u){
-  try{
-    const x=new URL(String(u));
-    return x.protocol==='http:' || x.protocol==='https:';
-  }catch{ return false; }
-}
-
-/* ========= NOVO: Resolver id_produto por EAN =========
-   Obs.: assumimos que cadastro_produtos.ean1 = EAN (string exata). */
-async function resolveProdutoIdByEan(ean){
-  try{
-    const { data, error } = await sb
-      .from('cadastro_produtos')
-      .select('id')
-      .eq('ean1', String(ean))
-      .limit(1)
-      .maybeSingle();
-    if (error) { dlog({error:'resolveProdutoIdByEan', detail:error}); return null; }
-    return data?.id ?? null;
-  }catch(e){ dlog({error:'resolveProdutoIdByEan.ex', detail:String(e)}); return null; }
-}
-
-/* ========= NOVO: Upsert do link direto no Supabase ========= */
-async function upsertProdutoSiteLink({ ean, site_id, url }){
-  const id_produto = await resolveProdutoIdByEan(ean);
-  if (!id_produto){
-    throw new Error('Produto não encontrado em cadastro_produtos para o EAN '+ean);
-  }
-  const payload = {
-    id_produto: Number(id_produto),
-    site_id: Number(site_id),
-    url: String(url),
-    added_by: currentUserId || null
-  };
-  const { error } = await sb
-    .from('links_produto_site')
-    .upsert(payload, { onConflict: 'id_produto,site_id' }); // atualiza url se já existir
-  if (error) { throw new Error(error.message || 'Falha ao salvar link'); }
-  return true;
-}
-
 /* ========= Células ========= */
 function chartButtonSVG(){ return '<svg class="chart-icon" viewBox="0 0 24 24" aria-hidden="true">'
   +'<rect x="3" y="11" width="3" height="7" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>'
@@ -594,32 +550,6 @@ function chartButtonSVG(){ return '<svg class="chart-icon" viewBox="0 0 24 24" a
   +'<rect x="15" y="5" width="3" height="13" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>'
   +'<path d="M3,18 L7,14 L12,15 L17,8 L21,10" fill="none" stroke="#00d084" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>'
   +'</svg>'; }
-
-/* ========= NOVO: anexa menu de contexto nas células '---' ========= */
-function attachLinkContext(td, item, label){
-  // apenas quando temos EAN e site_id resolvíveis
-  const site = chosen.find(x => x.label === label);
-  if (!site || !item || !item.sku) return;
-
-  td.classList.add('na-hint');
-  td.title = 'Clique com o botão direito para cadastrar o link do produto neste site.';
-
-  td.addEventListener('contextmenu', async (ev)=>{
-    ev.preventDefault();
-    try{
-      const url = window.prompt(`Cole a URL da página do produto no site "${label}" para o EAN ${item.sku}:`, '');
-      if (!url) return;
-      if (!isValidHttpUrl(url)){ alert('URL inválida. Use http:// ou https://'); return; }
-
-      setStatus('Salvando link...');
-      await upsertProdutoSiteLink({ ean: item.sku, site_id: site.site_id, url });
-      setStatus('Link salvo com sucesso.');
-    }catch(err){
-      showErr('Não foi possível salvar o link: ' + (err?.message||String(err)));
-      setStatus('');
-    }
-  }, { passive:false });
-}
 
 function computeMinMaxForRow(item){
   let min={label:null,val:Infinity}, max={label:null,val:-Infinity};
@@ -642,18 +572,14 @@ function createPriceCell(item, label, isLocked, minLabel, maxLabel){
       const span=document.createElement('span');
       span.className='price';
       if (d.precoRaw === null || d.precoRaw === undefined || String(d.precoRaw).trim() === '') {
-        span.title = 'Preço não encontrado (indisponível no site)';
-      } else if (item.analysis?.mean!=null) {
-        span.title = `Filtrado por discrepância (>±${Math.round(OUTLIER_TOL*100)}% da média ${formatBRL(item.analysis.mean)})`;
-      } else {
-        span.title = 'Preço indisponível';
-      }
+      span.title = 'Preço não encontrado (indisponível no site)';
+    } else if (item.analysis?.mean!=null) {
+      span.title = `Filtrado por discrepância (>±${Math.round(OUTLIER_TOL*100)}% da média ${formatBRL(item.analysis.mean)})`;
+    } else {
+      span.title = 'Preço indisponível';
+    }
       span.textContent=NA;
       td.appendChild(span);
-
-      /* NOVO: permitir cadastrar link quando não há valor utilizável */
-      if (!isLocked) attachLinkContext(td, item, label);
-
       return td;
     }
 
@@ -688,14 +614,9 @@ function createPriceCell(item, label, isLocked, minLabel, maxLabel){
       } else {
         td.appendChild(span);
       }
-
-      /* NOVO: se o conteúdo resultou em '---', também permitir cadastrar link */
-      if (!isLocked && (span.textContent===NA)) attachLinkContext(td, item, label);
     }
   } else {
     const span=document.createElement('span'); span.className='price'; span.textContent=NA; td.appendChild(span);
-    /* NOVO: sem dados para o site — habilitar cadastro de link */
-    if (!isLocked) attachLinkContext(td, item, label);
   }
   return td;
 }
@@ -1032,7 +953,7 @@ async function doLogSearch(){
     const descQ = (currentDescQ||'').trim();
     const scope = searchScope;
 
-    const isEanOk  = eanQ.replace(/\D/g,'').length >= 8;
+    const isEanOk  = eanQ.replace(/\\D/g,'').length >= 8;
     const isDescOk = descQ.length >= 3;
     if (!isEanOk && !isDescOk) return;
 
@@ -1063,7 +984,7 @@ function buildPrintHTMLFromFav() {
   const thead = '<thead><tr>' + headers.map(h => '<th>'+h+'</th>').join('') + '</tr></thead>';
   let tbody = '';
   for (const tr of rows) {
-    const cells = Array.from(tr.cells).slice(1).map(td => { const txt = (td.textContent || '').replace(/\s+/g, ' ').trim(); return '<td>'+(txt || NA)+'</td>'; });
+    const cells = Array.from(tr.cells).slice(1).map(td => { const txt = (td.textContent || '').replace(/\\s+/g, ' ').trim(); return '<td>'+(txt || NA)+'</td>'; });
     tbody += '<tr>'+cells.join('')+'</tr>';
   }
   const css = '*{box-sizing:border-box;} body{font-family:Arial,sans-serif;color:#000;background:#fff;padding:24px;} h1{margin:0 0 4px 0;font-size:18px;} .meta{color:#444;font-size:12px;margin-bottom:14px;} table{width:100%;border-collapse:collapse;} thead th{text-align:left;font-weight:700;padding:6px 0;} tbody td{padding:4px 0;} @media print{body{padding:0;}}';
@@ -1078,7 +999,7 @@ function printFavReport(){
   const doc = iframe.contentWindow || iframe.contentDocument;
   const html = buildPrintHTMLFromFav();
   (doc.document || doc).open();
-  (doc.document || doc).write(html + '<script>window.onload=function(){setTimeout(function(){window.focus();window.print();},10)}<\/script>');
+  (doc.document || doc).write(html + '<script>window.onload=function(){setTimeout(function(){window.focus();window.print();},10)}<\\/script>');
   (doc.document || doc).close();
   setTimeout(()=>{ try{ document.body.removeChild(iframe); }catch{} }, 2000);
 }
@@ -1176,6 +1097,7 @@ function drawSparkFull(points, hoverIdx=null, userPrice=null){
     ctx.strokeStyle='#2a2a2a'; ctx.strokeRect(bx, by, tw + pad*2, 18);
     ctx.fillStyle = '#ffd54f';
     ctx.fillText(label, bx + pad, by + 13);
+    ctx.restore();
   }
 
   ctx.fillStyle='#9aa0a6'; ctx.font='11px Arial';
@@ -1303,6 +1225,7 @@ async function initUserAndSites(){
     throw e;
   }
 
+  // Carrega favoritos da TABELA (não mais localStorage)
   await refreshFavsFromDB();
 }
 
@@ -1366,5 +1289,200 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
   }catch(e){ showErr('Falha na inicialização'); dlog({error:'init', detail:String(e)}); }
 })();
 </script>
+
+<!-- ===== MaiorMargem: bloco de contexto para salvar link direto por site (fallback sem EAN) ===== -->
+<style>
+  .mm-na-hint { border-bottom: 1px dotted #6b6b6b; cursor: context-menu; }
+</style>
+<script>
+(function(){
+  try{
+    // Cliente Supabase
+    var sb = (typeof window.sb !== 'undefined' && window.sb) ? window.sb : null;
+    if (!sb && typeof supabase !== 'undefined' && window.CONFIG){
+      sb = supabase.createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_ANON_KEY, { auth: { persistSession: true } });
+      window.sb = sb;
+    }
+    if (!sb){ console.warn('[MM] Supabase client não encontrado.'); return; }
+
+    var VIEW = (typeof window.VIEW === 'string' && window.VIEW) ? window.VIEW : 'vw_precos_dinamica';
+
+    function normalizeEanDigits(e){ return String(e||'').replace(/\D+/g,''); }
+
+    async function resolveProdutoIdByEan(ean){
+      try{
+        const raw = String(ean||'').trim();
+        const norm = normalizeEanDigits(raw);
+
+        // 1) ean1 / ean_norm exatos
+        let { data, error } = await sb.from('cadastro_produtos')
+          .select('id_produto, ean1, ean_norm')
+          .or('ean1.eq.'+raw+',ean_norm.eq.'+norm)
+          .limit(1);
+        if (!error && data && data[0] && data[0].id_produto) return data[0].id_produto;
+
+        // 2) like
+        ({ data, error } = await sb.from('cadastro_produtos')
+          .select('id_produto, ean1, ean_norm')
+          .or('ean1.ilike.%'+raw+'%,ean_norm.ilike.%'+norm+'%')
+          .limit(1));
+        if (!error && data && data[0] && data[0].id_produto) return data[0].id_produto;
+
+        // 3) tira zeros à esquerda
+        const normNoZeros = norm.replace(/^0+/, '');
+        if (normNoZeros && normNoZeros !== norm){
+          ({ data, error } = await sb.from('cadastro_produtos')
+            .select('id_produto, ean1, ean_norm')
+            .or('ean1.eq.'+normNoZeros+',ean_norm.eq.'+normNoZeros)
+            .limit(1));
+          if (!error && data && data[0] && data[0].id_produto) return data[0].id_produto;
+        }
+
+        // 4) fallback via view (se expuser id_produto)
+        try{
+          const vr = await sb.from(VIEW).select('id_produto').eq('ean', raw).limit(1);
+          if (!vr.error && vr.data && vr.data[0] && vr.data[0].id_produto) return vr.data[0].id_produto;
+        }catch(_){}
+
+        return null;
+      }catch(ex){
+        console.warn('[MM] resolveProdutoIdByEan ex:', ex);
+        return null;
+      }
+    }
+
+    async function upsertProdutoSiteLink(ean, site_id, url){
+      const id_produto = await resolveProdutoIdByEan(ean);
+      if (!id_produto){
+        throw new Error('Produto não encontrado em cadastro_produtos para o EAN '+ean);
+      }
+      const payload = { id_produto: Number(id_produto), site_id: Number(site_id), url: String(url) };
+      const { error } = await sb.from('links_produto_site')
+        .upsert(payload, { onConflict: 'id_produto,site_id' });
+      if (error) throw new Error(error.message || 'Falha ao salvar link');
+    }
+
+    // Coleta labels das colunas e tenta mapear para site_id
+    function collectSiteHeaderLabels(table){
+      const thead = table.querySelector('thead');
+      if (!thead) return [];
+      const ths = Array.from(thead.querySelectorAll('th'));
+      const labels = [];
+      ths.forEach((th, idx)=>{
+        const txt = (th.textContent||'').trim();
+        if (!txt) return;
+        // pular colunas de controle
+        const lower = txt.toLowerCase();
+        if (idx===0) return; // estrela/ação
+        if (['ean','descrição','descricao','meu preço','meu preco'].includes(lower)) return;
+        labels.push({ index: idx, label: txt });
+      });
+      return labels;
+    }
+
+    async function buildSiteColumnMap(table){
+      const labels = collectSiteHeaderLabels(table);
+      const map = new Map();
+      if (!labels.length) return map;
+
+      // 1) tentar via 'chosen' se existir no escopo global
+      if (typeof chosen !== 'undefined' && Array.isArray(chosen)){
+        const byLabel = new Map();
+        chosen.forEach(c=>{ byLabel.set(String(c.label||'').trim().toLowerCase(), Number(c.site_id)); });
+        labels.forEach(({index,label})=>{
+          const sid = byLabel.get(String(label).trim().toLowerCase());
+          if (sid) map.set(index, sid);
+        });
+      }
+
+      // 2) fallback: consultar sites por nome
+      const missing = labels.filter(l => !map.has(l.index));
+      if (missing.length){
+        const names = Array.from(new Set(missing.map(x => x.label)));
+        const { data, error } = await sb.from('sites').select('id, nome').in('nome', names);
+        if (!error && Array.isArray(data)){
+          const byName = new Map(data.map(r => [String(r.nome||'').trim().toLowerCase(), Number(r.id)]));
+          missing.forEach(({index, label})=>{
+            const sid = byName.get(String(label).trim().toLowerCase());
+            if (sid) map.set(index, sid);
+          });
+        }
+      }
+
+      return map;
+    }
+
+    function getRowEan(tr){
+      let td = tr.querySelector('.col-sku');
+      if (td && td.textContent.trim()) return td.textContent.trim();
+      for (const c of Array.from(tr.cells)){
+        const txt = (c.textContent||'').trim();
+        if ((txt.replace(/\D+/g,'').length)>=8) return txt;
+      }
+      return null;
+    }
+
+    function isNaCell(td){
+      const txt = (td.textContent||'').replace(/\s+/g,'').trim();
+      return /^-+$/.test(txt); // aceita '---' e variações de número de hifens
+    }
+
+    async function attachContextForTable(table){
+      const siteMap = await buildSiteColumnMap(table);
+      const tbody = table.querySelector('tbody');
+      if(!tbody) return;
+
+      tbody.addEventListener('contextmenu', async function(ev){
+        const td = ev.target.closest('td');
+        const tr = ev.target.closest('tr');
+        if (!td || !tr) return;
+
+        const colIndex = Array.prototype.indexOf.call(tr.children, td);
+        const site_id = siteMap.get(colIndex);
+        if (!site_id) return; // só nas colunas de site
+
+        if (!isNaCell(td)) return; // apenas quando está '---'
+
+        ev.preventDefault();
+        try{
+          const ean = getRowEan(tr);
+          if (!ean){ alert('EAN não identificado na linha.'); return; }
+
+          const url = prompt(`Cole a URL da página do produto para o site ${site_id} (EAN ${ean}):`, '');
+          if (!url) return;
+          try{ const u=new URL(url); if (!/^https?:$/.test(u.protocol)) throw 0; }catch(_){ alert('URL inválida. Use http(s)://'); return; }
+
+          await upsertProdutoSiteLink(ean, site_id, url);
+          td.classList.add('mm-na-hint');
+          td.title = 'Link salvo para este site';
+          alert('Link salvo com sucesso!');
+
+        }catch(ex){
+          alert('Não foi possível salvar o link: ' + (ex && ex.message ? ex.message : String(ex)));
+        }
+      }, { passive:false });
+    }
+
+    // Inicializa quando a página estiver pronta e a tabela renderizada
+    function whenTableReady(id, cb){
+      const el = document.getElementById(id);
+      if (el && el.querySelector('thead th')) { cb(el); return; }
+      const obs = new MutationObserver(()=>{
+        const el2 = document.getElementById(id);
+        if (el2 && el2.querySelector('thead th')) { obs.disconnect(); cb(el2); }
+      });
+      obs.observe(document.documentElement, { childList: true, subtree: true });
+      setTimeout(()=>obs.disconnect(), 10000);
+    }
+
+    whenTableReady('produtosTable', attachContextForTable);
+    whenTableReady('favTable', attachContextForTable);
+
+  }catch(err){
+    console.warn('[MM] contexto salvar link - erro de inicialização:', err);
+  }
+})();
+</script>
+<!-- ===== Fim do bloco de contexto ===== -->
 </body>
 </html>
