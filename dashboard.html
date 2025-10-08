@@ -243,7 +243,7 @@ const NA = '---'; // marcador padrão para ausências
 const DEFAULT_PLAN_SITE_LIMIT = { trial:2, basico:4, intermediario:6, premium:8 };
 const VIEW = 'vw_precos_dinamica';
 const PAGE_SIZE = 200, RENDER_CHUNK = 60;
-const OUTLIER_TOL = 0.50;
+const OUTLIER_TOL = 0.75;
 
 let chosen=[], unlocked=new Set(), locked=new Set();
 let produtosMap=new Map(), produtosList=[];
