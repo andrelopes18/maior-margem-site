@@ -81,10 +81,8 @@
 
     .mono { font-family: ui-monospace,Consolas,monospace; }
     .price { font-weight:700; display:inline-block; }
-    /* === COLORS ADJUSTED TO MATCH DASHBOARD === */
-    .price.min { color:#ff4d4f; }   /* concorrente mais barato = vermelho */
-    .price.max { color:#00d084; }   /* concorrente mais caro = verde */
-    .price.param { color:#ffd54f; } /* Meu preço = amarelo (mesmo tom do dashboard) */
+    .price.min { color:#00d084; }
+    .price.max { color:#ff5d5d; }
     .pill { font-size:12px; padding:2px 8px; border-radius:999px; border:1px solid #2d3b4a; background:#0f1620; color:#ddd; display:inline-block; }
 
     .status { margin:8px 0; color:#aaa; font-size:12px; }
@@ -860,8 +858,8 @@ function renderBaratos(){
     tr.innerHTML = `
       <td>${(r.desc||'').replace(/</g,'&lt;')}</td>
       <td class="mono">${r.ean}</td>
-      <td class="right"><span class="price param" title="Meu preço">${formatBRL(r.my)}</span></td>
-      <td class="right" title="${r.next_site||''}"><span class="price max">${formatBRL(r.next)}</span></td>
+      <td class="right"><span class="price min">${formatBRL(r.my)}</span></td>
+      <td class="right" title="${r.next_site||''}">${formatBRL(r.next)}</td>
       <td class="right">${formatBRL(r.gap_up)}</td>
     `;
     tb.appendChild(tr);
@@ -878,8 +876,8 @@ function renderCaros(){
     tr.innerHTML = `
       <td>${(r.desc||'').replace(/</g,'&lt;')}</td>
       <td class="mono">${r.ean}</td>
-      <td class="right"><span class="price param" title="Meu preço">${formatBRL(r.my)}</span></td>
-      <td class="right" title="${r.min_site||''}"><span class="price min">${formatBRL(r.minc)}</span></td>
+      <td class="right"><span class="price max">${formatBRL(r.my)}</span></td>
+      <td class="right" title="${r.min_site||''}">${formatBRL(r.minc)}</td>
       <td class="right">${formatBRL(r.diff)}</td>
     `;
     tb.appendChild(tr);
@@ -1099,7 +1097,7 @@ async function loadTopSearches(){
   for (const r of (data||[])){
     const e = (r.ean_query||'').trim();
     const d = (r.desc_query||'').trim().toLowerCase();
-    if (e && /^\\d{8,14}$/.test(e)){
+    if (e && /^\d{8,14}$/.test(e)){
       const curr = byEan.get(e) || { ean: e, n: 0 };
       curr.n++; byEan.set(e, curr);
     } else if (d){
@@ -1114,7 +1112,7 @@ async function loadTopSearches(){
   ].sort((a,b)=> b.n - a.n).slice(0, 30);
 
   const uniqueEansRaw = merged.filter(x=>x.type==='ean').map(x=>x.key);
-  const onlyDigits = (s)=> (s||'').replace(/\\D+/g,'');
+  const onlyDigits = (s)=> (s||'').replace(/\D+/g,'');
   const toCandidates = (code)=>{
     const d = onlyDigits(code);
     const out = new Set();
@@ -1195,7 +1193,7 @@ async function loadWordCloud(){
   const freq = new Map();
   (data||[]).forEach(r=>{
     const txt = (r.desc_query||'').toLowerCase();
-    txt.split(/[\\s,.;:/\\\\\\-+()]+/).forEach(w=>{
+    txt.split(/[\s,.;:/\\\-+()]+/).forEach(w=>{
       if(!w || w.length<3 || stop.has(w)) return;
       freq.set(w, (freq.get(w)||0)+1);
     });
