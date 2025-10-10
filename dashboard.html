@@ -1712,10 +1712,13 @@ function upsertProdutoSiteLink(ean, site_id, url, idNoSite = null){ return (asyn
             </div>`;
           document.body.appendChild(pop);
 
+// Referências dos inputs
+const inputEl = pop.querySelector('#mmUrlInput');
+const idNoSiteEl = pop.querySelector('#mmIdNoSite');
+
+// Prefill do que já existe na tabela links_produto_site
 (async ()=>{
   try{
-    const inputEl = pop.querySelector('#mmUrlInput');
-    const idNoSiteEl = pop.querySelector('#mmIdNoSite');
     const id_produto = await resolveProdutoIdByEan(ean);
     if (id_produto){
       const { data, error } = await sb
@@ -1725,8 +1728,8 @@ function upsertProdutoSiteLink(ean, site_id, url, idNoSite = null){ return (asyn
         .eq('site_id', Number(site_id))
         .maybeSingle();
       if (!error && data){
-        if (data.url && inputEl) inputEl.value = data.url;
-        if (data.id_no_site && idNoSiteEl) idNoSiteEl.value = data.id_no_site;
+        if (typeof data.url === 'string' && inputEl) inputEl.value = data.url;
+        if (typeof data.id_no_site === 'string' && idNoSiteEl) idNoSiteEl.value = data.id_no_site;
       }
     }
   }catch(e){ console.warn('[MM] prefill link existente falhou:', e); }
@@ -1734,32 +1737,20 @@ function upsertProdutoSiteLink(ean, site_id, url, idNoSite = null){ return (asyn
 
           
           
-          const x = (ev.clientX || 0) + 8;
-          const y = (ev.clientY || 0) + 8;
+          const x = (ev.clientX || 0)  + 8;
+          const y = (ev.clientY || 0)  + 8;
           pop.style.left = x + 'px';
 pop.style.top  = y + 'px';
 // Clamp to viewport (avoid overflow right/bottom and horizontal page shift)
 requestAnimationFrame(()=>{
   const rect = pop.getBoundingClientRect();
-  const vw = window.innerWidth, vh = window.innerHeight;
-  let left = rect.left;
-  let top  = rect.top;
-
-  // Corrige horizontal: encosta se passar da direita/esquerda
-  if (rect.right > vw - 8) left = Math.max(8, vw - rect.width - 8);
-  if (left < 8) left = 8;
-
-  // Corrige vertical com flip para cima se exceder a borda inferior
-  if (rect.bottom > vh - 8) {
-    const above = (ev.clientY || 0) - rect.height - 8;
-    top = Math.max(8, above);
-  } else {
-    top = Math.max(8, top);
-  }
-
-  // Como .mm-popover é position:fixed, usamos coordenadas de viewport (sem scroll)
-  pop.style.left = left + 'px';
-  pop.style.top  = top  + 'px';
+  const vw = window.innerWidth; const vh = window.innerHeight;
+  let newLeft = rect.left; let newTop = rect.top;
+  if (rect.right > vw - 8) newLeft = Math.max(8, vw - rect.width - 8);
+  if (rect.bottom > vh - 8) newTop = Math.max(8, vh - rect.height - 8);
+  // convert viewport coords back to page coords with scroll offsets
+  pop.style.left = (newLeft ) + 'px';
+  pop.style.top  = (newTop ) + 'px';
 });
 
           const inputEl = pop.querySelector('#mmUrlInput');
@@ -1779,7 +1770,8 @@ requestAnimationFrame(()=>{
             if (e.key === 'Enter'){ btnSave.click(); }
           }
           
-try{ if (window.__mmActivePopover && window.__mmActivePopover.parentNode) { window.__mmActivePopover.parentNode.removeChild(window.__mmActivePopover); } }catch(_){}
+// Fecha popover anterior se existir e guarda o atual
+try{ if (window.__mmActivePopover && window.__mmActivePopover.parentNode){ window.__mmActivePopover.parentNode.removeChild(window.__mmActivePopover); } }catch(_){}
 window.__mmActivePopover = pop;
 document.addEventListener('keydown', onKey);
 const outsideClose = (e)=>{ if (pop && !pop.contains(e.target)) closePop(); };
@@ -1791,30 +1783,35 @@ setTimeout(()=>document.addEventListener('mousedown', outsideClose), 0);
 
           
 btnSave.addEventListener('click', async function(){
-  const inputEl = pop.querySelector('#mmUrlInput');
-  const idNoSiteEl = pop.querySelector('#mmIdNoSite');
-  let url = (inputEl && inputEl.value || '').trim();
-  const idNoSiteRaw = (idNoSiteEl && idNoSiteEl.value ? idNoSiteEl.value.trim() : '');
+  const urlInput = pop.querySelector('#mmUrlInput');
+  const idInput  = pop.querySelector('#mmIdNoSite');
+  let url = (urlInput && urlInput.value || '').trim();
+  const idNoSiteRaw = (idInput && idInput.value ? idInput.value.trim() : '');
   const hasUrl = url.length > 0;
   const hasId  = idNoSiteRaw.length > 0;
 
   if (!hasUrl && !hasId){
-    inputEl.setCustomValidity('Informe a URL ou o código do produto no site.');
-    inputEl.reportValidity();
-    setTimeout(()=>inputEl.setCustomValidity(''), 1200);
-    inputEl.focus();
+    if (urlInput){
+      urlInput.setCustomValidity('Informe a URL ou o código do produto no site.');
+      urlInput.reportValidity();
+      setTimeout(()=>urlInput.setCustomValidity(''), 1200);
+      urlInput.focus();
+    }
     return;
   }
+
   if (hasUrl){
     try{
       const u = new URL(url);
       if (!/^https?:$/.test(u.protocol)) throw 0;
     }catch(_){
-      inputEl.focus();
-      inputEl.select();
-      inputEl.setCustomValidity('Informe uma URL válida iniciando com http:// ou https://');
-      inputEl.reportValidity();
-      setTimeout(()=>inputEl.setCustomValidity(''), 1200);
+      if (urlInput){
+        urlInput.focus();
+        urlInput.select();
+        urlInput.setCustomValidity('Informe uma URL válida iniciando com http:// ou https://');
+        urlInput.reportValidity();
+        setTimeout(()=>urlInput.setCustomValidity(''), 1200);
+      }
       return;
     }
   } else {
