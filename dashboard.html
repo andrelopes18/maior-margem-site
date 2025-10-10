@@ -188,7 +188,7 @@
 /* ========= Debug ========= */
 const dbgWrap = document.getElementById('dbgWrap');
 const dbg = document.getElementById('dbg');
-function dlog(o){ try{ dbg.textContent += (typeof o==='string' ? o : JSON.stringify(o,null,2)) + "\\n"; dbg.scrollTop = dbg.scrollHeight; }catchh{} }
+function dlog(o){ try{ dbg.textContent += (typeof o==='string' ? o : JSON.stringify(o,null,2)) + "\\n"; dbg.scrollTop = dbg.scrollHeight; }catch{} }
 addEventListener('keydown', (e)=>{ if (e.ctrlKey && e.altKey && (e.key==='d'||e.key==='D')) dbgWrap.style.display = (dbgWrap.style.display==='none'||!dbgWrap.style.display)?'block':'none'; });
 
 /* ========= Erros ========= */
@@ -272,7 +272,7 @@ const COL_ORDER_KEY = 'mm_col_order';
 function setStatus(t){ statusEl.textContent = t||''; }
 function debounce(fn,ms=500){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); } }
 function isFav(sku){ return favSet.has(String(sku)); }
-function formatBRL(n){ try{ return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) }catchh{ return String(n) } }
+function formatBRL(n){ try{ return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) }catch{ return String(n) } }
 
 /* Normalização p/ busca */
 function normTokens(s){
@@ -304,7 +304,7 @@ async function refreshFavsFromDB(){
   updateFavHeight();
   updateCounts();
   // Carrega os dados dos favoritos mesmo sem rolar a lista geral
-  try{ await fetchFavsDirect(); }catchh(_){}
+  try{ await fetchFavsDirect(); }catch(_){}
 }
 async function addFavorite(ean){
   if (!currentUserId) return;
@@ -353,7 +353,7 @@ function applyToggle(btn, wrap, extraEl, key){
 /* ========= Cabeçalhos / colunas ========= */
 function computeDefaultColumnOrder(){ return ['sku','desc','meu_preco', ...chosen.map(c => 'site:' + c.label)]; }
 function loadColumnOrder(){
-  const saved = (()=>{ try{ return JSON.parse(localStorage.getItem(COL_ORDER_KEY) || '[]'); }catchh{ return []; }})();
+  const saved = (()=>{ try{ return JSON.parse(localStorage.getItem(COL_ORDER_KEY) || '[]'); }catch{ return []; }})();
   const base = computeDefaultColumnOrder();
   const setBase = new Set(base);
   const filtered = saved.filter(k => setBase.has(k));
@@ -428,7 +428,7 @@ async function getSitesLimitForPlan(planKey){
       const v = Number(data?.sites_limit ?? data?.max_sites);
       if (Number.isFinite(v) && v>0) return v;
     }
-  }catchh(e){ dlog({warn:'fallback site limit', plan:k}); }
+  }catch(e){ dlog({warn:'fallback site limit', plan:k}); }
   return DEFAULT_PLAN_SITE_LIMIT[k] ?? 2;
 }
 
@@ -894,7 +894,7 @@ async function fetchNextPage(){
       if (!favFirstAutoRenderDone){ updateFavHeight(); favFirstAutoRenderDone=true; }
       serverOffset += PAGE_SIZE; setStatus('Carregados (parcial): ' + produtosList.length + ' SKUs');
     }
-  }catchh(e){
+  }catch(e){
     showErr('Falha ao carregar view: '+(e.message||String(e)));
     serverExhausted = true;
   } finally { fetching=false; updateCounts(); }
@@ -929,7 +929,7 @@ async function fetchFavsDirect(){
     updateFavHeight();
     updateCounts();
     dlog({step:'fav.direct.done', favs:favs.length, rows:(data?data.length:0)});
-  }catchh(e){
+  }catch(e){
     dlog({error:'fav.direct.exception', detail:String(e)});
   }
 }
@@ -939,7 +939,7 @@ function resetAndQuery(){
   dlog({step:'resetAndQuery'});
   produtosMap.clear(); produtosList=[]; serverOffset=0; serverExhausted=false; favFirstAutoRenderDone=false;
   generalView=[]; resetGeneralDom(); renderFavs(); updateFavHeight(); updateCounts();
-  try{ if (typeof fetchFavsDirect==='function') fetchFavsDirect(); }catchh(_){}
+  try{ if (typeof fetchFavsDirect==='function') fetchFavsDirect(); }catch(_){}
   fetchNextPage();
 }
 
@@ -972,7 +972,7 @@ async function doLogSearch(){
     const { error } = await sb.from('search_logs').insert(payload);
     if (error) { dlog({warn:'search_log.insert.failed', error}); }
     else { dlog({step:'search_log.insert.ok', eanQ, descQ, scope, results: payload.results_count}); }
-  }catchh(err){
+  }catch(err){
     dlog({warn:'search_log.insert.exception', detail: String(err)});
   }
 }
@@ -1002,7 +1002,7 @@ function printFavReport(){
   (doc.document || doc).open();
   (doc.document || doc).write(html + '<script>window.onload=function(){setTimeout(function(){window.focus();window.print();},10)}<\\/script>');
   (doc.document || doc).close();
-  setTimeout(()=>{ try{ document.body.removeChild(iframe); }catchh{} }, 2000);
+  setTimeout(()=>{ try{ document.body.removeChild(iframe); }catch{} }, 2000);
 }
 
 /* ========= Chart ========= */
@@ -1171,7 +1171,7 @@ async function fetchHistory(ean, siteId){
   try{
     const { data, error } = await sb.from(VIEW).select('data, preco_num').eq('ean', ean).eq('site_id', siteId).not('preco_num','is',null).order('data',{ascending:true}).limit(180);
     if (!error && data && data.length){ pts = data.map(r=>({ x:new Date(r.data), y:Number(r.preco_num) })).filter(p=>Number.isFinite(p.y)); }
-  }catchh(e){ dlog({error:'fetchHistory.view', detail:String(e)}); }
+  }catch(e){ dlog({error:'fetchHistory.view', detail:String(e)}); }
   const byTs = new Map(pts.map(p=>[p.x.getTime(), p])); return Array.from(byTs.values()).sort((a,b)=>a.x-b.x);
 }
 async function openChartFor(ev, ean, label, siteId, userPrice){
@@ -1215,13 +1215,13 @@ async function initUserAndSites(){
     }else{
       dlog({warn:'profiles.select.failed', detail: rs.error});
     }
-  }catchh(e){
+  }catch(e){
     dlog({warn:'profiles.exception', detail:String(e)});
   }
 
   try{
     await loadUserSelection(session.user.id, planKey);
-  }catchh(e){
+  }catch(e){
     dlog({fatal:'init user_sites/sites failed', raw:String(e)});
     throw e;
   }
@@ -1287,7 +1287,7 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
 
     resetAndQuery();
     generalWrap.dispatchEvent(new Event('scroll'));
-  }catchh(e){ showErr('Falha na inicialização'); dlog({error:'init', detail:String(e)}); }
+  }catch(e){ showErr('Falha na inicialização'); dlog({error:'init', detail:String(e)}); }
 })();
 </script>
 
@@ -1343,10 +1343,10 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
         try{
           const vr = await sb.from(VIEW).select('id_produto').eq('ean', raw).limit(1);
           if (!vr.error && vr.data && vr.data[0] && vr.data[0].id_produto) return vr.data[0].id_produto;
-        }catchh(_){}
+        }catch(_){}
 
         return null;
-      }catchh(ex){
+      }catch(ex){
         console.warn('[MM] resolveProdutoIdByEan ex:', ex);
         return null;
       }
@@ -1366,6 +1366,8 @@ function upsertProdutoSiteLink(ean, site_id, url, idNoSite = null){ return (asyn
     .upsert(payload, { onConflict: 'id_produto,site_id' });
   if (error) throw new Error(error.message || 'Falha ao salvar link');
 })();}
+
+      const payload = { id_produto: Number(id_produto), site_id: Number(site_id), url: String(url) };
       const { error } = await sb.from('links_produto_site')
         .upsert(payload, { onConflict: 'id_produto,site_id' });
       if (error) throw new Error(error.message || 'Falha ao salvar link');
@@ -1459,14 +1461,14 @@ function upsertProdutoSiteLink(ean, site_id, url, idNoSite = null){ return (asyn
 
           const url = null; /* prompt removido */ //`Cole a URL da página do produto para o site ${site_id} (EAN ${ean}):`, '');
           if (!url) return;
-          try{ const u=new URL(url); if (!/^https?:$/.test(u.protocol)) throw 0; }catchh(_){ alert('URL inválida. Use http(s)://'); return; }
+          try{ const u=new URL(url); if (!/^https?:$/.test(u.protocol)) throw 0; }catch(_){ alert('URL inválida. Use http(s)://'); return; }
 
-          await upsertProdutoSiteLink(ean, site_id, url, idNoSite);
+          await upsertProdutoSiteLink(ean, site_id, url);
           td.classList.add('mm-na-hint');
           td.title = 'Link salvo para este site';
           alert('Link salvo com sucesso!');
 
-        }catchh(ex){
+        }catch(ex){
           alert('Não foi possível salvar o link: ' + (ex && ex.message ? ex.message : String(ex)));
         }
       }, { passive:false });
@@ -1487,7 +1489,7 @@ function upsertProdutoSiteLink(ean, site_id, url, idNoSite = null){ return (asyn
     whenTableReady('produtosTable', attachContextForTable);
     whenTableReady('favTable', attachContextForTable);
 
-  }catchh(err){
+  }catch(err){
     console.warn('[MM] contexto salvar link - erro de inicialização:', err);
   }
 })();
@@ -1569,10 +1571,10 @@ function upsertProdutoSiteLink(ean, site_id, url, idNoSite = null){ return (asyn
         try{
           const vr = await sb.from(VIEW).select('id_produto').eq('ean', raw).limit(1);
           if (!vr.error && vr.data && vr.data[0] && vr.data[0].id_produto) return vr.data[0].id_produto;
-        }catchh(_){}
+        }catch(_){}
 
         return null;
-      }catchh(ex){
+      }catch(ex){
         console.warn('[MM] resolveProdutoIdByEan ex:', ex);
         return null;
       }
@@ -1710,13 +1712,10 @@ function upsertProdutoSiteLink(ean, site_id, url, idNoSite = null){ return (asyn
             </div>`;
           document.body.appendChild(pop);
 
-// Referências dos inputs
-const inputEl = pop.querySelector('#mmUrlInput');
-const idNoSiteEl = pop.querySelector('#mmIdNoSite');
-
-// Prefill: buscar link já salvo para este (ean, site_id)
 (async ()=>{
   try{
+    const inputEl = pop.querySelector('#mmUrlInput');
+    const idNoSiteEl = pop.querySelector('#mmIdNoSite');
     const id_produto = await resolveProdutoIdByEan(ean);
     if (id_produto){
       const { data, error } = await sb
@@ -1726,19 +1725,17 @@ const idNoSiteEl = pop.querySelector('#mmIdNoSite');
         .eq('site_id', Number(site_id))
         .maybeSingle();
       if (!error && data){
-        if (data.url) inputEl.value = data.url;
+        if (data.url && inputEl) inputEl.value = data.url;
         if (data.id_no_site && idNoSiteEl) idNoSiteEl.value = data.id_no_site;
       }
     }
-  }catchh(e){
-    console.warn('[MM] prefill link existente falhou:', e);
-  }
+  }catch(e){ console.warn('[MM] prefill link existente falhou:', e); }
 })();
 
           
           
-          const x = (ev.clientX || 0) + window.scrollX + 8;
-          const y = (ev.clientY || 0) + window.scrollY + 8;
+          const x = (ev.clientX || 0) + 8;
+          const y = (ev.clientY || 0) + 8;
           pop.style.left = x + 'px';
 pop.style.top  = y + 'px';
 // Clamp to viewport (avoid overflow right/bottom and horizontal page shift)
@@ -1762,7 +1759,6 @@ requestAnimationFrame(()=>{
           function closePop(){
             document.removeEventListener('keydown', onKey);
             if (pop && pop.parentNode) pop.parentNode.removeChild(pop);
-            document.removeEventListener('mousedown', outsideClose);
             
             
           }
@@ -1770,22 +1766,26 @@ requestAnimationFrame(()=>{
             if (e.key === 'Escape'){ closePop(); }
             if (e.key === 'Enter'){ btnSave.click(); }
           }
-          document.addEventListener('keydown', onKey);
+          
+try{ if (window.__mmActivePopover && window.__mmActivePopover.parentNode) { window.__mmActivePopover.parentNode.removeChild(window.__mmActivePopover); } }catch(_){}
+window.__mmActivePopover = pop;
+document.addEventListener('keydown', onKey);
+const outsideClose = (e)=>{ if (pop && !pop.contains(e.target)) closePop(); };
+setTimeout(()=>document.addEventListener('mousedown', outsideClose), 0);
 
-          const outsideClose = (e)=>{ if (pop && !pop.contains(e.target)) closePop(); };
-          setTimeout(()=>document.addEventListener('mousedown', outsideClose), 0);
 
           btnCancel.addEventListener('click', closePop);
           btnClose.addEventListener('click', closePop);
 
           
 btnSave.addEventListener('click', async function(){
-  let url = (inputEl.value||'').trim();
+  const inputEl = pop.querySelector('#mmUrlInput');
+  const idNoSiteEl = pop.querySelector('#mmIdNoSite');
+  let url = (inputEl && inputEl.value || '').trim();
   const idNoSiteRaw = (idNoSiteEl && idNoSiteEl.value ? idNoSiteEl.value.trim() : '');
   const hasUrl = url.length > 0;
   const hasId  = idNoSiteRaw.length > 0;
 
-  // Permitir salvar com um OU outro OU ambos; bloquear apenas se ambos vazios
   if (!hasUrl && !hasId){
     inputEl.setCustomValidity('Informe a URL ou o código do produto no site.');
     inputEl.reportValidity();
@@ -1793,13 +1793,11 @@ btnSave.addEventListener('click', async function(){
     inputEl.focus();
     return;
   }
-
-  // Validar URL somente se fornecida
   if (hasUrl){
     try{
       const u = new URL(url);
       if (!/^https?:$/.test(u.protocol)) throw 0;
-    }catchh(_){
+    }catch(_){
       inputEl.focus();
       inputEl.select();
       inputEl.setCustomValidity('Informe uma URL válida iniciando com http:// ou https://');
@@ -1814,7 +1812,7 @@ btnSave.addEventListener('click', async function(){
   const idNoSite = hasId ? idNoSiteRaw : null;
 
   try{
-    await upsertProdutoSiteLink(ean, site_id, site_nome, url, descricao_produto, idNoSite);
+    await upsertProdutoSiteLink(ean, site_id, url, idNoSite);
     td.classList.add('mm-na-hint');
     td.title = 'Link salvo para este site';
     closePop();
@@ -1823,13 +1821,15 @@ btnSave.addEventListener('click', async function(){
     ok.textContent = 'Link salvo!';
     document.body.appendChild(ok);
     setTimeout(()=>{ if (ok.parentNode) ok.parentNode.removeChild(ok); }, 1600);
-  }catchh(ex){
+  }catch(ex){
     closePop();
     alert('Não foi possível salvar o link: ' + (ex && ex.message ? ex.message : String(ex)));
   }
 });
-inputEl.focus();
-        }catchh(ex){
+
+
+          inputEl.focus();
+        }catch(ex){
           alert('Não foi possível salvar o link: ' + (ex && ex.message ? ex.message : String(ex)));
         }
       }, { passive:false });
@@ -1849,7 +1849,7 @@ inputEl.focus();
     whenTableReady('produtosTable', attachContextForTable);
     whenTableReady('favTable', attachContextForTable);
 
-  }catchh(err){
+  }catch(err){
     console.warn('[MM] contexto salvar link - erro de inicialização:', err);
   }
 })();
