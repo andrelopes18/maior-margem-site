@@ -1358,11 +1358,19 @@ function upsertProdutoSiteLink(ean, site_id, _site_nome, url, _descricao_produto
   if (!id_produto){
     throw new Error('Produto não encontrado em cadastro_produtos para o EAN ' + ean);
   }
-  const payload = { id_produto: Number(id_produto), site_id: Number(site_id), url: (url==null?null:String(url)) };
-  if (idNoSite !== undefined && idNoSite !== null && String(idNoSite).length){
-    payload.id_no_site = String(idNoSite);
-  }
-  const { error } = await sb.from('links_produto_site')
+  const safe = (v)=>{
+    if (v===undefined || v===null) return null;
+    const s = String(v).trim();
+    if (!s || s.toLowerCase()==='null') return null;
+    return s;
+  };
+  const payload = { id_produto: Number(id_produto), site_id: Number(site_id) };
+  const urlSafe = safe(url);
+  const idSafe  = safe(idNoSite);
+  if (urlSafe !== null) payload.url = urlSafe;     // inclui apenas se tiver valor real
+  if (idSafe  !== null) payload.id_no_site = idSafe;
+
+  const { data, error } = await sb.from('links_produto_site')
     .upsert(payload, { onConflict: 'id_produto,site_id' });
   if (error) throw new Error(error.message || 'Falha ao salvar link');
 })();}
@@ -1712,9 +1720,12 @@ function upsertProdutoSiteLink(ean, site_id, _site_nome, url, _descricao_produto
             </div>`;
           document.body.appendChild(pop);
 
-// Prefill de registros existentes
+// Prefill de registros existentes (normaliza null/undefined/'null' -> vazio)
 (async ()=>{
   try{
+    const urlInput = pop.querySelector('#mmUrlInput');
+    const idInput  = pop.querySelector('#mmIdNoSite');
+    const safe = (v)=> (v===null || v===undefined || String(v).toLowerCase()==='null') ? '' : String(v);
     const id_produto = await resolveProdutoIdByEan(ean);
     if (id_produto){
       const { data, error } = await sb
@@ -1724,11 +1735,15 @@ function upsertProdutoSiteLink(ean, site_id, _site_nome, url, _descricao_produto
         .eq('site_id', Number(site_id))
         .maybeSingle();
       if (!error && data){
-        const urlInput = pop.querySelector('#mmUrlInput');
-        const idInput  = pop.querySelector('#mmIdNoSite');
-        if (urlInput && typeof data.url === 'string') urlInput.value = data.url;
-        if (idInput  && typeof data.id_no_site === 'string') idInput.value = data.id_no_site;
+        if (urlInput) urlInput.value = safe(data.url).trim();
+        if (idInput)  idInput.value  = safe(data.id_no_site).trim();
+      } else {
+        if (urlInput) urlInput.value = '';
+        if (idInput)  idInput.value  = '';
       }
+    } else {
+      if (urlInput) urlInput.value = '';
+      if (idInput)  idInput.value  = '';
     }
   }catch(e){ console.warn('[MM] prefill link existente falhou:', e); }
 })();
@@ -1791,7 +1806,12 @@ btnSave.addEventListener('click', async function(){
   const urlInput = pop.querySelector('#mmUrlInput');
   const idInput  = pop.querySelector('#mmIdNoSite');
   let url = (urlInput && urlInput.value || '').trim();
-  const idNoSiteRaw = (idInput && idInput.value ? idInput.value.trim() : '');
+  let idNoSiteRaw = (idInput && idInput.value ? idInput.value.trim() : '');
+
+  // Normaliza strings 'null' -> vazio
+  if (url.toLowerCase && url.toLowerCase() === 'null') url = '';
+  if (idNoSiteRaw.toLowerCase && idNoSiteRaw.toLowerCase() === 'null') idNoSiteRaw = '';
+
   const hasUrl = url.length > 0;
   const hasId  = idNoSiteRaw.length > 0;
 
@@ -1806,6 +1826,7 @@ btnSave.addEventListener('click', async function(){
     return;
   }
 
+  // Se tiver URL, valida. Se não tiver, envia como null efetivo (não string 'null').
   if (hasUrl){
     try{
       const u = new URL(url);
@@ -1827,7 +1848,6 @@ btnSave.addEventListener('click', async function(){
   const idNoSite = hasId ? idNoSiteRaw : null;
 
   try{
-    // Mantém a assinatura de chamada existente (6 args), mas a função aceitará e tratá só o que precisa
     await upsertProdutoSiteLink(ean, site_id, site_nome, url, descricao_produto, idNoSite);
     td.classList.add('mm-na-hint');
     td.title = 'Link salvo para este site';
