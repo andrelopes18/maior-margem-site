@@ -1,11 +1,12 @@
 <!DOCTYPE html>
+
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
-  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MaiorMargem — Dashboard</title>
-  <style>
+<meta charset="utf-8"/>
+<meta content="text/html; charset=utf-8" http-equiv="Content-Type"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>MaiorMargem — Dashboard</title>
+<style>
     :root { color-scheme: dark; }
     body { margin:0; font-family: Arial, sans-serif; background:#121212; color:#fff; padding:20px; }
     header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; gap:12px; flex-wrap:wrap; }
@@ -95,94 +96,128 @@
     #chartPopover .close { background:transparent; border:1px solid #333; color:#ddd; padding:2px 8px; border-radius:6px; cursor:pointer; }
     #chartPopover .msg { font-size:12px; color:#9aa0a6; }
   </style>
-  <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-  <script src="./config.js"></script>
+<script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="./config.js"></script>
+<style>
+/* === MM inline editor (no popup) === */
+.mm-inline-link-editor{
+  position:absolute;
+  z-index:9999;
+  background:#111827;
+  color:#e5e7eb;
+  border:1px solid #374151;
+  border-radius:0.75rem;
+  padding:0.75rem;
+  box-shadow:0 10px 25px rgba(0,0,0,.35);
+  width:min(520px, 92vw);
+}
+.mm-inline-link-editor h4{
+  margin:0 0 .25rem 0;
+  font-size:0.95rem;
+  font-weight:600;
+}
+.mm-inline-link-editor .mm-meta{
+  font-size:0.8rem;
+  color:#9ca3af;
+  margin-bottom:.5rem;
+}
+.mm-inline-link-editor .mm-row{ display:flex; gap:.5rem; align-items:center; }
+.mm-inline-link-editor input[type="url"]{
+  flex:1; border:1px solid #4b5563; background:#0b1220; color:#f3f4f6; 
+  border-radius:.5rem; padding:.5rem .6rem; outline:none;
+}
+.mm-inline-link-editor input[type="url"]::placeholder{ color:#6b7280; }
+.mm-inline-link-editor .mm-actions{
+  margin-top:.6rem; display:flex; gap:.5rem; justify-content:flex-end;
+}
+.mm-inline-link-editor button{
+  border:1px solid #4b5563; background:#1f2937; color:#e5e7eb;
+  border-radius:.5rem; padding:.45rem .8rem; cursor:pointer;
+}
+.mm-inline-link-editor button.mm-primary{ background:#2563eb; border-color:#2563eb; color:#fff; }
+.mm-inline-link-editor .mm-tip{ font-size:.75rem; color:#9ca3af; margin-top:.25rem; }
+td.mm-cell-anchor{ position:relative; }
+</style>
 </head>
 <body>
 <header>
-  <h1>MaiorMargem — Dashboard</h1>
-  <div class="userbox">
-    <span id="planChip" class="chip plan">Plano: —</span>
-    <div class="userChipWrap">
-      <span id="userChip" class="chip">Usuário</span>
-      <div class="dropdown" role="menu" aria-hidden="true">
-        <button class="dd-item" id="ddMeusDados" type="button">Meus dados</button>
-        <button class="dd-item" id="ddPlanos" type="button">Planos</button>
-      </div>
-    </div>
-    <button id="btnSair" class="btn" type="button">Sair</button>
-  </div>
+<h1>MaiorMargem — Dashboard</h1>
+<div class="userbox">
+<span class="chip plan" id="planChip">Plano: —</span>
+<div class="userChipWrap">
+<span class="chip" id="userChip">Usuário</span>
+<div aria-hidden="true" class="dropdown" role="menu">
+<button class="dd-item" id="ddMeusDados" type="button">Meus dados</button>
+<button class="dd-item" id="ddPlanos" type="button">Planos</button>
+</div>
+</div>
+<button class="btn" id="btnSair" type="button">Sair</button>
+</div>
 </header>
-
 <!-- FILTROS + ESCOPO -->
 <div class="panel">
-  <div class="filters">
-    <input id="eanFilter" placeholder="Filtrar por EAN/GTIN..." />
-    <input id="descFilter" placeholder="Filtrar por descrição..." />
-    <button id="btnReload" class="btn" type="button">Recarregar</button>
-    <div class="scope" id="scopeGroup" role="radiogroup" aria-label="Escopo da pesquisa">
-      <span>Filtrar em:</span>
-      <label><input type="radio" name="scope" value="both" checked> Ambas</label>
-      <label><input type="radio" name="scope" value="favorites"> Favoritos</label>
-      <label><input type="radio" name="scope" value="general"> Geral</label>
-    </div>
-  </div>
-  <div class="status"><span id="status"></span></div>
-  <div id="err" class="err"></div>
+<div class="filters">
+<input id="eanFilter" placeholder="Filtrar por EAN/GTIN..."/>
+<input id="descFilter" placeholder="Filtrar por descrição..."/>
+<button class="btn" id="btnReload" type="button">Recarregar</button>
+<div aria-label="Escopo da pesquisa" class="scope" id="scopeGroup" role="radiogroup">
+<span>Filtrar em:</span>
+<label><input checked="" name="scope" type="radio" value="both"/> Ambas</label>
+<label><input name="scope" type="radio" value="favorites"/> Favoritos</label>
+<label><input name="scope" type="radio" value="general"/> Geral</label>
 </div>
-
+</div>
+<div class="status"><span id="status"></span></div>
+<div class="err" id="err"></div>
+</div>
 <!-- FAVORITOS -->
-<section id="favPanel" class="panel">
-  <div class="panel-header">
-    <h2>Favoritos</h2>
-    <button id="btnPrintFav" class="toggle-btn" title="Imprimir favoritos" type="button">Imprimir</button>
-    <button id="toggleFav" class="toggle-btn" aria-expanded="true" type="button">Minimizar</button>
-  </div>
-  <div id="favWrap" class="wrap">
-    <table id="favTable">
-      <thead><tr id="favHeaderRow"></tr></thead>
-      <tbody></tbody>
-    </table>
-  </div>
-  <div id="favResizer" class="resizer" title="Arraste para redimensionar. Duplo clique volta ao automático."></div>
+<section class="panel" id="favPanel">
+<div class="panel-header">
+<h2>Favoritos</h2>
+<button class="toggle-btn" id="btnPrintFav" title="Imprimir favoritos" type="button">Imprimir</button>
+<button aria-expanded="true" class="toggle-btn" id="toggleFav" type="button">Minimizar</button>
+</div>
+<div class="wrap" id="favWrap">
+<table id="favTable">
+<thead><tr id="favHeaderRow"></tr></thead>
+<tbody></tbody>
+</table>
+</div>
+<div class="resizer" id="favResizer" title="Arraste para redimensionar. Duplo clique volta ao automático."></div>
 </section>
-
 <!-- GERAL -->
-<section id="generalPanel" class="panel">
-  <div class="panel-header">
-    <h2>Geral</h2>
-    <button id="toggleGen" class="toggle-btn" aria-expanded="true" type="button">Minimizar</button>
-  </div>
-  <div id="generalWrap" class="wrap">
-    <table id="produtosTable">
-      <thead><tr id="generalHeaderRow"></tr></thead>
-      <tbody></tbody>
-    </table>
-    <div id="endMarker" class="end-marker"></div>
-  </div>
-  <div class="counts">
-    <span id="countShown"></span>
-    <span id="countTotal"></span>
-    <span id="countFavs"></span>
-  </div>
+<section class="panel" id="generalPanel">
+<div class="panel-header">
+<h2>Geral</h2>
+<button aria-expanded="true" class="toggle-btn" id="toggleGen" type="button">Minimizar</button>
+</div>
+<div class="wrap" id="generalWrap">
+<table id="produtosTable">
+<thead><tr id="generalHeaderRow"></tr></thead>
+<tbody></tbody>
+</table>
+<div class="end-marker" id="endMarker"></div>
+</div>
+<div class="counts">
+<span id="countShown"></span>
+<span id="countTotal"></span>
+<span id="countFavs"></span>
+</div>
 </section>
-
 <!-- DEBUG -->
 <div id="dbgWrap">
-  <h3>Debug</h3>
-  <pre id="dbg"></pre>
+<h3>Debug</h3>
+<pre id="dbg"></pre>
 </div>
-
 <!-- CHART POPOVER -->
 <div id="chartPopover" style="display:none;">
-  <header>
-    <span id="chartTitle">Histórico</span>
-    <button class="close" id="chartClose" aria-label="Fechar" type="button">×</button>
-  </header>
-  <canvas id="spark" width="360" height="240"></canvas>
-  <div id="chartMsg" class="msg" style="display:none;"></div>
+<header>
+<span id="chartTitle">Histórico</span>
+<button aria-label="Fechar" class="close" id="chartClose" type="button">×</button>
+</header>
+<canvas height="240" id="spark" width="360"></canvas>
+<div class="msg" id="chartMsg" style="display:none;"></div>
 </div>
-
 <script>
 /* ========= Debug ========= */
 const dbgWrap = document.getElementById('dbgWrap');
@@ -200,7 +235,7 @@ addEventListener('unhandledrejection', e => showErr('Erro assíncrono: '+(e.reas
 /* ========= Supabase ========= */
 const CFG = window.CONFIG || {};
 if(!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY){ showErr('CONFIG ausente (config.js)'); throw new Error('CONFIG ausente'); }
-const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth:{ persistSession:true, autoRefreshToken:true, detectSessionInUrl:true }});
+      sb = supabase.createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
 
 /* ========= Elementos ========= */
 const statusEl = document.getElementById('status');
@@ -979,29 +1014,53 @@ async function doLogSearch(){
 /* ========= Impressão (via iframe oculto) ========= */
 function buildPrintHTMLFromFav() {
   const favHeaderRow = document.getElementById('favHeaderRow');
-  const headers = Array.from(favHeaderRow?.children || []).map((th,i) => i===0 ? null : th.textContent.trim()).filter(Boolean);
-  const favBody = document.querySelector('#favTable tbody'); const rows = Array.from(favBody?.rows || []);
+  const headers = Array.from(favHeaderRow?.children || [])
+    .map((th,i) => i===0 ? null : (th.textContent||'').trim())
+    .filter(Boolean);
+
+  const favBody = document.querySelector('#favTable tbody');
+  const rows = Array.from(favBody?.rows || []);
+
   const thead = '<thead><tr>' + headers.map(h => '<th>'+h+'</th>').join('') + '</tr></thead>';
   let tbody = '';
+  const NA = '&mdash;';
   for (const tr of rows) {
-    const cells = Array.from(tr.cells).slice(1).map(td => { const txt = (td.textContent || '').replace(/\\s+/g, ' ').trim(); return '<td>'+(txt || NA)+'</td>'; });
+    const cells = Array.from(tr.cells).slice(1).map(td => {
+      const txt = (td.textContent || '').replace(/\s+/g, ' ').trim();
+      return '<td>' + (txt || NA) + '</td>';
+    });
     tbody += '<tr>'+cells.join('')+'</tr>';
   }
-  const css = '*{box-sizing:border-box;} body{font-family:Arial,sans-serif;color:#000;background:#fff;padding:24px;} h1{margin:0 0 4px 0;font-size:18px;} .meta{color:#444;font-size:12px;margin-bottom:14px;} table{width:100%;border-collapse:collapse;} thead th{text-align:left;font-weight:700;padding:6px 0;} tbody td{padding:4px 0;} @media print{body{padding:0;}}';
-  const now=new Date(); const meta = now.toLocaleDateString('pt-BR')+' '+now.toLocaleTimeString('pt-BR');
-  return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório — Favoritos</title><style>'+css+'</style></head><body><h1>Relatório — Favoritos</h1><div class="meta">Gerado em '+meta+'</div><table>'+thead+'<tbody>'+tbody+'</tbody></table></body></html>';
-}
-function printFavReport(){
-  const iframe = document.createElement('iframe');
-  iframe.style.position='fixed'; iframe.style.right='0'; iframe.style.bottom='0';
-  iframe.style.width='0'; iframe.style.height='0'; iframe.style.border='0'; iframe.style.visibility='hidden';
-  document.body.appendChild(iframe);
-  const doc = iframe.contentWindow || iframe.contentDocument;
-  const html = buildPrintHTMLFromFav();
-  (doc.document || doc).open();
-  (doc.document || doc).write(html + '<script>window.onload=function(){setTimeout(function(){window.focus();window.print();},10)}<\\/script>');
-  (doc.document || doc).close();
-  setTimeout(()=>{ try{ document.body.removeChild(iframe); }catch{} }, 2000);
+
+  const css = [
+    '*{box-sizing:border-box;}',
+    'body{font-family:Arial,Helvetica,sans-serif;color:#111;padding:24px;}',
+    'h1{font-size:18px;margin:0 0 12px;}',
+    '.meta{font-size:12px;color:#555;margin:0 0 16px;}',
+    'table{border-collapse:collapse;width:100%;}',
+    'thead th{border-bottom:2px solid #000;text-align:left;padding:6px 0;}',
+    'tbody td{border-bottom:1px solid #ddd;padding:4px 0;font-size:13px;}',
+    '@media print{body{padding:0;}}'
+  ].join('');
+
+  const now = new Date();
+  const meta = now.toLocaleDateString('pt-BR') + ' ' + now.toLocaleTimeString('pt-BR');
+
+  // Important: do NOT include <script> inside the returned HTML to avoid string-escaping breakages.
+  return [
+    '<!DOCTYPE html>',
+    '<html>',
+    '<head>',
+    '<meta charset="utf-8">',
+    '<title>Favoritos - Relatório</title>',
+    '<style>', css, '</style>',
+    '</head>',
+    '<body>',
+    '<h1>Favoritos</h1>',
+    '<div class="meta">Gerado em ', meta, '</div>',
+    '<table>', thead, '<tbody>', tbody, '</tbody></table>',
+    '</body></html>'
+  ].join('');
 }
 
 /* ========= Chart ========= */
@@ -1289,18 +1348,21 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
   }catch(e){ showErr('Falha na inicialização'); dlog({error:'init', detail:String(e)}); }
 })();
 </script>
-
 <!-- ===== MaiorMargem: bloco de contexto para salvar link direto por site (fallback sem EAN) ===== -->
 <style>
   .mm-na-hint { border-bottom: 1px dotted #6b6b6b; cursor: context-menu; }
 </style>
-<script>
-(function(){
+<script>(function(){
   try{
     // Cliente Supabase
     var sb = (typeof window.sb !== 'undefined' && window.sb) ? window.sb : null;
     if (!sb && typeof supabase !== 'undefined' && window.CONFIG){
-      sb = supabase.createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_ANON_KEY, { auth: { persistSession: true } });
+      if (!window.CONFIG.SUPABASE_URL || !window.CONFIG.SUPABASE_ANON_KEY) throw new Error('CONFIG ausente');
+      sb = supabase.createClient(
+        window.CONFIG.SUPABASE_URL,
+        window.CONFIG.SUPABASE_ANON_KEY,
+        { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } }
+      );
       window.sb = sb;
     }
     if (!sb){ console.warn('[MM] Supabase client não encontrado.'); return; }
@@ -1314,21 +1376,21 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
         const raw = String(ean||'').trim();
         const norm = normalizeEanDigits(raw);
 
-        // 1) ean1 / ean_norm exatos
+        // (1) ean1 / ean_norm exatos
         let { data, error } = await sb.from('cadastro_produtos')
           .select('id_produto, ean1, ean_norm')
           .or('ean1.eq.'+raw+',ean_norm.eq.'+norm)
           .limit(1);
         if (!error && data && data[0] && data[0].id_produto) return data[0].id_produto;
 
-        // 2) like
+        // (2) like
         ({ data, error } = await sb.from('cadastro_produtos')
           .select('id_produto, ean1, ean_norm')
           .or('ean1.ilike.%'+raw+'%,ean_norm.ilike.%'+norm+'%')
           .limit(1));
         if (!error && data && data[0] && data[0].id_produto) return data[0].id_produto;
 
-        // 3) tira zeros à esquerda
+        // (3) tira zeros à esquerda
         const normNoZeros = norm.replace(/^0+/, '');
         if (normNoZeros && normNoZeros !== norm){
           ({ data, error } = await sb.from('cadastro_produtos')
@@ -1338,7 +1400,7 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
           if (!error && data && data[0] && data[0].id_produto) return data[0].id_produto;
         }
 
-        // 4) fallback via view (se expuser id_produto)
+        // (4) fallback via view (se expuser id_produto)
         try{
           const vr = await sb.from(VIEW).select('id_produto').eq('ean', raw).limit(1);
           if (!vr.error && vr.data && vr.data[0] && vr.data[0].id_produto) return vr.data[0].id_produto;
@@ -1371,9 +1433,7 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
       ths.forEach((th, idx)=>{
         const txt = (th.textContent||'').trim();
         if (!txt) return;
-        // pular colunas de controle
         const lower = txt.toLowerCase();
-        if (idx===0) return; // estrela/ação
         if (['ean','descrição','descricao','meu preço','meu preco'].includes(lower)) return;
         labels.push({ index: idx, label: txt });
       });
@@ -1385,7 +1445,7 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
       const map = new Map();
       if (!labels.length) return map;
 
-      // 1) tentar via 'chosen' se existir no escopo global
+      // (1) tentar via 'chosen' se existir no escopo global
       if (typeof chosen !== 'undefined' && Array.isArray(chosen)){
         const byLabel = new Map();
         chosen.forEach(c=>{ byLabel.set(String(c.label||'').trim().toLowerCase(), Number(c.site_id)); });
@@ -1395,7 +1455,7 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
         });
       }
 
-      // 2) fallback: consultar sites por nome
+      // (2) fallback: consultar sites por nome
       const missing = labels.filter(l => !map.has(l.index));
       if (missing.length){
         const names = Array.from(new Set(missing.map(x => x.label)));
@@ -1408,12 +1468,13 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
           });
         }
       }
-
       return map;
     }
 
     function getRowEan(tr){
-      let td = tr.querySelector('.col-sku');
+      const dataEan = tr.getAttribute('data-ean') || tr.dataset.ean;
+      if (dataEan) return dataEan;
+      let td = tr.querySelector('.col-ean, .col-sku');
       if (td && td.textContent.trim()) return td.textContent.trim();
       for (const c of Array.from(tr.cells)){
         const txt = (c.textContent||'').trim();
@@ -1424,7 +1485,7 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
 
     function isNaCell(td){
       const txt = (td.textContent||'').replace(/\s+/g,'').trim();
-      return /^-+$/.test(txt); // aceita '---' e variações de número de hifens
+      return /^-+$/.test(txt); // aceita '---'
     }
 
     async function attachContextForTable(table){
@@ -1436,18 +1497,17 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
         const td = ev.target.closest('td');
         const tr = ev.target.closest('tr');
         if (!td || !tr) return;
-
         const colIndex = Array.prototype.indexOf.call(tr.children, td);
         const site_id = siteMap.get(colIndex);
-        if (!site_id) return; // só nas colunas de site
-
-        if (!isNaCell(td)) return; // apenas quando está '---'
+        if (!site_id) return;
+        if (!isNaCell(td)) return;
 
         ev.preventDefault();
         try{
           const ean = getRowEan(tr);
           if (!ean){ alert('EAN não identificado na linha.'); return; }
 
+          // Mantém compatibilidade com o prompt antigo (será interceptado pelo override)
           const url = prompt(`Cole a URL da página do produto para o site ${site_id} (EAN ${ean}):`, '');
           if (!url) return;
           try{ const u=new URL(url); if (!/^https?:$/.test(u.protocol)) throw 0; }catch(_){ alert('URL inválida. Use http(s)://'); return; }
@@ -1463,7 +1523,6 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
       }, { passive:false });
     }
 
-    // Inicializa quando a página estiver pronta e a tabela renderizada
     function whenTableReady(id, cb){
       const el = document.getElementById(id);
       if (el && el.querySelector('thead th')) { cb(el); return; }
@@ -1481,6 +1540,147 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
   }catch(err){
     console.warn('[MM] contexto salvar link - erro de inicialização:', err);
   }
+})();</script>
+<script>
+(function(){
+  // Cache maps
+  const _mmSiteNameCache = new Map();
+
+  async function resolveSiteName(sb, site_id){
+    if (_mmSiteNameCache.has(site_id)) return _mmSiteNameCache.get(site_id);
+    // Try common columns
+    const { data, error } = await sb.from('sites').select('id, nome, name, site, label').eq('id', site_id).limit(1);
+    if (error || !data || !data[0]) return String(site_id);
+    const row = data[0];
+    const nome = row.nome || row.name || row.label || row.site || ('Site '+site_id);
+    _mmSiteNameCache.set(site_id, nome);
+    return nome;
+  }
+
+  async function resolveProdutoDescricao(sb, id_produto){
+    // try cadastro_produtos.descricao then descricao_produto then nome
+    const { data, error } = await sb.from('cadastro_produtos')
+      .select('descricao, descricao_produto, nome')
+      .eq('id_produto', id_produto).limit(1);
+    if (error || !data || !data[0]) return '';
+    const r = data[0];
+    return r.descricao || r.descricao_produto || r.nome || '';
+  }
+
+  // Create an inline editor anchored to the TD; returns a Promise<string|null> for the URL
+  function openInlineEditorAtCell(td, { site_id, ean }, sb){
+    // Ensure relative positioning on the cell
+    td.classList.add('mm-cell-anchor');
+
+    // Remove any existing editor
+    document.querySelectorAll('.mm-inline-link-editor').forEach(e=>e.remove());
+
+    const editor = document.createElement('div');
+    editor.className = 'mm-inline-link-editor';
+    editor.innerHTML = \`
+      <h4>Adicionar link do produto</h4>
+      <div class="mm-meta" id="mmMeta">Carregando informações…</div>
+      <div class="mm-row">
+        <input id="mmUrl" type="url" placeholder="Cole aqui a URL completa (http:// ou https://)" autocomplete="off" />
+      </div>
+      <div class="mm-tip">Dica: copie a URL diretamente da página do produto no site.</div>
+      <div class="mm-actions">
+        <button type="button" class="mm-cancel">Cancelar</button>
+        <button type="button" class="mm-primary mm-save">Salvar</button>
+      </div>
+    \`;
+    td.appendChild(editor);
+
+    // Position within the cell (bottom-left)
+    const rect = td.getBoundingClientRect();
+    const offsetLeft = 6;
+    const offsetTop = Math.min(td.offsetHeight + 6, 180);
+    editor.style.left = offsetLeft + 'px';
+    editor.style.top = offsetTop + 'px';
+
+    const meta = editor.querySelector('#mmMeta');
+    (async ()=>{
+      try{
+        // Resolve id_produto for description
+        const eanRaw = (ean||'').toString();
+        let id_produto = null;
+        try {
+          const raw = eanRaw.trim();
+          const norm = raw.replace(/\D+/g, '');
+          let { data } = await sb.from('cadastro_produtos').select('id_produto').or('ean1.eq.'+raw+',ean_norm.eq.'+norm).limit(1);
+          if (data && data[0]) id_produto = data[0].id_produto;
+        }catch(_){}
+        const siteNome = await resolveSiteName(sb, site_id);
+        const desc = id_produto ? (await resolveProdutoDescricao(sb, id_produto)) : '';
+
+        meta.textContent = siteNome + (desc ? (' • ' + desc) : '') + (ean ? (' • EAN ' + ean) : '');
+      }catch(_){
+        meta.textContent = 'Site ' + site_id + (ean ? (' • EAN ' + ean) : '');
+      }
+    })();
+
+    const urlInput = editor.querySelector('#mmUrl');
+    urlInput.focus();
+
+    return new Promise((resolve)=>{
+      const close = (val=null)=>{ editor.remove(); resolve(val); };
+      editor.querySelector('.mm-cancel').addEventListener('click', ()=>close(null));
+      editor.querySelector('.mm-save').addEventListener('click', ()=>{
+        const v = (urlInput.value||'').trim();
+        if (!v) { urlInput.focus(); return; }
+        try{
+          const u = new URL(v);
+          if (!/^https?:$/.test(u.protocol)) throw new Error();
+        }catch(_){
+          urlInput.setCustomValidity('Informe uma URL iniciando com http:// ou https://');
+          urlInput.reportValidity();
+          setTimeout(()=>urlInput.setCustomValidity(''), 1200);
+          return;
+        }
+        close(v);
+      });
+      // ESC to close
+      editor.addEventListener('keydown', (ev)=>{
+        if (ev.key === 'Escape'){ ev.preventDefault(); close(null); }
+      });
+      // Clicking outside closes
+      setTimeout(()=>{
+        const onDocClick = (ev)=>{
+          if (!editor.contains(ev.target)){ document.removeEventListener('mousedown', onDocClick); close(null); }
+        };
+        document.addEventListener('mousedown', onDocClick);
+      }, 0);
+    });
+  }
+
+  // Enhance upsert to include site_nome and descricao_produto
+  async function upsertProdutoSiteLinkWithExtras(sb, ean, site_id, url){
+    // Reuse existing resolver if present
+    async function _resolveProdutoIdByEan(ean){
+      if (typeof resolveProdutoIdByEan === 'function'){
+        return await resolveProdutoIdByEan(ean);
+      }
+      // Fallback minimal resolve
+      const raw = String(ean||'').trim();
+      const norm = raw.replace(/\D+/g, '');
+      const { data } = await sb.from('cadastro_produtos').select('id_produto').or('ean1.eq.'+raw+',ean_norm.eq.'+norm).limit(1);
+      return data && data[0] ? data[0].id_produto : null;
+    }
+
+    const id_produto = await _resolveProdutoIdByEan(ean);
+    if (!id_produto) throw new Error('Produto não encontrado em cadastro_produtos para o EAN '+ean);
+
+    const site_nome = await resolveSiteName(sb, site_id);
+    const descricao_produto = await resolveProdutoDescricao(sb, id_produto);
+
+    const payload = { id_produto: Number(id_produto), site_id: Number(site_id), url: String(url), site_nome, descricao_produto };
+    const { error } = await sb.from('links_produto_site')
+      .upsert(payload, { onConflict: 'id_produto,site_id' });
+    if (error) throw new Error(error.message || 'Falha ao salvar link');
+  }
+
+  // Expose globally for reuse
+  window._mmInlineLink = { openInlineEditorAtCell, upsertProdutoSiteLinkWithExtras };
 })();
 </script>
 <!-- ===== Fim do bloco de contexto ===== -->
