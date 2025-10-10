@@ -1352,12 +1352,9 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
       }
     }
 
-    async function upsertProdutoSiteLink(ean, site_id, url){
-      const id_produto = await resolveProdutoIdByEan(ean);
-      if (!id_produto){
-        throw new Error('Produto não encontrado em cadastro_produtos para o EAN '+ean);
-      }
-      const payload = { id_produto: Number(id_produto), site_id: Number(site_id), url: String(url) };
+    async function upsertProdutoSiteLink(ean, site_id, url, idNoSite = null){
+      \1const payload = { id_produto: Number(id_produto), site_id: Number(site_id), url: url==null?null:String(url) };
+      if (idNoSite !== null && idNoSite !== undefined && String(idNoSite).length){ payload.id_no_site = String(idNoSite); }
       const { error } = await sb.from('links_produto_site')
         .upsert(payload, { onConflict: 'id_produto,site_id' });
       if (error) throw new Error(error.message || 'Falha ao salvar link');
@@ -1453,7 +1450,7 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
           if (!url) return;
           try{ const u=new URL(url); if (!/^https?:$/.test(u.protocol)) throw 0; }catch(_){ alert('URL inválida. Use http(s)://'); return; }
 
-          await upsertProdutoSiteLink(ean, site_id, url);
+          await upsertProdutoSiteLink(ean, site_id, url, idNoSite);
           td.classList.add('mm-na-hint');
           td.title = 'Link salvo para este site';
           alert('Link salvo com sucesso!');
@@ -1701,6 +1698,32 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
               </div>
             </div>`;
           document.body.appendChild(pop);
+
+// Referências dos inputs
+const inputEl = pop.querySelector('#mmUrlInput');
+const idNoSiteEl = pop.querySelector('#mmIdNoSite');
+
+// Prefill: buscar link já salvo para este (ean, site_id)
+(async ()=>{
+  try{
+    const id_produto = await resolveProdutoIdByEan(ean);
+    if (id_produto){
+      const { data, error } = await sb
+        .from('links_produto_site')
+        .select('url, id_no_site')
+        .eq('id_produto', Number(id_produto))
+        .eq('site_id', Number(site_id))
+        .maybeSingle();
+      if (!error && data){
+        if (data.url) inputEl.value = data.url;
+        if (data.id_no_site && idNoSiteEl) idNoSiteEl.value = data.id_no_site;
+      }
+    }
+  }catch(e){
+    console.warn('[MM] prefill link existente falhou:', e);
+  }
+})();
+
           
           
           const x = (ev.clientX || 0) + window.scrollX + 8;
