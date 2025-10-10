@@ -1353,13 +1353,13 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
     }
 
     async 
-function upsertProdutoSiteLink(ean, site_id, url, idNoSite = null){ return (async()=>{
+function upsertProdutoSiteLink(ean, site_id, _site_nome, url, _descricao_produto, idNoSite){ return (async()=>{
   const id_produto = await resolveProdutoIdByEan(ean);
   if (!id_produto){
     throw new Error('Produto não encontrado em cadastro_produtos para o EAN ' + ean);
   }
   const payload = { id_produto: Number(id_produto), site_id: Number(site_id), url: (url==null?null:String(url)) };
-  if (idNoSite !== null && idNoSite !== undefined && String(idNoSite).length){
+  if (idNoSite !== undefined && idNoSite !== null && String(idNoSite).length){
     payload.id_no_site = String(idNoSite);
   }
   const { error } = await sb.from('links_produto_site')
@@ -1712,11 +1712,7 @@ function upsertProdutoSiteLink(ean, site_id, url, idNoSite = null){ return (asyn
             </div>`;
           document.body.appendChild(pop);
 
-// Referências dos inputs
-const inputEl = pop.querySelector('#mmUrlInput');
-const idNoSiteEl = pop.querySelector('#mmIdNoSite');
-
-// Prefill do que já existe na tabela links_produto_site
+// Prefill de registros existentes
 (async ()=>{
   try{
     const id_produto = await resolveProdutoIdByEan(ean);
@@ -1728,29 +1724,39 @@ const idNoSiteEl = pop.querySelector('#mmIdNoSite');
         .eq('site_id', Number(site_id))
         .maybeSingle();
       if (!error && data){
-        if (typeof data.url === 'string' && inputEl) inputEl.value = data.url;
-        if (typeof data.id_no_site === 'string' && idNoSiteEl) idNoSiteEl.value = data.id_no_site;
+        const urlInput = pop.querySelector('#mmUrlInput');
+        const idInput  = pop.querySelector('#mmIdNoSite');
+        if (urlInput && typeof data.url === 'string') urlInput.value = data.url;
+        if (idInput  && typeof data.id_no_site === 'string') idInput.value = data.id_no_site;
       }
     }
   }catch(e){ console.warn('[MM] prefill link existente falhou:', e); }
 })();
 
-          
-          
-          const x = (ev.clientX || 0)  + 8;
-          const y = (ev.clientY || 0)  + 8;
+          document.documentElement.classList.add('mm-no-horizontal-overflow');
+          document.body.classList.add('mm-no-horizontal-overflow');
+          const x = (ev.clientX || 0) + 8;
+          const y = (ev.clientY || 0) + 8;
           pop.style.left = x + 'px';
 pop.style.top  = y + 'px';
-// Clamp to viewport (avoid overflow right/bottom and horizontal page shift)
+// Clamp to viewport (fixed coords) + flip vertical se precisar
 requestAnimationFrame(()=>{
   const rect = pop.getBoundingClientRect();
-  const vw = window.innerWidth; const vh = window.innerHeight;
-  let newLeft = rect.left; let newTop = rect.top;
-  if (rect.right > vw - 8) newLeft = Math.max(8, vw - rect.width - 8);
-  if (rect.bottom > vh - 8) newTop = Math.max(8, vh - rect.height - 8);
-  // convert viewport coords back to page coords with scroll offsets
-  pop.style.left = (newLeft ) + 'px';
-  pop.style.top  = (newTop ) + 'px';
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let left = rect.left, top = rect.top;
+
+  if (rect.right > vw - 8) left = Math.max(8, vw - rect.width - 8);
+  if (left < 8) left = 8;
+
+  if (rect.bottom > vh - 8) {
+    const above = (ev.clientY || 0) - rect.height - 8;
+    top = Math.max(8, above);
+  } else {
+    top = Math.max(8, top);
+  }
+
+  pop.style.left = left + 'px';
+  pop.style.top  = top  + 'px';
 });
 
           const inputEl = pop.querySelector('#mmUrlInput');
@@ -1762,15 +1768,14 @@ requestAnimationFrame(()=>{
           function closePop(){
             document.removeEventListener('keydown', onKey);
             if (pop && pop.parentNode) pop.parentNode.removeChild(pop);
-            
-            
+            document.documentElement.classList.remove('mm-no-horizontal-overflow');
+            document.body.classList.remove('mm-no-horizontal-overflow');
           }
           function onKey(e){
             if (e.key === 'Escape'){ closePop(); }
             if (e.key === 'Enter'){ btnSave.click(); }
           }
           
-// Fecha popover anterior se existir e guarda o atual
 try{ if (window.__mmActivePopover && window.__mmActivePopover.parentNode){ window.__mmActivePopover.parentNode.removeChild(window.__mmActivePopover); } }catch(_){}
 window.__mmActivePopover = pop;
 document.addEventListener('keydown', onKey);
@@ -1790,6 +1795,7 @@ btnSave.addEventListener('click', async function(){
   const hasUrl = url.length > 0;
   const hasId  = idNoSiteRaw.length > 0;
 
+  // aceita um ou outro ou ambos
   if (!hasUrl && !hasId){
     if (urlInput){
       urlInput.setCustomValidity('Informe a URL ou o código do produto no site.');
@@ -1821,7 +1827,8 @@ btnSave.addEventListener('click', async function(){
   const idNoSite = hasId ? idNoSiteRaw : null;
 
   try{
-    await upsertProdutoSiteLink(ean, site_id, url, idNoSite);
+    // Mantém a assinatura de chamada existente (6 args), mas a função aceitará e tratá só o que precisa
+    await upsertProdutoSiteLink(ean, site_id, site_nome, url, descricao_produto, idNoSite);
     td.classList.add('mm-na-hint');
     td.title = 'Link salvo para este site';
     closePop();
