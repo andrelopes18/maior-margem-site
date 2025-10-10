@@ -1448,7 +1448,7 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
           const ean = getRowEan(tr);
           if (!ean){ alert('EAN não identificado na linha.'); return; }
 
-          const url = prompt(`Cole a URL da página do produto para o site ${site_id} (EAN ${ean}):`, '');
+          const url = null; /* prompt removido */ //`Cole a URL da página do produto para o site ${site_id} (EAN ${ean}):`, '');
           if (!url) return;
           try{ const u=new URL(url); if (!/^https?:$/.test(u.protocol)) throw 0; }catch(_){ alert('URL inválida. Use http(s)://'); return; }
 
