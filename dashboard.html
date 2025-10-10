@@ -1492,7 +1492,7 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
 <style>
   .mm-na-hint { border-bottom: 1px dotted #6b6b6b; cursor: context-menu; }
   .mm-inline-link { display:flex; gap:8px; align-items:center; }
-  .mm-popover{ position:absolute; z-index:9999; width:min(360px, calc(100vw - 24px)); background:#111; color:#eee; border:1px solid #2a2a2a; border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,.45); padding:12px; backdrop-filter:blur(6px); overflow:hidden; }
+  .mm-popover{ position:fixed; z-index:9999; width:min(360px, calc(100vw - 24px)); background:#111; color:#eee; border:1px solid #2a2a2a; border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,.45); padding:12px; backdrop-filter:blur(6px); overflow:hidden; }
   .mm-pop-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
   .mm-pop-header strong{ font-weight:600; }
   .mm-pop-close{ background:transparent; border:0; color:#aaa; font-size:18px; line-height:1; cursor:pointer; }
@@ -1701,8 +1701,8 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
               </div>
             </div>`;
           document.body.appendChild(pop);
-          document.documentElement.classList.add('mm-no-horizontal-overflow');
-          document.body.classList.add('mm-no-horizontal-overflow');
+          
+          
           const x = (ev.clientX || 0) + window.scrollX + 8;
           const y = (ev.clientY || 0) + window.scrollY + 8;
           pop.style.left = x + 'px';
@@ -1728,8 +1728,9 @@ requestAnimationFrame(()=>{
           function closePop(){
             document.removeEventListener('keydown', onKey);
             if (pop && pop.parentNode) pop.parentNode.removeChild(pop);
-            document.documentElement.classList.remove('mm-no-horizontal-overflow');
-            document.body.classList.remove('mm-no-horizontal-overflow');
+            document.removeEventListener('mousedown', outsideClose);
+            
+            
           }
           function onKey(e){
             if (e.key === 'Escape'){ closePop(); }
@@ -1737,41 +1738,63 @@ requestAnimationFrame(()=>{
           }
           document.addEventListener('keydown', onKey);
 
+          const outsideClose = (e)=>{ if (pop && !pop.contains(e.target)) closePop(); };
+          setTimeout(()=>document.addEventListener('mousedown', outsideClose), 0);
+
           btnCancel.addEventListener('click', closePop);
           btnClose.addEventListener('click', closePop);
 
-          btnSave.addEventListener('click', async function(){
-            const url = (inputEl.value||'').trim();
-            const idNoSite = (idNoSiteEl && idNoSiteEl.value ? idNoSiteEl.value.trim() : null);
-            if (!url){ inputEl.focus(); return; }
-            try{
-              const u = new URL(url);
-              if (!/^https?:$/.test(u.protocol)) throw 0;
-            }catch(_){
-              inputEl.focus();
-              inputEl.select();
-              inputEl.setCustomValidity('Informe uma URL válida iniciando com http:// ou https://');
-              inputEl.reportValidity();
-              setTimeout(()=>inputEl.setCustomValidity(''), 1200);
-              return;
-            }
-            try{
-              await upsertProdutoSiteLink(ean, site_id, site_nome, url, descricao_produto, idNoSite);
-              td.classList.add('mm-na-hint');
-              td.title = 'Link salvo para este site';
-              closePop();
-              const ok = document.createElement('div');
-              ok.className = 'mm-pop-toast';
-              ok.textContent = 'Link salvo!';
-              document.body.appendChild(ok);
-              setTimeout(()=>{ if (ok.parentNode) ok.parentNode.removeChild(ok); }, 1600);
-            }catch(ex){
-              closePop();
-              alert('Não foi possível salvar o link: ' + (ex && ex.message ? ex.message : String(ex)));
-            }
-          });
+          
+btnSave.addEventListener('click', async function(){
+  let url = (inputEl.value||'').trim();
+  const idNoSiteRaw = (idNoSiteEl && idNoSiteEl.value ? idNoSiteEl.value.trim() : '');
+  const hasUrl = url.length > 0;
+  const hasId  = idNoSiteRaw.length > 0;
 
-          inputEl.focus();
+  // Permitir salvar com um OU outro OU ambos; bloquear apenas se ambos vazios
+  if (!hasUrl && !hasId){
+    inputEl.setCustomValidity('Informe a URL ou o código do produto no site.');
+    inputEl.reportValidity();
+    setTimeout(()=>inputEl.setCustomValidity(''), 1200);
+    inputEl.focus();
+    return;
+  }
+
+  // Validar URL somente se fornecida
+  if (hasUrl){
+    try{
+      const u = new URL(url);
+      if (!/^https?:$/.test(u.protocol)) throw 0;
+    }catch(_){
+      inputEl.focus();
+      inputEl.select();
+      inputEl.setCustomValidity('Informe uma URL válida iniciando com http:// ou https://');
+      inputEl.reportValidity();
+      setTimeout(()=>inputEl.setCustomValidity(''), 1200);
+      return;
+    }
+  } else {
+    url = null;
+  }
+
+  const idNoSite = hasId ? idNoSiteRaw : null;
+
+  try{
+    await upsertProdutoSiteLink(ean, site_id, site_nome, url, descricao_produto, idNoSite);
+    td.classList.add('mm-na-hint');
+    td.title = 'Link salvo para este site';
+    closePop();
+    const ok = document.createElement('div');
+    ok.className = 'mm-pop-toast';
+    ok.textContent = 'Link salvo!';
+    document.body.appendChild(ok);
+    setTimeout(()=>{ if (ok.parentNode) ok.parentNode.removeChild(ok); }, 1600);
+  }catch(ex){
+    closePop();
+    alert('Não foi possível salvar o link: ' + (ex && ex.message ? ex.message : String(ex)));
+  }
+});
+inputEl.focus();
         }catch(ex){
           alert('Não foi possível salvar o link: ' + (ex && ex.message ? ex.message : String(ex)));
         }
