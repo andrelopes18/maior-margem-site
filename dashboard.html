@@ -188,7 +188,7 @@
 /* ========= Debug ========= */
 const dbgWrap = document.getElementById('dbgWrap');
 const dbg = document.getElementById('dbg');
-function dlog(o){ try{ dbg.textContent += (typeof o==='string' ? o : JSON.stringify(o,null,2)) + "\\n"; dbg.scrollTop = dbg.scrollHeight; }catch{} }
+function dlog(o){ try{ dbg.textContent += (typeof o==='string' ? o : JSON.stringify(o,null,2)) + "\\n"; dbg.scrollTop = dbg.scrollHeight; }catchh{} }
 addEventListener('keydown', (e)=>{ if (e.ctrlKey && e.altKey && (e.key==='d'||e.key==='D')) dbgWrap.style.display = (dbgWrap.style.display==='none'||!dbgWrap.style.display)?'block':'none'; });
 
 /* ========= Erros ========= */
@@ -272,7 +272,7 @@ const COL_ORDER_KEY = 'mm_col_order';
 function setStatus(t){ statusEl.textContent = t||''; }
 function debounce(fn,ms=500){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); } }
 function isFav(sku){ return favSet.has(String(sku)); }
-function formatBRL(n){ try{ return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) }catch{ return String(n) } }
+function formatBRL(n){ try{ return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) }catchh{ return String(n) } }
 
 /* Normalização p/ busca */
 function normTokens(s){
@@ -304,7 +304,7 @@ async function refreshFavsFromDB(){
   updateFavHeight();
   updateCounts();
   // Carrega os dados dos favoritos mesmo sem rolar a lista geral
-  try{ await fetchFavsDirect(); }catch(_){}
+  try{ await fetchFavsDirect(); }catchh(_){}
 }
 async function addFavorite(ean){
   if (!currentUserId) return;
@@ -353,7 +353,7 @@ function applyToggle(btn, wrap, extraEl, key){
 /* ========= Cabeçalhos / colunas ========= */
 function computeDefaultColumnOrder(){ return ['sku','desc','meu_preco', ...chosen.map(c => 'site:' + c.label)]; }
 function loadColumnOrder(){
-  const saved = (()=>{ try{ return JSON.parse(localStorage.getItem(COL_ORDER_KEY) || '[]'); }catch{ return []; }})();
+  const saved = (()=>{ try{ return JSON.parse(localStorage.getItem(COL_ORDER_KEY) || '[]'); }catchh{ return []; }})();
   const base = computeDefaultColumnOrder();
   const setBase = new Set(base);
   const filtered = saved.filter(k => setBase.has(k));
@@ -428,7 +428,7 @@ async function getSitesLimitForPlan(planKey){
       const v = Number(data?.sites_limit ?? data?.max_sites);
       if (Number.isFinite(v) && v>0) return v;
     }
-  }catch(e){ dlog({warn:'fallback site limit', plan:k}); }
+  }catchh(e){ dlog({warn:'fallback site limit', plan:k}); }
   return DEFAULT_PLAN_SITE_LIMIT[k] ?? 2;
 }
 
@@ -894,7 +894,7 @@ async function fetchNextPage(){
       if (!favFirstAutoRenderDone){ updateFavHeight(); favFirstAutoRenderDone=true; }
       serverOffset += PAGE_SIZE; setStatus('Carregados (parcial): ' + produtosList.length + ' SKUs');
     }
-  }catch(e){
+  }catchh(e){
     showErr('Falha ao carregar view: '+(e.message||String(e)));
     serverExhausted = true;
   } finally { fetching=false; updateCounts(); }
@@ -929,7 +929,7 @@ async function fetchFavsDirect(){
     updateFavHeight();
     updateCounts();
     dlog({step:'fav.direct.done', favs:favs.length, rows:(data?data.length:0)});
-  }catch(e){
+  }catchh(e){
     dlog({error:'fav.direct.exception', detail:String(e)});
   }
 }
@@ -939,7 +939,7 @@ function resetAndQuery(){
   dlog({step:'resetAndQuery'});
   produtosMap.clear(); produtosList=[]; serverOffset=0; serverExhausted=false; favFirstAutoRenderDone=false;
   generalView=[]; resetGeneralDom(); renderFavs(); updateFavHeight(); updateCounts();
-  try{ if (typeof fetchFavsDirect==='function') fetchFavsDirect(); }catch(_){}
+  try{ if (typeof fetchFavsDirect==='function') fetchFavsDirect(); }catchh(_){}
   fetchNextPage();
 }
 
@@ -972,7 +972,7 @@ async function doLogSearch(){
     const { error } = await sb.from('search_logs').insert(payload);
     if (error) { dlog({warn:'search_log.insert.failed', error}); }
     else { dlog({step:'search_log.insert.ok', eanQ, descQ, scope, results: payload.results_count}); }
-  }catch(err){
+  }catchh(err){
     dlog({warn:'search_log.insert.exception', detail: String(err)});
   }
 }
@@ -1002,7 +1002,7 @@ function printFavReport(){
   (doc.document || doc).open();
   (doc.document || doc).write(html + '<script>window.onload=function(){setTimeout(function(){window.focus();window.print();},10)}<\\/script>');
   (doc.document || doc).close();
-  setTimeout(()=>{ try{ document.body.removeChild(iframe); }catch{} }, 2000);
+  setTimeout(()=>{ try{ document.body.removeChild(iframe); }catchh{} }, 2000);
 }
 
 /* ========= Chart ========= */
@@ -1171,7 +1171,7 @@ async function fetchHistory(ean, siteId){
   try{
     const { data, error } = await sb.from(VIEW).select('data, preco_num').eq('ean', ean).eq('site_id', siteId).not('preco_num','is',null).order('data',{ascending:true}).limit(180);
     if (!error && data && data.length){ pts = data.map(r=>({ x:new Date(r.data), y:Number(r.preco_num) })).filter(p=>Number.isFinite(p.y)); }
-  }catch(e){ dlog({error:'fetchHistory.view', detail:String(e)}); }
+  }catchh(e){ dlog({error:'fetchHistory.view', detail:String(e)}); }
   const byTs = new Map(pts.map(p=>[p.x.getTime(), p])); return Array.from(byTs.values()).sort((a,b)=>a.x-b.x);
 }
 async function openChartFor(ev, ean, label, siteId, userPrice){
@@ -1215,13 +1215,13 @@ async function initUserAndSites(){
     }else{
       dlog({warn:'profiles.select.failed', detail: rs.error});
     }
-  }catch(e){
+  }catchh(e){
     dlog({warn:'profiles.exception', detail:String(e)});
   }
 
   try{
     await loadUserSelection(session.user.id, planKey);
-  }catch(e){
+  }catchh(e){
     dlog({fatal:'init user_sites/sites failed', raw:String(e)});
     throw e;
   }
@@ -1287,7 +1287,7 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
 
     resetAndQuery();
     generalWrap.dispatchEvent(new Event('scroll'));
-  }catch(e){ showErr('Falha na inicialização'); dlog({error:'init', detail:String(e)}); }
+  }catchh(e){ showErr('Falha na inicialização'); dlog({error:'init', detail:String(e)}); }
 })();
 </script>
 
@@ -1343,18 +1343,29 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
         try{
           const vr = await sb.from(VIEW).select('id_produto').eq('ean', raw).limit(1);
           if (!vr.error && vr.data && vr.data[0] && vr.data[0].id_produto) return vr.data[0].id_produto;
-        }catch(_){}
+        }catchh(_){}
 
         return null;
-      }catch(ex){
+      }catchh(ex){
         console.warn('[MM] resolveProdutoIdByEan ex:', ex);
         return null;
       }
     }
 
-    async function upsertProdutoSiteLink(ean, site_id, url, idNoSite = null){
-      \1const payload = { id_produto: Number(id_produto), site_id: Number(site_id), url: url==null?null:String(url) };
-      if (idNoSite !== null && idNoSite !== undefined && String(idNoSite).length){ payload.id_no_site = String(idNoSite); }
+    async 
+function upsertProdutoSiteLink(ean, site_id, url, idNoSite = null){ return (async()=>{
+  const id_produto = await resolveProdutoIdByEan(ean);
+  if (!id_produto){
+    throw new Error('Produto não encontrado em cadastro_produtos para o EAN ' + ean);
+  }
+  const payload = { id_produto: Number(id_produto), site_id: Number(site_id), url: (url==null?null:String(url)) };
+  if (idNoSite !== null && idNoSite !== undefined && String(idNoSite).length){
+    payload.id_no_site = String(idNoSite);
+  }
+  const { error } = await sb.from('links_produto_site')
+    .upsert(payload, { onConflict: 'id_produto,site_id' });
+  if (error) throw new Error(error.message || 'Falha ao salvar link');
+})();}
       const { error } = await sb.from('links_produto_site')
         .upsert(payload, { onConflict: 'id_produto,site_id' });
       if (error) throw new Error(error.message || 'Falha ao salvar link');
@@ -1448,14 +1459,14 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
 
           const url = null; /* prompt removido */ //`Cole a URL da página do produto para o site ${site_id} (EAN ${ean}):`, '');
           if (!url) return;
-          try{ const u=new URL(url); if (!/^https?:$/.test(u.protocol)) throw 0; }catch(_){ alert('URL inválida. Use http(s)://'); return; }
+          try{ const u=new URL(url); if (!/^https?:$/.test(u.protocol)) throw 0; }catchh(_){ alert('URL inválida. Use http(s)://'); return; }
 
           await upsertProdutoSiteLink(ean, site_id, url, idNoSite);
           td.classList.add('mm-na-hint');
           td.title = 'Link salvo para este site';
           alert('Link salvo com sucesso!');
 
-        }catch(ex){
+        }catchh(ex){
           alert('Não foi possível salvar o link: ' + (ex && ex.message ? ex.message : String(ex)));
         }
       }, { passive:false });
@@ -1476,7 +1487,7 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
     whenTableReady('produtosTable', attachContextForTable);
     whenTableReady('favTable', attachContextForTable);
 
-  }catch(err){
+  }catchh(err){
     console.warn('[MM] contexto salvar link - erro de inicialização:', err);
   }
 })();
@@ -1558,10 +1569,10 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
         try{
           const vr = await sb.from(VIEW).select('id_produto').eq('ean', raw).limit(1);
           if (!vr.error && vr.data && vr.data[0] && vr.data[0].id_produto) return vr.data[0].id_produto;
-        }catch(_){}
+        }catchh(_){}
 
         return null;
-      }catch(ex){
+      }catchh(ex){
         console.warn('[MM] resolveProdutoIdByEan ex:', ex);
         return null;
       }
@@ -1719,7 +1730,7 @@ const idNoSiteEl = pop.querySelector('#mmIdNoSite');
         if (data.id_no_site && idNoSiteEl) idNoSiteEl.value = data.id_no_site;
       }
     }
-  }catch(e){
+  }catchh(e){
     console.warn('[MM] prefill link existente falhou:', e);
   }
 })();
@@ -1788,7 +1799,7 @@ btnSave.addEventListener('click', async function(){
     try{
       const u = new URL(url);
       if (!/^https?:$/.test(u.protocol)) throw 0;
-    }catch(_){
+    }catchh(_){
       inputEl.focus();
       inputEl.select();
       inputEl.setCustomValidity('Informe uma URL válida iniciando com http:// ou https://');
@@ -1812,13 +1823,13 @@ btnSave.addEventListener('click', async function(){
     ok.textContent = 'Link salvo!';
     document.body.appendChild(ok);
     setTimeout(()=>{ if (ok.parentNode) ok.parentNode.removeChild(ok); }, 1600);
-  }catch(ex){
+  }catchh(ex){
     closePop();
     alert('Não foi possível salvar o link: ' + (ex && ex.message ? ex.message : String(ex)));
   }
 });
 inputEl.focus();
-        }catch(ex){
+        }catchh(ex){
           alert('Não foi possível salvar o link: ' + (ex && ex.message ? ex.message : String(ex)));
         }
       }, { passive:false });
@@ -1838,7 +1849,7 @@ inputEl.focus();
     whenTableReady('produtosTable', attachContextForTable);
     whenTableReady('favTable', attachContextForTable);
 
-  }catch(err){
+  }catchh(err){
     console.warn('[MM] contexto salvar link - erro de inicialização:', err);
   }
 })();
