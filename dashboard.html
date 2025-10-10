@@ -97,6 +97,7 @@
   </style>
   <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="./config.js"></script>
+<style>html.mm-no-horizontal-overflow, body.mm-no-horizontal-overflow{overflow-x:hidden;}</style>
 </head>
 <body>
 <header>
@@ -1491,23 +1492,16 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
 <style>
   .mm-na-hint { border-bottom: 1px dotted #6b6b6b; cursor: context-menu; }
   .mm-inline-link { display:flex; gap:8px; align-items:center; }
-  .mm-popover{
-    position:absolute; z-index:9999; width: min(360px, calc(100vw - 24px));
-    background:#111; color:#eee; border:1px solid #2a2a2a; border-radius:12px;
-    box-shadow:0 8px 30px rgba(0,0,0,.45); padding:10px; backdrop-filter: blur(6px);
-  }
+  .mm-popover{ position:absolute; z-index:9999; width:min(360px, calc(100vw - 24px)); background:#111; color:#eee; border:1px solid #2a2a2a; border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,.45); padding:12px; backdrop-filter:blur(6px); overflow:hidden; }
   .mm-pop-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
   .mm-pop-header strong{ font-weight:600; }
   .mm-pop-close{ background:transparent; border:0; color:#aaa; font-size:18px; line-height:1; cursor:pointer; }
-  .mm-pop-body{ display:flex; flex-direction:column; gap:8px; }
+  .mm-pop-body{ display:flex; flex-direction:column; gap:8px; max-width:100%; }
   .mm-pop-row{ display:flex; gap:6px; align-items:center; font-size:12px; opacity:.9; }
   .mm-pop-row span{ color:#bbb; }
   .mm-pop-row em{ font-style:normal; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:240px; }
-  .mm-pop-input{
-    width:100%; padding:10px 12px; border-radius:10px; border:1px solid #3a3a3a; background:#0e0e0e; color:#eee;
-    outline:none;
-  }
-  .mm-pop-input:focus{ border-color:#6aa7ff; box-shadow:0 0 0 3px rgba(106,167,255,.15); }
+  .mm-pop-input{width:100%; box-sizing:border-box; padding:10px 12px; border-radius:10px; border:1px solid #4a4a4a; background:#1b1b1b; color:#f2f2f2; outline:none;}
+  .mm-pop-input:focus{ border-color:#8ab4ff; box-shadow:0 0 0 3px rgba(138,180,255,.22); background:#202020; }
   .mm-pop-actions{ display:flex; gap:8px; justify-content:flex-end; margin-top:2px; }
   .mm-pop-actions button{
     padding:8px 12px; border-radius:10px; border:1px solid #2a2a2a; cursor:pointer; background:#1a1a1a; color:#eee;
@@ -1707,10 +1701,23 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
               </div>
             </div>`;
           document.body.appendChild(pop);
+          document.documentElement.classList.add('mm-no-horizontal-overflow');
+          document.body.classList.add('mm-no-horizontal-overflow');
           const x = (ev.clientX || 0) + window.scrollX + 8;
           const y = (ev.clientY || 0) + window.scrollY + 8;
           pop.style.left = x + 'px';
-          pop.style.top  = y + 'px';
+pop.style.top  = y + 'px';
+// Clamp to viewport (avoid overflow right/bottom and horizontal page shift)
+requestAnimationFrame(()=>{
+  const rect = pop.getBoundingClientRect();
+  const vw = window.innerWidth; const vh = window.innerHeight;
+  let newLeft = rect.left; let newTop = rect.top;
+  if (rect.right > vw - 8) newLeft = Math.max(8, vw - rect.width - 8);
+  if (rect.bottom > vh - 8) newTop = Math.max(8, vh - rect.height - 8);
+  // convert viewport coords back to page coords with scroll offsets
+  pop.style.left = (newLeft + window.scrollX) + 'px';
+  pop.style.top  = (newTop + window.scrollY) + 'px';
+});
 
           const inputEl = pop.querySelector('#mmUrlInput');
           const idNoSiteEl = pop.querySelector('#mmIdNoSite');
@@ -1721,6 +1728,8 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
           function closePop(){
             document.removeEventListener('keydown', onKey);
             if (pop && pop.parentNode) pop.parentNode.removeChild(pop);
+            document.documentElement.classList.remove('mm-no-horizontal-overflow');
+            document.body.classList.remove('mm-no-horizontal-overflow');
           }
           function onKey(e){
             if (e.key === 'Escape'){ closePop(); }
