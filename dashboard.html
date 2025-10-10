@@ -97,6 +97,35 @@
   </style>
   <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="./config.js"></script>
+<style>
+  .mm-popover{
+    position:absolute; z-index:9999; width: min(360px, calc(100vw - 24px));
+    background:#111; color:#eee; border:1px solid #2a2a2a; border-radius:12px;
+    box-shadow:0 8px 30px rgba(0,0,0,.45); padding:10px; backdrop-filter: blur(6px);
+  }
+  .mm-pop-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+  .mm-pop-header strong{ font-weight:600; }
+  .mm-pop-close{ background:transparent; border:0; color:#aaa; font-size:18px; line-height:1; cursor:pointer; }
+  .mm-pop-body{ display:flex; flex-direction:column; gap:8px; }
+  .mm-pop-row{ display:flex; gap:6px; align-items:center; font-size:12px; opacity:.9; }
+  .mm-pop-row span{ color:#bbb; }
+  .mm-pop-row em{ font-style:normal; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:240px; }
+  .mm-pop-input{
+    width:100%; padding:10px 12px; border-radius:10px; border:1px solid #3a3a3a; background:#0e0e0e; color:#eee;
+    outline:none;
+  }
+  .mm-pop-input:focus{ border-color:#6aa7ff; box-shadow:0 0 0 3px rgba(106,167,255,.15); }
+  .mm-pop-actions{ display:flex; gap:8px; justify-content:flex-end; margin-top:2px; }
+  .mm-pop-actions button{
+    padding:8px 12px; border-radius:10px; border:1px solid #2a2a2a; cursor:pointer; background:#1a1a1a; color:#eee;
+  }
+  .mm-pop-actions .mm-pop-save{ background:#2a63ff; border-color:#2a63ff; color:#fff; }
+  .mm-pop-toast{
+    position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+    background:#0d4b1f; color:#e6ffe6; padding:10px 16px; border-radius:999px; box-shadow:0 6px 18px rgba(0,0,0,.35);
+    z-index:10000; font-weight:600;
+  }
+</style>
 </head>
 <body>
 <header>
@@ -1468,14 +1497,81 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
 
           const descricao_produto = getRowDesc(tr);
 
-          const url = prompt(`Cole a URL da página do produto para o site "${site_nome}"\nProduto: ${descricao_produto || '(sem descrição)'}\nEAN: ${ean}`, '');
-          if (!url) return;
-          try{ const u=new URL(url); if (!/^https?:$/.test(u.protocol)) throw 0; }catch(_){ alert('URL inválida. Use http(s)://'); return; }
+          
+          // === Popover flutuante para inserir URL ===
+          const pop = document.createElement('div');
+          pop.className = 'mm-popover';
+          pop.innerHTML = `
+            <div class="mm-pop-header">
+              <strong>${site_nome}</strong>
+              <button type="button" class="mm-pop-close" aria-label="Fechar">×</button>
+            </div>
+            <div class="mm-pop-body">
+              <div class="mm-pop-row"><span>Produto:</span><em>${(descricao_produto||'').replace(/`/g,'')}</em></div>
+              <div class="mm-pop-row"><span>EAN:</span><code>${ean||''}</code></div>
+              <input id="mmUrlInput" class="mm-pop-input" type="url" placeholder="https://exemplo.com/produto" autocomplete="off" />
+              <div class="mm-pop-actions">
+                <button type="button" class="mm-pop-save">Salvar</button>
+                <button type="button" class="mm-pop-cancel">Cancelar</button>
+              </div>
+            </div>`;
+          document.body.appendChild(pop);
+          // posiciona próximo ao clique
+          const x = (ev.clientX || 0) + window.scrollX + 8;
+          const y = (ev.clientY || 0) + window.scrollY + 8;
+          pop.style.left = x + 'px';
+          pop.style.top  = y + 'px';
 
-          await upsertProdutoSiteLink(ean, site_id, site_nome, url, descricao_produto);
-          td.classList.add('mm-na-hint');
-          td.title = 'Link salvo para este site';
-          alert('Link salvo com sucesso!');
+          const inputEl = pop.querySelector('#mmUrlInput');
+          const btnSave = pop.querySelector('.mm-pop-save');
+          const btnCancel = pop.querySelector('.mm-pop-cancel');
+          const btnClose = pop.querySelector('.mm-pop-close');
+
+          function closePop(){
+            document.removeEventListener('keydown', onKey);
+            if (pop && pop.parentNode) pop.parentNode.removeChild(pop);
+          }
+          function onKey(e){
+            if (e.key === 'Escape'){ closePop(); }
+            if (e.key === 'Enter'){ btnSave.click(); }
+          }
+          document.addEventListener('keydown', onKey);
+
+          btnCancel.addEventListener('click', closePop);
+          btnClose.addEventListener('click', closePop);
+
+          btnSave.addEventListener('click', async function(){
+            const url = (inputEl.value||'').trim();
+            if (!url){ inputEl.focus(); return; }
+            try{
+              const u = new URL(url);
+              if (!/^https?:$/.test(u.protocol)) throw 0;
+            }catch(_){
+              inputEl.focus();
+              inputEl.select();
+              inputEl.setCustomValidity('Informe uma URL válida iniciando com http:// ou https://');
+              inputEl.reportValidity();
+              setTimeout(()=>inputEl.setCustomValidity(''), 1200);
+              return;
+            }
+            try{
+              await upsertProdutoSiteLink(ean, site_id, site_nome, url, descricao_produto);
+              td.classList.add('mm-na-hint');
+              td.title = 'Link salvo para este site';
+              closePop();
+              // feedback sutil
+              const ok = document.createElement('div');
+              ok.className = 'mm-pop-toast';
+              ok.textContent = 'Link salvo!';
+              document.body.appendChild(ok);
+              setTimeout(()=>{ if (ok.parentNode) ok.parentNode.removeChild(ok); }, 1600);
+            }catch(ex){
+              closePop();
+              alert('Não foi possível salvar o link: ' + (ex && ex.message ? ex.message : String(ex)));
+            }
+          });
+
+          inputEl.focus();
 
         }catch(ex){
           alert('Não foi possível salvar o link: ' + (ex && ex.message ? ex.message : String(ex)));
