@@ -97,35 +97,6 @@
   </style>
   <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="./config.js"></script>
-<style>
-  .mm-popover{
-    position:absolute; z-index:9999; width: min(360px, calc(100vw - 24px));
-    background:#111; color:#eee; border:1px solid #2a2a2a; border-radius:12px;
-    box-shadow:0 8px 30px rgba(0,0,0,.45); padding:10px; backdrop-filter: blur(6px);
-  }
-  .mm-pop-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
-  .mm-pop-header strong{ font-weight:600; }
-  .mm-pop-close{ background:transparent; border:0; color:#aaa; font-size:18px; line-height:1; cursor:pointer; }
-  .mm-pop-body{ display:flex; flex-direction:column; gap:8px; }
-  .mm-pop-row{ display:flex; gap:6px; align-items:center; font-size:12px; opacity:.9; }
-  .mm-pop-row span{ color:#bbb; }
-  .mm-pop-row em{ font-style:normal; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:240px; }
-  .mm-pop-input{
-    width:100%; padding:10px 12px; border-radius:10px; border:1px solid #3a3a3a; background:#0e0e0e; color:#eee;
-    outline:none;
-  }
-  .mm-pop-input:focus{ border-color:#6aa7ff; box-shadow:0 0 0 3px rgba(106,167,255,.15); }
-  .mm-pop-actions{ display:flex; gap:8px; justify-content:flex-end; margin-top:2px; }
-  .mm-pop-actions button{
-    padding:8px 12px; border-radius:10px; border:1px solid #2a2a2a; cursor:pointer; background:#1a1a1a; color:#eee;
-  }
-  .mm-pop-actions .mm-pop-save{ background:#2a63ff; border-color:#2a63ff; color:#fff; }
-  .mm-pop-toast{
-    position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
-    background:#0d4b1f; color:#e6ffe6; padding:10px 16px; border-radius:999px; box-shadow:0 6px 18px rgba(0,0,0,.35);
-    z-index:10000; font-weight:600;
-  }
-</style>
 </head>
 <body>
 <header>
@@ -1322,7 +1293,6 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
 <!-- ===== MaiorMargem: bloco de contexto para salvar link direto por site (fallback sem EAN) ===== -->
 <style>
   .mm-na-hint { border-bottom: 1px dotted #6b6b6b; cursor: context-menu; }
-  .mm-inline-link { display:flex; gap:8px; align-items:center; }
 </style>
 <script>
 (function(){
@@ -1381,24 +1351,18 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
       }
     }
 
-    async function upsertProdutoSiteLink(ean, site_id, site_nome, url, descricao_produto){
+    async function upsertProdutoSiteLink(ean, site_id, url){
       const id_produto = await resolveProdutoIdByEan(ean);
       if (!id_produto){
         throw new Error('Produto não encontrado em cadastro_produtos para o EAN '+ean);
       }
-      const payload = {
-        id_produto: Number(id_produto),
-        site_id: Number(site_id),
-        site_nome: String(site_nome || ''),
-        url: String(url),
-        descricao_produto: String(descricao_produto || '')
-      };
+      const payload = { id_produto: Number(id_produto), site_id: Number(site_id), url: String(url) };
       const { error } = await sb.from('links_produto_site')
         .upsert(payload, { onConflict: 'id_produto,site_id' });
       if (error) throw new Error(error.message || 'Falha ao salvar link');
     }
 
-    // Coleta labels das colunas e tenta mapear para site_id e nome
+    // Coleta labels das colunas e tenta mapear para site_id
     function collectSiteHeaderLabels(table){
       const thead = table.querySelector('thead');
       if (!thead) return [];
@@ -1418,12 +1382,241 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
 
     async function buildSiteColumnMap(table){
       const labels = collectSiteHeaderLabels(table);
+      const map = new Map();
+      if (!labels.length) return map;
+
+      // 1) tentar via 'chosen' se existir no escopo global
+      if (typeof chosen !== 'undefined' && Array.isArray(chosen)){
+        const byLabel = new Map();
+        chosen.forEach(c=>{ byLabel.set(String(c.label||'').trim().toLowerCase(), Number(c.site_id)); });
+        labels.forEach(({index,label})=>{
+          const sid = byLabel.get(String(label).trim().toLowerCase());
+          if (sid) map.set(index, sid);
+        });
+      }
+
+      // 2) fallback: consultar sites por nome
+      const missing = labels.filter(l => !map.has(l.index));
+      if (missing.length){
+        const names = Array.from(new Set(missing.map(x => x.label)));
+        const { data, error } = await sb.from('sites').select('id, nome').in('nome', names);
+        if (!error && Array.isArray(data)){
+          const byName = new Map(data.map(r => [String(r.nome||'').trim().toLowerCase(), Number(r.id)]));
+          missing.forEach(({index, label})=>{
+            const sid = byName.get(String(label).trim().toLowerCase());
+            if (sid) map.set(index, sid);
+          });
+        }
+      }
+
+      return map;
+    }
+
+    function getRowEan(tr){
+      let td = tr.querySelector('.col-sku');
+      if (td && td.textContent.trim()) return td.textContent.trim();
+      for (const c of Array.from(tr.cells)){
+        const txt = (c.textContent||'').trim();
+        if ((txt.replace(/\D+/g,'').length)>=8) return txt;
+      }
+      return null;
+    }
+
+    function isNaCell(td){
+      const txt = (td.textContent||'').replace(/\s+/g,'').trim();
+      return /^-+$/.test(txt); // aceita '---' e variações de número de hifens
+    }
+
+    async function attachContextForTable(table){
+      const siteMap = await buildSiteColumnMap(table);
+      const tbody = table.querySelector('tbody');
+      if(!tbody) return;
+
+      tbody.addEventListener('contextmenu', async function(ev){
+        const td = ev.target.closest('td');
+        const tr = ev.target.closest('tr');
+        if (!td || !tr) return;
+
+        const colIndex = Array.prototype.indexOf.call(tr.children, td);
+        const site_id = siteMap.get(colIndex);
+        if (!site_id) return; // só nas colunas de site
+
+        if (!isNaCell(td)) return; // apenas quando está '---'
+
+        ev.preventDefault();
+        try{
+          const ean = getRowEan(tr);
+          if (!ean){ alert('EAN não identificado na linha.'); return; }
+
+          const url = prompt(`Cole a URL da página do produto para o site ${site_id} (EAN ${ean}):`, '');
+          if (!url) return;
+          try{ const u=new URL(url); if (!/^https?:$/.test(u.protocol)) throw 0; }catch(_){ alert('URL inválida. Use http(s)://'); return; }
+
+          await upsertProdutoSiteLink(ean, site_id, url);
+          td.classList.add('mm-na-hint');
+          td.title = 'Link salvo para este site';
+          alert('Link salvo com sucesso!');
+
+        }catch(ex){
+          alert('Não foi possível salvar o link: ' + (ex && ex.message ? ex.message : String(ex)));
+        }
+      }, { passive:false });
+    }
+
+    // Inicializa quando a página estiver pronta e a tabela renderizada
+    function whenTableReady(id, cb){
+      const el = document.getElementById(id);
+      if (el && el.querySelector('thead th')) { cb(el); return; }
+      const obs = new MutationObserver(()=>{
+        const el2 = document.getElementById(id);
+        if (el2 && el2.querySelector('thead th')) { obs.disconnect(); cb(el2); }
+      });
+      obs.observe(document.documentElement, { childList: true, subtree: true });
+      setTimeout(()=>obs.disconnect(), 10000);
+    }
+
+    whenTableReady('produtosTable', attachContextForTable);
+    whenTableReady('favTable', attachContextForTable);
+
+  }catch(err){
+    console.warn('[MM] contexto salvar link - erro de inicialização:', err);
+  }
+})();
+</script>
+<!-- ===== Fim do bloco de contexto ===== -->
+</body>
+</html>
+
+<!-- ===== MaiorMargem: bloco de contexto para salvar link direto por site (fallback sem EAN) ===== -->
+<style>
+  .mm-na-hint { border-bottom: 1px dotted #6b6b6b; cursor: context-menu; }
+  .mm-inline-link { display:flex; gap:8px; align-items:center; }
+  .mm-popover{
+    position:absolute; z-index:9999; width: min(360px, calc(100vw - 24px));
+    background:#111; color:#eee; border:1px solid #2a2a2a; border-radius:12px;
+    box-shadow:0 8px 30px rgba(0,0,0,.45); padding:10px; backdrop-filter: blur(6px);
+  }
+  .mm-pop-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+  .mm-pop-header strong{ font-weight:600; }
+  .mm-pop-close{ background:transparent; border:0; color:#aaa; font-size:18px; line-height:1; cursor:pointer; }
+  .mm-pop-body{ display:flex; flex-direction:column; gap:8px; }
+  .mm-pop-row{ display:flex; gap:6px; align-items:center; font-size:12px; opacity:.9; }
+  .mm-pop-row span{ color:#bbb; }
+  .mm-pop-row em{ font-style:normal; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:240px; }
+  .mm-pop-input{
+    width:100%; padding:10px 12px; border-radius:10px; border:1px solid #3a3a3a; background:#0e0e0e; color:#eee;
+    outline:none;
+  }
+  .mm-pop-input:focus{ border-color:#6aa7ff; box-shadow:0 0 0 3px rgba(106,167,255,.15); }
+  .mm-pop-actions{ display:flex; gap:8px; justify-content:flex-end; margin-top:2px; }
+  .mm-pop-actions button{
+    padding:8px 12px; border-radius:10px; border:1px solid #2a2a2a; cursor:pointer; background:#1a1a1a; color:#eee;
+  }
+  .mm-pop-actions .mm-pop-save{ background:#2a63ff; border-color:#2a63ff; color:#fff; }
+  .mm-pop-toast{
+    position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+    background:#0d4b1f; color:#e6ffe6; padding:10px 16px; border-radius:999px; box-shadow:0 6px 18px rgba(0,0,0,.35);
+    z-index:10000; font-weight:600;
+  }
+</style>
+<script>
+(function(){
+  try{
+    // Cliente Supabase
+    var sb = (typeof window.sb !== 'undefined' && window.sb) ? window.sb : null;
+    if (!sb && typeof supabase !== 'undefined' && window.CONFIG){
+      sb = supabase.createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_ANON_KEY, { auth: { persistSession: true } });
+      window.sb = sb;
+    }
+    if (!sb){ console.warn('[MM] Supabase client não encontrado.'); return; }
+
+    var VIEW = (typeof window.VIEW === 'string' && window.VIEW) ? window.VIEW : 'vw_precos_dinamica';
+
+    function normalizeEanDigits(e){ return String(e||'').replace(/\D+/g,''); }
+
+    async function resolveProdutoIdByEan(ean){
+      try{
+        const raw = String(ean||'').trim();
+        const norm = normalizeEanDigits(raw);
+
+        // 1) ean1 / ean_norm exatos
+        let { data, error } = await sb.from('cadastro_produtos')
+          .select('id_produto, ean1, ean_norm')
+          .or('ean1.eq.'+raw+',ean_norm.eq.'+norm)
+          .limit(1);
+        if (!error && data && data[0] && data[0].id_produto) return data[0].id_produto;
+
+        // 2) like
+        ({ data, error } = await sb.from('cadastro_produtos')
+          .select('id_produto, ean1, ean_norm')
+          .or('ean1.ilike.%'+raw+'%,ean_norm.ilike.%'+norm+'%')
+          .limit(1));
+        if (!error && data && data[0] && data[0].id_produto) return data[0].id_produto;
+
+        // 3) tira zeros à esquerda
+        const normNoZeros = norm.replace(/^0+/, '');
+        if (normNoZeros && normNoZeros !== norm){
+          ({ data, error } = await sb.from('cadastro_produtos')
+            .select('id_produto, ean1, ean_norm')
+            .or('ean1.eq.'+normNoZeros+',ean_norm.eq.'+normNoZeros)
+            .limit(1));
+          if (!error && data && data[0] && data[0].id_produto) return data[0].id_produto;
+        }
+
+        // 4) fallback via view (se expuser id_produto)
+        try{
+          const vr = await sb.from(VIEW).select('id_produto').eq('ean', raw).limit(1);
+          if (!vr.error && vr.data && vr.data[0] && vr.data[0].id_produto) return vr.data[0].id_produto;
+        }catch(_){}
+
+        return null;
+      }catch(ex){
+        console.warn('[MM] resolveProdutoIdByEan ex:', ex);
+        return null;
+      }
+    }
+
+    async function upsertProdutoSiteLink(ean, site_id, site_nome, url, descricao_produto, id_no_site){
+      const id_produto = await resolveProdutoIdByEan(ean);
+      if (!id_produto){
+        throw new Error('Produto não encontrado em cadastro_produtos para o EAN '+ean);
+      }
+      const payload = {
+        id_produto: Number(id_produto),
+        site_id: Number(site_id),
+        site_nome: String(site_nome || ''),
+        url: String(url),
+        descricao_produto: String(descricao_produto || ''),
+        id_no_site: (id_no_site == null ? null : String(id_no_site))
+      };
+      const { error } = await sb.from('links_produto_site')
+        .upsert(payload, { onConflict: 'id_produto,site_id' });
+      if (error) throw new Error(error.message || 'Falha ao salvar link');
+    }
+
+    function collectSiteHeaderLabels(table){
+      const thead = table.querySelector('thead');
+      if (!thead) return [];
+      const ths = Array.from(thead.querySelectorAll('th'));
+      const labels = [];
+      ths.forEach((th, idx)=>{
+        const txt = (th.textContent||'').trim();
+        if (!txt) return;
+        const lower = txt.toLowerCase();
+        if (idx===0) return;
+        if (['ean','descrição','descricao','meu preço','meu preco'].includes(lower)) return;
+        labels.push({ index: idx, label: txt });
+      });
+      return labels;
+    }
+
+    async function buildSiteColumnMap(table){
+      const labels = collectSiteHeaderLabels(table);
       const idMap = new Map();
       const nameMap = new Map();
 
       if (!labels.length) return { idMap, nameMap };
 
-      // 1) tentar via 'chosen' se existir no escopo global
       if (typeof chosen !== 'undefined' && Array.isArray(chosen)){
         const byLabel = new Map();
         chosen.forEach(c=>{ byLabel.set(String(c.label||'').trim().toLowerCase(), { id:Number(c.site_id), nome:String(c.label||'') }); });
@@ -1433,7 +1626,6 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
         });
       }
 
-      // 2) fallback: consultar sites por nome
       const missing = labels.filter(l => !idMap.has(l.index));
       if (missing.length){
         const names = Array.from(new Set(missing.map(x => x.label)));
@@ -1487,18 +1679,16 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
         const colIndex = Array.prototype.indexOf.call(tr.children, td);
         const site_id = siteIdByCol.get(colIndex);
         const site_nome = siteNameByCol.get(colIndex) || ('Site '+(site_id||''));
-        if (!site_id) return; // só nas colunas de site
-        if (!isNaCell(td)) return; // apenas quando está '---'
+        if (!site_id) return;
+        if (!isNaCell(td)) return;
 
         ev.preventDefault();
         try{
           const ean = getRowEan(tr);
           if (!ean){ alert('EAN não identificado na linha.'); return; }
-
           const descricao_produto = getRowDesc(tr);
 
-          
-          // === Popover flutuante para inserir URL ===
+          // === Popover flutuante para inserir URL e Código no site ===
           const pop = document.createElement('div');
           pop.className = 'mm-popover';
           pop.innerHTML = `
@@ -1510,19 +1700,20 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
               <div class="mm-pop-row"><span>Produto:</span><em>${(descricao_produto||'').replace(/`/g,'')}</em></div>
               <div class="mm-pop-row"><span>EAN:</span><code>${ean||''}</code></div>
               <input id="mmUrlInput" class="mm-pop-input" type="url" placeholder="https://exemplo.com/produto" autocomplete="off" />
+              <input id="mmIdNoSite" class="mm-pop-input" type="text" placeholder="Código do produto no site (opcional)" autocomplete="off" />
               <div class="mm-pop-actions">
                 <button type="button" class="mm-pop-save">Salvar</button>
                 <button type="button" class="mm-pop-cancel">Cancelar</button>
               </div>
             </div>`;
           document.body.appendChild(pop);
-          // posiciona próximo ao clique
           const x = (ev.clientX || 0) + window.scrollX + 8;
           const y = (ev.clientY || 0) + window.scrollY + 8;
           pop.style.left = x + 'px';
           pop.style.top  = y + 'px';
 
           const inputEl = pop.querySelector('#mmUrlInput');
+          const idNoSiteEl = pop.querySelector('#mmIdNoSite');
           const btnSave = pop.querySelector('.mm-pop-save');
           const btnCancel = pop.querySelector('.mm-pop-cancel');
           const btnClose = pop.querySelector('.mm-pop-close');
@@ -1542,6 +1733,7 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
 
           btnSave.addEventListener('click', async function(){
             const url = (inputEl.value||'').trim();
+            const idNoSite = (idNoSiteEl && idNoSiteEl.value ? idNoSiteEl.value.trim() : null);
             if (!url){ inputEl.focus(); return; }
             try{
               const u = new URL(url);
@@ -1555,11 +1747,10 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
               return;
             }
             try{
-              await upsertProdutoSiteLink(ean, site_id, site_nome, url, descricao_produto);
+              await upsertProdutoSiteLink(ean, site_id, site_nome, url, descricao_produto, idNoSite);
               td.classList.add('mm-na-hint');
               td.title = 'Link salvo para este site';
               closePop();
-              // feedback sutil
               const ok = document.createElement('div');
               ok.className = 'mm-pop-toast';
               ok.textContent = 'Link salvo!';
@@ -1572,14 +1763,12 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
           });
 
           inputEl.focus();
-
         }catch(ex){
           alert('Não foi possível salvar o link: ' + (ex && ex.message ? ex.message : String(ex)));
         }
       }, { passive:false });
     }
 
-    // Inicializa quando a página estiver pronta e a tabela renderizada
     function whenTableReady(id, cb){
       const el = document.getElementById(id);
       if (el && el.querySelector('thead th')) { cb(el); return; }
@@ -1600,5 +1789,3 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
 })();
 </script>
 <!-- ===== Fim do bloco de contexto ===== -->
-</body>
-</html>
