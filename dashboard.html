@@ -1741,13 +1741,25 @@ pop.style.top  = y + 'px';
 // Clamp to viewport (avoid overflow right/bottom and horizontal page shift)
 requestAnimationFrame(()=>{
   const rect = pop.getBoundingClientRect();
-  const vw = window.innerWidth; const vh = window.innerHeight;
-  let newLeft = rect.left; let newTop = rect.top;
-  if (rect.right > vw - 8) newLeft = Math.max(8, vw - rect.width - 8);
-  if (rect.bottom > vh - 8) newTop = Math.max(8, vh - rect.height - 8);
-  // convert viewport coords back to page coords with scroll offsets
-  pop.style.left = (newLeft + window.scrollX) + 'px';
-  pop.style.top  = (newTop + window.scrollY) + 'px';
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let left = rect.left;
+  let top  = rect.top;
+
+  // Corrige horizontal: encosta se passar da direita/esquerda
+  if (rect.right > vw - 8) left = Math.max(8, vw - rect.width - 8);
+  if (left < 8) left = 8;
+
+  // Corrige vertical com flip para cima se exceder a borda inferior
+  if (rect.bottom > vh - 8) {
+    const above = (ev.clientY || 0) - rect.height - 8;
+    top = Math.max(8, above);
+  } else {
+    top = Math.max(8, top);
+  }
+
+  // Como .mm-popover é position:fixed, usamos coordenadas de viewport (sem scroll)
+  pop.style.left = left + 'px';
+  pop.style.top  = top  + 'px';
 });
 
           const inputEl = pop.querySelector('#mmUrlInput');
