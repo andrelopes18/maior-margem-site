@@ -1293,6 +1293,7 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
 <!-- ===== MaiorMargem: bloco de contexto para salvar link direto por site (fallback sem EAN) ===== -->
 <style>
   .mm-na-hint { border-bottom: 1px dotted #6b6b6b; cursor: context-menu; }
+  .mm-inline-link { display:flex; gap:8px; align-items:center; }
 </style>
 <script>
 (function(){
@@ -1351,18 +1352,24 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
       }
     }
 
-    async function upsertProdutoSiteLink(ean, site_id, url){
+    async function upsertProdutoSiteLink(ean, site_id, site_nome, url, descricao_produto){
       const id_produto = await resolveProdutoIdByEan(ean);
       if (!id_produto){
         throw new Error('Produto não encontrado em cadastro_produtos para o EAN '+ean);
       }
-      const payload = { id_produto: Number(id_produto), site_id: Number(site_id), url: String(url) };
+      const payload = {
+        id_produto: Number(id_produto),
+        site_id: Number(site_id),
+        site_nome: String(site_nome || ''),
+        url: String(url),
+        descricao_produto: String(descricao_produto || '')
+      };
       const { error } = await sb.from('links_produto_site')
         .upsert(payload, { onConflict: 'id_produto,site_id' });
       if (error) throw new Error(error.message || 'Falha ao salvar link');
     }
 
-    // Coleta labels das colunas e tenta mapear para site_id
+    // Coleta labels das colunas e tenta mapear para site_id e nome
     function collectSiteHeaderLabels(table){
       const thead = table.querySelector('thead');
       if (!thead) return [];
@@ -1382,34 +1389,36 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
 
     async function buildSiteColumnMap(table){
       const labels = collectSiteHeaderLabels(table);
-      const map = new Map();
-      if (!labels.length) return map;
+      const idMap = new Map();
+      const nameMap = new Map();
+
+      if (!labels.length) return { idMap, nameMap };
 
       // 1) tentar via 'chosen' se existir no escopo global
       if (typeof chosen !== 'undefined' && Array.isArray(chosen)){
         const byLabel = new Map();
-        chosen.forEach(c=>{ byLabel.set(String(c.label||'').trim().toLowerCase(), Number(c.site_id)); });
+        chosen.forEach(c=>{ byLabel.set(String(c.label||'').trim().toLowerCase(), { id:Number(c.site_id), nome:String(c.label||'') }); });
         labels.forEach(({index,label})=>{
-          const sid = byLabel.get(String(label).trim().toLowerCase());
-          if (sid) map.set(index, sid);
+          const info = byLabel.get(String(label).trim().toLowerCase());
+          if (info) { idMap.set(index, info.id); nameMap.set(index, info.nome); }
         });
       }
 
       // 2) fallback: consultar sites por nome
-      const missing = labels.filter(l => !map.has(l.index));
+      const missing = labels.filter(l => !idMap.has(l.index));
       if (missing.length){
         const names = Array.from(new Set(missing.map(x => x.label)));
         const { data, error } = await sb.from('sites').select('id, nome').in('nome', names);
         if (!error && Array.isArray(data)){
-          const byName = new Map(data.map(r => [String(r.nome||'').trim().toLowerCase(), Number(r.id)]));
+          const byName = new Map(data.map(r => [String(r.nome||'').trim().toLowerCase(), { id:Number(r.id), nome:String(r.nome||'') }]));
           missing.forEach(({index, label})=>{
-            const sid = byName.get(String(label).trim().toLowerCase());
-            if (sid) map.set(index, sid);
+            const info = byName.get(String(label).trim().toLowerCase());
+            if (info) { idMap.set(index, info.id); nameMap.set(index, info.nome); }
           });
         }
       }
 
-      return map;
+      return { idMap, nameMap };
     }
 
     function getRowEan(tr){
@@ -1422,13 +1431,22 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
       return null;
     }
 
+    function getRowDesc(tr){
+      const td = tr.querySelector('.col-desc');
+      if (td) return (td.textContent || '').trim();
+      return '';
+    }
+
     function isNaCell(td){
       const txt = (td.textContent||'').replace(/\s+/g,'').trim();
-      return /^-+$/.test(txt); // aceita '---' e variações de número de hifens
+      return /^-+$/.test(txt);
     }
 
     async function attachContextForTable(table){
-      const siteMap = await buildSiteColumnMap(table);
+      const maps = await buildSiteColumnMap(table);
+      const siteIdByCol = maps.idMap;
+      const siteNameByCol = maps.nameMap;
+
       const tbody = table.querySelector('tbody');
       if(!tbody) return;
 
@@ -1438,9 +1456,9 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
         if (!td || !tr) return;
 
         const colIndex = Array.prototype.indexOf.call(tr.children, td);
-        const site_id = siteMap.get(colIndex);
+        const site_id = siteIdByCol.get(colIndex);
+        const site_nome = siteNameByCol.get(colIndex) || ('Site '+(site_id||''));
         if (!site_id) return; // só nas colunas de site
-
         if (!isNaCell(td)) return; // apenas quando está '---'
 
         ev.preventDefault();
@@ -1448,11 +1466,13 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
           const ean = getRowEan(tr);
           if (!ean){ alert('EAN não identificado na linha.'); return; }
 
-          const url = prompt(`Cole a URL da página do produto para o site ${site_id} (EAN ${ean}):`, '');
+          const descricao_produto = getRowDesc(tr);
+
+          const url = prompt(`Cole a URL da página do produto para o site "${site_nome}"\nProduto: ${descricao_produto || '(sem descrição)'}\nEAN: ${ean}`, '');
           if (!url) return;
           try{ const u=new URL(url); if (!/^https?:$/.test(u.protocol)) throw 0; }catch(_){ alert('URL inválida. Use http(s)://'); return; }
 
-          await upsertProdutoSiteLink(ean, site_id, url);
+          await upsertProdutoSiteLink(ean, site_id, site_nome, url, descricao_produto);
           td.classList.add('mm-na-hint');
           td.title = 'Link salvo para este site';
           alert('Link salvo com sucesso!');
