@@ -97,6 +97,7 @@
   </style>
   <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="./config.js"></script>
+<style>html.mm-no-horizontal-overflow, body.mm-no-horizontal-overflow{overflow-x:hidden;}</style>
 </head>
 <body>
 <header>
@@ -1491,7 +1492,7 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
 <style>
   .mm-na-hint { border-bottom: 1px dotted #6b6b6b; cursor: context-menu; }
   .mm-inline-link { display:flex; gap:8px; align-items:center; }
-  .mm-popover{ position:fixed; z-index:9999; width:min(360px, calc(100vw - 24px)); background:#111; color:#eee; border:1px solid #2a2a2a; border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,.45); padding:12px; backdrop-filter:blur(6px); overflow:hidden; }
+  .mm-popover{ position:absolute; z-index:9999; width:min(360px, calc(100vw - 24px)); background:#111; color:#eee; border:1px solid #2a2a2a; border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,.45); padding:12px; backdrop-filter:blur(6px); overflow:hidden; }
   .mm-pop-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
   .mm-pop-header strong{ font-weight:600; }
   .mm-pop-close{ background:transparent; border:0; color:#aaa; font-size:18px; line-height:1; cursor:pointer; }
@@ -1682,8 +1683,6 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
           const descricao_produto = getRowDesc(tr);
 
           // === Popover flutuante para inserir URL e Código no site ===
-          const oldPop = document.querySelector('.mm-popover');
-          if (oldPop && oldPop.parentNode) oldPop.parentNode.removeChild(oldPop);
           const pop = document.createElement('div');
           pop.className = 'mm-popover';
           pop.innerHTML = `
@@ -1702,11 +1701,15 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
               </div>
             </div>`;
           document.body.appendChild(pop);
-          
+          document.documentElement.classList.add('mm-no-horizontal-overflow');
+          document.body.classList.add('mm-no-horizontal-overflow');
           const x = (ev.clientX || 0) + window.scrollX + 8;
           const y = (ev.clientY || 0) + window.scrollY + 8;
           pop.style.left = x + 'px';
 pop.style.top  = y + 'px';
+// Clamp to viewport (avoid overflow right/bottom and horizontal page shift)
+requestAnimationFrame(()=>{
+  const rect = pop.getBoundingClientRect();
   const vw = window.innerWidth; const vh = window.innerHeight;
   let newLeft = rect.left; let newTop = rect.top;
   if (rect.right > vw - 8) newLeft = Math.max(8, vw - rect.width - 8);
@@ -1725,7 +1728,8 @@ pop.style.top  = y + 'px';
           function closePop(){
             document.removeEventListener('keydown', onKey);
             if (pop && pop.parentNode) pop.parentNode.removeChild(pop);
-            
+            document.documentElement.classList.remove('mm-no-horizontal-overflow');
+            document.body.classList.remove('mm-no-horizontal-overflow');
           }
           function onKey(e){
             if (e.key === 'Escape'){ closePop(); }
