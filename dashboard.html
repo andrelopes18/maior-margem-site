@@ -1477,7 +1477,7 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
         const tr = ev.target.closest('tr');
         if (!td || !tr) return;
 
-        const colIndex = Array.prototype.indexOf.call(tr.children, td);
+        ev.preventDefault(); ev.stopPropagation(); const colIndex = Array.prototype.indexOf.call(tr.children, td);
         const site_id = siteIdByCol.get(colIndex);
         const site_nome = siteNameByCol.get(colIndex) || ('Site '+(site_id||''));
         if (!site_id) return;
@@ -1490,6 +1490,7 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
           const descricao_produto = getRowDesc(tr);
 
           // === Popover flutuante para inserir URL e Código no site ===
+          document.querySelectorAll('.mm-popover').forEach(n=>n.remove());
           const pop = document.createElement('div');
           pop.className = 'mm-popover';
           pop.innerHTML = `
