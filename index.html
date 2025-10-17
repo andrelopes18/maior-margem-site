@@ -7,93 +7,41 @@
 <style>
   :root { color-scheme: dark; }
   /* Base */
-  body{
-    margin:0;
-    font-family:'Segoe UI',Arial,sans-serif;
-    background-color:#0b0b0b;
-    color:#fff;
-    line-height:1.45;
-  }
+  html,body{margin:0;height:100%;background:#0b0b0b;color:#fff;font-family:'Segoe UI',Arial,sans-serif}
   a{color:#9cf;text-decoration:none}
   img{display:block;max-width:100%;height:auto}
-  /* Background image fixed, centered, not cropped */
-  .bg-hero{
-    position:relative;
-    min-height:64vh;
-    background-image:url('./Gemini_Generated_Image_ag5zswag5zswag5z.png');
-    background-size:contain;
-    background-repeat:no-repeat;
-    background-position:center top;
-    background-attachment:fixed;
-    display:flex;
-    align-items:flex-end;
-    justify-content:center;
-    padding:32px 16px 0;
-  }
-  /* Soft gradient overlay from top to main section to avoid harsh cut */
-  .bg-hero::before{
-    content:"";
-    position:absolute; inset:0;
-    background:linear-gradient(180deg, rgba(0,0,0,.85) 0%, rgba(0,0,0,.4) 35%, rgba(0,0,0,0) 60%);
-    pointer-events:none;
-  }
   /* Header */
-  header{display:flex;justify-content:space-between;align-items:center;padding:15px 30px;background:rgba(18,18,18,0.9);position:sticky;top:0;z-index:1000;border-bottom:1px solid #2a2a2a;backdrop-filter:saturate(120%) blur(6px)}
+  header{display:flex;justify-content:space-between;align-items:center;padding:15px 30px;background:rgba(18,18,18,.95);position:sticky;top:0;z-index:1000;border-bottom:1px solid #222;backdrop-filter:saturate(120%) blur(6px)}
   header img{height:45px}
-  .auth-chip{background:#0e4;color:#001;padding:6px 10px;border-radius:999px;font-size:12px;margin-left:12px;display:none}
   .header-buttons button{background:#00b140;color:#fff;border:none;padding:10px 20px;margin-left:10px;border-radius:25px;cursor:pointer;font-size:14px;transition:transform .2s, background .3s}
   .header-buttons button:hover{background:#009b38;transform:scale(1.05)}
-  /* Copy on top of the background */
-  .hero-copy{
-    position:relative;
-    z-index:2;
-    max-width:1100px;
-    margin:0 auto;
-    text-align:center;
-    padding:40px 20px 12px;
-  }
-  .hero-copy h1{font-size:34px;margin:0 0 8px;color:#00b140}
-  .hero-copy p{margin:0 auto;max-width:900px;color:#ddd}
-  /* Clean image strip, no overlap */
-  .showcase-strip{
-    position:relative;
-    z-index:2;
-    max-width:1200px;
-    margin:18px auto 24px;
-    padding:0 20px;
-    display:grid;
-    grid-template-columns:repeat(12,1fr);
-    gap:16px;
-  }
-  .card-img{
-    grid-column:span 12;
-    border:1px solid #2a2a2a;
-    background:#141414;
-    border-radius:14px;
-    overflow:hidden;
-    box-shadow:0 10px 36px rgba(0,0,0,.45);
-  }
-  .card-img img{width:100%;height:auto}
-  @media (min-width: 860px){
-    .card-img--wide{grid-column:span 7}
-    .card-img--tall{grid-column:span 5}
-  }
+  .auth-chip{display:none;background:#0e4;color:#001;padding:6px 10px;border-radius:999px;font-size:12px;margin-left:12px}
+  /* Title (above banner) */
+  .page-title{max-width:1100px;margin:28px auto 8px;padding:0 20px}
+  .page-title h1{margin:0 0 6px;font-size:34px;color:#00b140}
+  .page-title p{margin:0;color:#ddd}
+  /* HERO: big banner that shrinks */
+  .hero-wrap{position:relative;height:70vh;min-height:420px;margin:10px auto 0;max-width:1400px}
+  .hero-banner{position:sticky;top:74px;height:calc(70vh - 74px);display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:2}
+  .hero-img{width:100%;max-width:1300px;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.6);border:1px solid #242424;will-change:transform,opacity}
+  .hero-gradient{position:absolute;inset:0;background:linear-gradient(180deg, rgba(0,0,0,.85) 0%, rgba(0,0,0,0) 40%, rgba(0,0,0,0) 70%, rgba(0,0,0,.9) 100%);z-index:1;pointer-events:none}
+  /* Dock area where the banner lands */
+  .dock-area{max-width:1200px;margin:0 auto;padding:10px 20px}
+  .dock-card{border:1px solid #2a2a2a;background:#121212;border-radius:14px;padding:12px;box-shadow:0 10px 36px rgba(0,0,0,.45)}
+  .dock-card img{border-radius:10px}
+  /* Gallery aside the dock to avoid overlap */
+  .gallery{max-width:1200px;margin:20px auto 30px;padding:0 20px;display:grid;grid-template-columns:repeat(12,1fr);gap:16px}
+  .g-item{grid-column:span 12;border:1px solid #2a2a2a;background:#121212;border-radius:14px;overflow:hidden;box-shadow:0 6px 28px rgba(0,0,0,.35)}
+  @media(min-width: 900px){ .g-item--half{grid-column:span 6} }
   /* Plans */
-  .plans-wrap{
-    position:relative;
-    z-index:3;
-    padding:40px 20px 64px;
-    background:linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(18,18,18,0.85) 18%, rgba(18,18,18,0.95) 60%, rgba(18,18,18,1) 100%);
-    margin-top:-24px;
-  }
-  .plans{display:flex;flex-wrap:wrap;justify-content:center;gap:20px;max-width:1200px;margin:0 auto}
+  .plans{display:flex;flex-wrap:wrap;justify-content:center;padding:40px 20px;gap:20px;background:#121212}
   .plan{border:1px solid #2a2a2a;border-radius:10px;padding:25px;width:260px;background:#1c1c1c;box-shadow:0 2px 12px rgba(0,0,0,.3);text-align:center;transition:transform .3s, border-color .3s}
   .plan:hover{transform:translateY(-5px);border-color:#00b140}
   .plan h2{color:#00b140;font-size:20px;margin:0}
   .plan ul{list-style:none;padding:0;margin:15px 0;text-align:left}
   .plan ul li{margin-bottom:8px}
   .plan .price{font-size:20px;color:#e63946;font-weight:bold;margin-top:10px}
-  /* Side panels */
+  /* Panels */
   .overlay{display:none;position:fixed;z-index:1500;inset:0;background:rgba(0,0,0,.5)}
   .side-panel{position:fixed;top:0;right:-400px;width:350px;height:100%;background:#1c1c1c;box-shadow:-4px 0 15px rgba(0,0,0,.5);z-index:2000;padding:20px;transition:right .4s ease;overflow-y:auto}
   .side-panel.active{right:0}
@@ -101,10 +49,12 @@
   .side-panel input{width:100%;padding:10px;margin:8px 0;border:1px solid #2a2a2a;border-radius:4px;background:#121212;color:#fff}
   .side-panel button{width:100%;background:#00b140;color:#fff;padding:10px;border:none;border-radius:4px;cursor:pointer}
   .side-panel button:hover{background:#009b38}
+  /* Floating clone styles */
+  .floating{position:fixed;left:0;top:0;will-change:transform,width,height;z-index:999;pointer-events:none;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.6);border:1px solid #242424}
+  .hidden{opacity:0;pointer-events:none}
 </style>
 </head>
 <body>
-
 <header>
   <img src="https://via.placeholder.com/180x45?text=MaiorMargem" alt="MaiorMargem">
   <div style="display:flex; align-items:center;">
@@ -122,55 +72,59 @@
   </div>
 </header>
 
-<section class="bg-hero">
-  <div class="hero-copy">
-    <h1>Monitoramento Inteligente de Preços</h1>
-    <p>Visualize tendências, acompanhe concorrentes e tome decisões com dados em tempo real.</p>
-  </div>
-</section>
+<div class="page-title">
+  <h1>Monitoramento Inteligente de Preços</h1>
+  <p>Visualize tendências, acompanhe concorrentes e tome decisões com dados em tempo real.</p>
+</div>
 
-<!-- Image strip (não sobreposta, responsiva) -->
-<div class="showcase-strip" aria-label="Prévias do sistema">
-  <div class="card-img card-img--wide">
-    <img src="./Gemini_Generated_Image_ag5zswag5zswag5z.png" alt="Telas principais do sistema de preços">
+<!-- HERO large banner -->
+<div class="hero-wrap">
+  <div class="hero-banner" id="heroBanner">
+    <img class="hero-img" id="heroImg" src="./Gemini_Generated_Image_ag5zswag5zswag5z.png" alt="Telas principais do sistema de preços">
   </div>
-  <div class="card-img card-img--tall">
-    <img src="./profiles.JPG" alt="Tela de perfis e preferências">
-  </div>
-  <div class="card-img card-img--tall">
-    <img src="./tabelas.JPG" alt="Tabelas e relatórios de preços">
+  <div class="hero-gradient"></div>
+</div>
+
+<!-- D O C K   A R E A  (local alvo do banner após a rolagem) -->
+<div class="dock-area">
+  <div class="dock-card">
+    <img id="bannerDock" src="./Gemini_Generated_Image_ag5zswag5zswag5z.png" alt="Banner reduzido" class="hidden">
   </div>
 </div>
 
-<section class="plans-wrap">
-  <div class="plans">
-    <div class="plan">
-      <h2>Trial</h2>
-      <ul><li>Monitorar 100 SKUs</li><li>Sites monitorados: 2</li><li>Análise mensal: 1 inclusa</li></ul>
-      <div class="price">Gratuito</div>
-    </div>
-    <div class="plan">
-      <h2>Básico</h2>
-      <ul><li>Monitorar 1.000 SKUs</li><li>Sites monitorados: 5</li><li>Análise semanal: 4 inclusas</li></ul>
-      <div class="price">R$ 129,90</div>
-    </div>
-    <div class="plan">
-      <h2>Intermediário</h2>
-      <ul><li>Monitorar 5.000 SKUs</li><li>Sites monitorados: 8</li><li>Análise semanal: 4 inclusas</li></ul>
-      <div class="price">R$ 159,90</div>
-    </div>
-    <div class="plan">
-      <h2>Prime</h2>
-      <ul><li>Monitorar 20.000 SKUs</li><li>Sites monitorados: 12</li><li>Análise semanal: 4 inclusas</li></ul>
-      <div class="price">R$ 249,90</div>
-    </div>
+<!-- Outras imagens laterais (não sobrepostas) -->
+<div class="gallery" aria-label="Prévias do sistema">
+  <div class="g-item g-item--half"><img src="./profiles.JPG" alt="Tela de perfis e preferências"></div>
+  <div class="g-item g-item--half"><img src="./tabelas.JPG" alt="Tabelas e relatórios de preços"></div>
+</div>
+
+<section class="plans">
+  <div class="plan">
+    <h2>Trial</h2>
+    <ul><li>Monitorar 100 SKUs</li><li>Sites monitorados: 2</li><li>Análise mensal: 1 inclusa</li></ul>
+    <div class="price">Gratuito</div>
+  </div>
+  <div class="plan">
+    <h2>Básico</h2>
+    <ul><li>Monitorar 1.000 SKUs</li><li>Sites monitorados: 5</li><li>Análise semanal: 4 inclusas</li></ul>
+    <div class="price">R$ 129,90</div>
+  </div>
+  <div class="plan">
+    <h2>Intermediário</h2>
+    <ul><li>Monitorar 5.000 SKUs</li><li>Sites monitorados: 8</li><li>Análise semanal: 4 inclusas</li></ul>
+    <div class="price">R$ 159,90</div>
+  </div>
+  <div class="plan">
+    <h2>Prime</h2>
+    <ul><li>Monitorar 20.000 SKUs</li><li>Sites monitorados: 12</li><li>Análise semanal: 4 inclusas</li></ul>
+    <div class="price">R$ 249,90</div>
   </div>
 </section>
 
 <!-- Overlay -->
 <div id="overlay" class="overlay" onclick="closePanel()"></div>
 
-<!-- Painel Cadastro -->
+<!-- Painéis -->
 <div id="panel-cadastro" class="side-panel" role="dialog" aria-labelledby="cadTitle" aria-modal="true">
   <h3 id="cadTitle">Cadastre-se</h3>
   <input id="nomeCadastro" type="text" placeholder="Nome (opcional)">
@@ -179,7 +133,6 @@
   <button id="btnCadastrar" onclick="registrarUsuario()">Cadastrar</button>
 </div>
 
-<!-- Painel Login -->
 <div id="panel-login" class="side-panel" role="dialog" aria-labelledby="logTitle" aria-modal="true">
   <h3 id="logTitle">Entrar</h3>
   <input id="emailLogin" type="email" placeholder="Email">
@@ -190,109 +143,129 @@
   </div>
 </div>
 
-<!-- Painel Recuperar Senha -->
 <div id="panel-recuperar" class="side-panel" role="dialog" aria-labelledby="recTitle" aria-modal="true">
   <h3 id="recTitle">Recuperar Senha</h3>
   <input id="emailRecuperar" type="email" placeholder="Digite seu email">
   <button onclick="recuperarSenha()">Enviar link</button>
 </div>
 
-<!-- 1) Config + 2) Supabase + 3) App -->
 <script src="config.js?v=11"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
 <script>
   function getBaseSite() {
-    try { if (window.CONFIG?.SITE_URL) return window.CONFIG.SITE_URL.replace(/\/+$/,''); }
+    try { if (window.CONFIG?.SITE_URL) return window.CONFIG.SITE_URL.replace(/\\/+$/,''); }
     catch(_) {}
     return window.location.origin;
   }
   const DASHBOARD_URL = getBaseSite() + '/dashboard.html';
 
-  function goDashboard(){ window.location.assign(DASHBOARD_URL); }
-  window.goDashboard = goDashboard;
-
   const { SUPABASE_URL, SUPABASE_ANON_KEY } = window.CONFIG || {};
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    alert('Erro de configuração: config.js não carregado (SUPABASE_URL/ANON_KEY ausentes).');
-    throw new Error('CONFIG ausente');
-  }
   const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
 
-  function openPanel(type) {
-    document.getElementById('overlay').style.display = 'block';
-    const el = document.getElementById('panel-' + type);
-    if (el) el.classList.add('active');
-  }
-  function closePanel() {
-    document.getElementById('overlay').style.display = 'none';
-    document.querySelectorAll('.side-panel').forEach(el => el.classList.remove('active'));
-  }
-  function isEmail(v){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
+  function openPanel(type){ document.getElementById('overlay').style.display='block'; const el=document.getElementById('panel-'+type); if(el) el.classList.add('active'); }
+  function closePanel(){ document.getElementById('overlay').style.display='none'; document.querySelectorAll('.side-panel').forEach(p=>p.classList.remove('active')); }
+  async function registrarUsuario(){ const email=document.getElementById('emailCadastro').value.trim(); const senha=document.getElementById('senhaCadastro').value; const nome=document.getElementById('nomeCadastro').value.trim(); if(!email||!senha)return alert('Preencha email e senha.'); const {error}=await sb.auth.signUp({email,password:senha,options:{data:{nome},emailRedirectTo:getBaseSite()+'/reset.html'}}); if(error)alert('Erro: '+error.message); else alert('Verifique seu email.'); closePanel(); }
+  async function fazerLogin(){ const email=document.getElementById('emailLogin').value.trim(); const senha=document.getElementById('senhaLogin').value; const {error}=await sb.auth.signInWithPassword({email,password:senha}); if(error)return alert('Erro: '+error.message); window.location.assign(DASHBOARD_URL); }
+  async function sair(){ await sb.auth.signOut(); alert('Você saiu.'); }
+  async function recuperarSenha(){ const email=document.getElementById('emailRecuperar').value.trim(); const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:getBaseSite()+'/reset.html'}); if(error)alert('Erro: '+error.message); else alert('Link enviado.'); closePanel(); }
 
-  async function registrarUsuario() {
-    const btn   = document.getElementById('btnCadastrar');
-    const nome  = document.getElementById('nomeCadastro').value.trim();
-    const email = document.getElementById('emailCadastro').value.trim();
-    const senha = document.getElementById('senhaCadastro').value;
+  // ===== Scroll shrink & dock =====
+  (function(){
+    const hero = document.getElementById('heroBanner');
+    const heroImg = document.getElementById('heroImg');
+    const dockImg = document.getElementById('bannerDock');
+    let docked = false;
+    let animating = false;
 
-    if (!email || !senha) { alert('Preencha email e senha.'); return; }
-    if (!isEmail(email))  { alert('Email inválido.'); return; }
-    if (senha.length < 6) { alert('A senha deve ter pelo menos 6 caracteres.'); return; }
+    function getRects(){
+      const h = heroImg.getBoundingClientRect();
+      const d = dockImg.getBoundingClientRect();
+      return {h,d};
+    }
 
-    const old = btn.textContent; btn.disabled = true; btn.textContent = 'Cadastrando...';
+    function createClone(rect){
+      const clone = heroImg.cloneNode(true);
+      clone.removeAttribute('id');
+      clone.classList.add('floating');
+      clone.style.width = rect.width + 'px';
+      clone.style.height = rect.height + 'px';
+      clone.style.left = rect.left + 'px';
+      clone.style.top = rect.top + 'px';
+      clone.style.transform = 'translate(0,0)';
+      document.body.appendChild(clone);
+      return clone;
+    }
 
-    try {
-      const { data, error } = await sb.auth.signUp({
-        email, password: senha,
-        options: {
-          data: nome ? { nome } : {},
-          emailRedirectTo: getBaseSite() + '/reset.html'
-        }
+    function dock(){
+      if (docked || animating) return;
+      animating = true;
+      const {h,d} = getRects();
+      const clone = createClone(h);
+      heroImg.classList.add('hidden');
+      dockImg.classList.add('hidden');
+
+      const dx = (d.left - h.left);
+      const dy = (d.top - h.top);
+      const sx = d.width / h.width;
+      const sy = d.height / h.height;
+
+      requestAnimationFrame(()=>{
+        clone.style.transition = 'transform 400ms ease, width 400ms ease, height 400ms ease, left 400ms ease, top 400ms ease';
+        clone.style.left = h.left + 'px';
+        clone.style.top = h.top + 'px';
+        clone.style.transformOrigin = 'top left';
+        clone.style.transform = `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`;
       });
-      if (error) {
-        const m = (error.message || '').toLowerCase();
-        if (m.includes('already') || m.includes('exists')) { alert('Este email já está cadastrado. Use o Login ou a Recuperação de Senha.'); return; }
-        if (m.includes('rate limit')) { alert('Muitos envios. Aguarde alguns minutos e tente novamente.'); return; }
-        alert('Erro no cadastro: ' + error.message); return;
-      }
-      if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
-        alert('Este email já está cadastrado. Verifique sua caixa de entrada ou use Recuperar Senha.');
-        return;
-      }
-      alert('Cadastro criado! Verifique seu email para confirmar a conta.');
-      closePanel();
-    } catch(e) {
-      alert('Falha inesperada ao cadastrar: ' + (e?.message || e));
-    } finally {
-      btn.disabled = false; btn.textContent = old;
+
+      setTimeout(()=>{
+        clone.remove();
+        dockImg.classList.remove('hidden');
+        docked = true; animating = false;
+      }, 420);
     }
-  }
 
-  async function fazerLogin() {
-    const email = document.getElementById('emailLogin').value.trim();
-    const senha = document.getElementById('senhaLogin').value;
-    const { error } = await sb.auth.signInWithPassword({ email, password: senha });
-    if (error) {
-      alert('Erro no login: ' + error.message);
-      console.error('[LOGIN error]', error);
-      return;
+    function undock(){
+      if (!docked || animating) return;
+      animating = true;
+      const {h,d} = getRects();
+      const clone = createClone(d);
+      dockImg.classList.add('hidden');
+
+      const dx = (h.left - d.left);
+      const dy = (h.top - d.top);
+      const sx = h.width / d.width;
+      const sy = h.height / d.height;
+
+      requestAnimationFrame(()=>{
+        clone.style.transition = 'transform 400ms ease';
+        clone.style.transformOrigin = 'top left';
+        clone.style.transform = `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`;
+      });
+
+      setTimeout(()=>{
+        clone.remove();
+        heroImg.classList.remove('hidden');
+        docked = false; animating = false;
+      }, 420);
     }
-    window.location.assign(DASHBOARD_URL);
-  }
 
-  async function sair() {
-    await sb.auth.signOut();
-    alert('Você saiu da conta.');
-  }
+    function onScroll(){
+      // Shrink effect while scrolling towards the dock
+      const dockTop = document.querySelector('.dock-area').getBoundingClientRect().top + window.scrollY;
+      const start = hero.offsetTop;
+      const end = dockTop - 160; // point to start docking
+      const y = window.scrollY;
+      const progress = Math.min(1, Math.max(0, (y - start) / (end - start)));
+      const scale = 1 - (0.35 * progress); // shrink to ~65%
+      heroImg.style.transform = `scale(${scale})`;
 
-  async function recuperarSenha() {
-    const email = document.getElementById('emailRecuperar').value.trim();
-    if (!email) { alert('Informe o email.'); return; }
-    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: getBaseSite() + '/reset.html' });
-    if (error) alert('Erro: ' + error.message);
-    else { alert('Enviamos um link de recuperação para seu email.'); closePanel(); }
-  }
+      if (y >= end) dock();
+      else undock();
+    }
+
+    window.addEventListener('scroll', onScroll, {passive:true});
+    window.addEventListener('resize', ()=>{ if(docked){ undock(); dock(); } });
+  })();
 </script>
 </body>
 </html>
