@@ -6,65 +6,85 @@
 <title>MaiorMargem - Monitoramento de Preços</title>
 <style>
   :root { color-scheme: dark; }
-  /* Base */
-  body{margin:0;font-family:'Segoe UI',Arial,sans-serif;background:#121212;color:#fff}
-  a{color:#9cf;text-decoration:none}
-  img{display:block;max-width:100%}
+  body {
+    margin: 0;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: #000 url('./Gemini_Generated_Image_ag5zswag5zswag5z.png') no-repeat center center fixed;
+    background-size: cover;
+    color: #fff;
+  }
+  a { color: #9cf; text-decoration: none; }
 
-  /* Header */
-  header{display:flex;justify-content:space-between;align-items:center;padding:15px 30px;background:#1c1c1c;position:sticky;top:0;z-index:1000;border-bottom:1px solid #2a2a2a}
-  header img{height:45px}
-  .auth-chip{background:#0e4;color:#001;padding:6px 10px;border-radius:999px;font-size:12px;margin-left:12px;display:none}
-  .header-buttons button{background:#00b140;color:#fff;border:none;padding:10px 20px;margin-left:10px;border-radius:25px;cursor:pointer;font-size:14px;transition:transform .2s, background .3s}
-  .header-buttons button:hover{background:#009b38;transform:scale(1.05)}
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 30px;
+    background: rgba(18, 18, 18, 0.85);
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    border-bottom: 1px solid #2a2a2a;
+  }
+  header img { height: 45px; }
+  .auth-chip {
+    background: #0e4;
+    color: #001;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    margin-left: 12px;
+    display: none;
+  }
+  .header-buttons button {
+    background: #00b140;
+    color: #fff;
+    border: none;
+    padding: 10px 20px;
+    margin-left: 10px;
+    border-radius: 25px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: transform .2s, background .3s;
+  }
+  .header-buttons button:hover { background: #009b38; transform: scale(1.05); }
 
-  /* Hero + Showcase */
-  .hero{padding:40px 20px 0}
-  .hero h1{font-size:32px;color:#00b140;margin:0 0 8px}
-  .hero p{margin:0 0 20px;color:#cfcfcf}
+  .plans {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    padding: 80px 20px;
+    gap: 20px;
+    background: rgba(18,18,18,0.7);
+    backdrop-filter: blur(4px);
+  }
+  .plan {
+    border: 1px solid #2a2a2a;
+    border-radius: 10px;
+    padding: 25px;
+    width: 260px;
+    background: rgba(28, 28, 28, 0.9);
+    box-shadow: 0 2px 12px rgba(0,0,0,.3);
+    text-align: center;
+    transition: transform .3s, border-color .3s;
+  }
+  .plan:hover { transform: translateY(-5px); border-color: #00b140; }
+  .plan h2 { color: #00b140; font-size: 20px; margin: 0; }
+  .plan ul { list-style: none; padding: 0; margin: 15px 0; text-align: left; }
+  .plan ul li { margin-bottom: 8px; }
+  .plan .price { font-size: 20px; color: #e63946; font-weight: bold; margin-top: 10px; }
 
-  .showcase{max-width:1200px;margin:0 auto;padding:0 20px}
-
-  /* Carousel */
-  .carousel{position:relative;border:1px solid #2a2a2a;border-radius:12px;background:#1e1e1e;overflow:hidden}
-  .carousel-track{display:flex;transition:transform .5s ease}
-  .carousel-slide{min-width:100%;display:flex;align-items:center;justify-content:center;padding:10px;background:#111}
-  .carousel-slide img{border-radius:10px;box-shadow:0 10px 40px rgba(0,0,0,.45)}
-  .carousel-controls{display:flex;gap:8px;justify-content:center;align-items:center;padding:10px;background:#1c1c1c;border-top:1px solid #2a2a2a}
-  .dot{width:10px;height:10px;border-radius:50%;background:#3a3a3a;border:1px solid #555;cursor:pointer}
-  .dot.active{background:#00b140;border-color:#00b140}
-  .nav-btn{background:transparent;border:1px solid #2a2a2a;color:#ddd;padding:8px 12px;border-radius:8px;cursor:pointer}
-  .nav-btn:hover{background:#1b1b1b}
-
-  /* Mosaico */
-  .mosaic{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:18px 0}
-  .mosaic .tile{border:1px solid #2a2a2a;border-radius:12px;overflow:hidden;background:#1c1c1c}
-  .tile img{width:100%;height:auto}
-  @media (max-width: 980px){ .mosaic{grid-template-columns:1fr} }
-
-  /* Planos */
-  .plans{display:flex;flex-wrap:wrap;justify-content:center;padding:40px 20px;gap:20px}
-  .plan{border:1px solid #2a2a2a;border-radius:10px;padding:25px;width:260px;background:#1c1c1c;box-shadow:0 2px 12px rgba(0,0,0,.3);text-align:center;transition:transform .3s, border-color .3s}
-  .plan:hover{transform:translateY(-5px);border-color:#00b140}
-  .plan h2{color:#00b140;font-size:20px;margin:0}
-  .plan ul{list-style:none;padding:0;margin:15px 0;text-align:left}
-  .plan ul li{margin-bottom:8px}
-  .plan .price{font-size:20px;color:#e63946;font-weight:bold;margin-top:10px}
-
-  /* Logos rolando */
-  .empresa-carousel{background:#1c1c1c;padding:20px 0;overflow:hidden}
-  .carousel-track-logos{display:flex;gap:40px;animation:scrollLogos 20s linear infinite}
-  .empresa-carousel img{filter:brightness(0) invert(1);height:60px}
-  @keyframes scrollLogos{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
-
-  /* Side panels */
-  .overlay{display:none;position:fixed;z-index:1500;inset:0;background:rgba(0,0,0,.5)}
-  .side-panel{position:fixed;top:0;right:-400px;width:350px;height:100%;background:#1c1c1c;box-shadow:-4px 0 15px rgba(0,0,0,.5);z-index:2000;padding:20px;transition:right .4s ease;overflow-y:auto}
-  .side-panel.active{right:0}
-  .side-panel h3{color:#00b140;margin-top:0}
-  .side-panel input{width:100%;padding:10px;margin:8px 0;border:1px solid #2a2a2a;border-radius:4px;background:#121212;color:#fff}
-  .side-panel button{width:100%;background:#00b140;color:#fff;padding:10px;border:none;border-radius:4px;cursor:pointer}
-  .side-panel button:hover{background:#009b38}
+  .overlay { display: none; position: fixed; z-index: 1500; inset: 0; background: rgba(0,0,0,.5); }
+  .side-panel {
+    position: fixed; top: 0; right: -400px; width: 350px; height: 100%;
+    background: #1c1c1c; box-shadow: -4px 0 15px rgba(0,0,0,.5);
+    z-index: 2000; padding: 20px; transition: right .4s ease; overflow-y: auto;
+  }
+  .side-panel.active { right: 0; }
+  .side-panel h3 { color: #00b140; margin-top: 0; }
+  .side-panel input { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #2a2a2a; border-radius: 4px; background: #121212; color: #fff; }
+  .side-panel button { width: 100%; background: #00b140; color: #fff; padding: 10px; border: none; border-radius: 4px; cursor: pointer; }
+  .side-panel button:hover { background: #009b38; }
 </style>
 </head>
 <body>
@@ -86,40 +106,6 @@
   </div>
 </header>
 
-<section class="hero">
-  <div class="showcase">
-    <h1>Monitoramento Inteligente de Preços</h1>
-    <p>Compare múltiplos varejistas, acompanhe favoritos e visualize tendências — tudo em uma interface clara e enxuta.</p>
-
-    <!-- CARROSSEL CENTRAL -->
-    <div class="carousel" aria-label="Prévia do Dashboard">
-      <div id="carouselTrack" class="carousel-track">
-        <div class="carousel-slide">
-          <img src="./media/mm-hero-dashboard.jpg" alt="Prévia do painel com favoritos e comparação multi-lojas">
-        </div>
-        <div class="carousel-slide">
-          <img src="./media/mm-hero-trend.jpg" alt="Gráfico de tendência de preços mostrando evolução por loja">
-        </div>
-      </div>
-      <div class="carousel-controls">
-        <button class="nav-btn" onclick="prevSlide()">◀</button>
-        <div id="dots" style="display:flex;gap:8px">
-          <div class="dot active" onclick="goSlide(0)" aria-label="Slide 1"></div>
-          <div class="dot" onclick="goSlide(1)" aria-label="Slide 2"></div>
-        </div>
-        <button class="nav-btn" onclick="nextSlide()">▶</button>
-      </div>
-    </div>
-
-    <!-- MOSAICO ILUSTRATIVO -->
-    <div class="mosaic">
-      <div class="tile"><img src="./media/mm-tile-alertas.jpg" alt="Alertas de variação por SKU"></div>
-      <div class="tile"><img src="./media/mm-tile-vencedores.jpg" alt="Vencedores do dia — maiores quedas de preço"></div>
-      <div class="tile"><img src="./media/mm-tile-distribuicao.jpg" alt="Distribuição de status do catálogo"></div>
-    </div>
-  </div>
-</section>
-
 <section class="plans">
   <div class="plan">
     <h2>Trial</h2>
@@ -140,21 +126,6 @@
     <h2>Prime</h2>
     <ul><li>Monitorar 20.000 SKUs</li><li>Sites monitorados: 12</li><li>Análise semanal: 4 inclusas</li></ul>
     <div class="price">R$ 249,90</div>
-  </div>
-</section>
-
-<section class="empresa-carousel" aria-label="Empresas que confiam">
-  <div class="carousel-track-logos">
-    <img src="https://via.placeholder.com/120x60?text=Empresa+1" alt="Empresa 1">
-    <img src="https://via.placeholder.com/120x60?text=Empresa+2" alt="Empresa 2">
-    <img src="https://via.placeholder.com/120x60?text=Empresa+3" alt="Empresa 3">
-    <img src="https://via.placeholder.com/120x60?text=Empresa+4" alt="Empresa 4">
-    <img src="https://via.placeholder.com/120x60?text=Empresa+5" alt="Empresa 5">
-    <img src="https://via.placeholder.com/120x60?text=Empresa+1" alt="Empresa 1">
-    <img src="https://via.placeholder.com/120x60?text=Empresa+2" alt="Empresa 2">
-    <img src="https://via.placeholder.com/120x60?text=Empresa+3" alt="Empresa 3">
-    <img src="https://via.placeholder.com/120x60?text=Empresa+4" alt="Empresa 4">
-    <img src="https://via.placeholder.com/120x60?text=Empresa+5" alt="Empresa 5">
   </div>
 </section>
 
@@ -188,12 +159,9 @@
   <button onclick="recuperarSenha()">Enviar link</button>
 </div>
 
-<!-- 1) Config + 2) Supabase + 3) App -->
 <script src="config.js?v=11"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
 <script>
-  /* ===== Helpers base e dashboard ===== */
   function getBaseSite() {
     try { if (window.CONFIG?.SITE_URL) return window.CONFIG.SITE_URL.replace(/\/+$/,''); }
     catch(_) {}
@@ -201,159 +169,15 @@
   }
   const DASHBOARD_URL = getBaseSite() + '/dashboard.html';
 
-  function goDashboard(){ window.location.assign(DASHBOARD_URL); }
-  window.goDashboard = goDashboard;
-
-  /* ===== Supabase ===== */
   const { SUPABASE_URL, SUPABASE_ANON_KEY } = window.CONFIG || {};
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    alert('Erro de configuração: config.js não carregado (SUPABASE_URL/ANON_KEY ausentes).');
-    throw new Error('CONFIG ausente');
-  }
   const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
 
-  /* ===== Painéis ===== */
-  function openPanel(type) {
-    document.getElementById('overlay').style.display = 'block';
-    if (type === 'cadastro')   document.getElementById('panel-cadastro').classList.add('active');
-    if (type === 'login')      document.getElementById('panel-login').classList.add('active');
-    if (type === 'recuperar')  document.getElementById('panel-recuperar').classList.add('active');
-  }
-  function closePanel() {
-    document.getElementById('overlay').style.display = 'none';
-    ['panel-cadastro','panel-login','panel-recuperar'].forEach(id => {
-      document.getElementById(id).classList.remove('active');
-    });
-  }
-  function isEmail(v){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
-
-  /* ===== Cadastro ===== */
-  async function registrarUsuario() {
-    const btn   = document.getElementById('btnCadastrar');
-    const nome  = document.getElementById('nomeCadastro').value.trim();
-    const email = document.getElementById('emailCadastro').value.trim();
-    const senha = document.getElementById('senhaCadastro').value;
-
-    if (!email || !senha) { alert('Preencha email e senha.'); return; }
-    if (!isEmail(email))  { alert('Email inválido.'); return; }
-    if (senha.length < 6) { alert('A senha deve ter pelo menos 6 caracteres.'); return; }
-
-    const old = btn.textContent; btn.disabled = true; btn.textContent = 'Cadastrando...';
-
-    try {
-      const { data, error } = await sb.auth.signUp({
-        email, password: senha,
-        options: {
-          data: nome ? { nome } : {},
-          emailRedirectTo: getBaseSite() + '/reset.html'
-        }
-      });
-      if (error) {
-        const m = (error.message || '').toLowerCase();
-        if (m.includes('already') || m.includes('exists')) { alert('Este email já está cadastrado. Use o Login ou a Recuperação de Senha.'); return; }
-        if (m.includes('rate limit')) { alert('Muitos envios. Aguarde alguns minutos e tente novamente.'); return; }
-        alert('Erro no cadastro: ' + error.message); return;
-      }
-      if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
-        alert('Este email já está cadastrado. Verifique sua caixa de entrada ou use Recuperar Senha.');
-        return;
-      }
-      alert('Cadastro criado! Verifique seu email para confirmar a conta.');
-      closePanel();
-    } catch(e) {
-      alert('Falha inesperada ao cadastrar: ' + (e?.message || e));
-    } finally {
-      btn.disabled = false; btn.textContent = old;
-    }
-  }
-
-  /* ===== Login → redireciona imediatamente ===== */
-  async function fazerLogin() {
-    const email = document.getElementById('emailLogin').value.trim();
-    const senha = document.getElementById('senhaLogin').value;
-
-    const { error } = await sb.auth.signInWithPassword({ email, password: senha });
-    if (error) {
-      alert('Erro no login: ' + error.message);
-      console.error('[LOGIN error]', error);
-      return;
-    }
-    window.location.assign(DASHBOARD_URL);
-  }
-
-  /* ===== Logout ===== */
-  async function sair() {
-    await sb.auth.signOut();
-    await atualizarUIAuth();
-    alert('Você saiu da conta.');
-  }
-
-  /* ===== Recuperar senha ===== */
-  async function recuperarSenha() {
-    const email = document.getElementById('emailRecuperar').value.trim();
-    if (!email) { alert('Informe o email.'); return; }
-    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: getBaseSite() + '/reset.html' });
-    if (error) alert('Erro: ' + error.message);
-    else { alert('Enviamos um link de recuperação para seu email.'); closePanel(); }
-  }
-
-  /* ===== UI Auth + auto-redirect se já logado ===== */
-  async function atualizarUIAuth() {
-    const { data: { session } } = await sb.auth.getSession();
-    const chip = document.getElementById('authChip');
-    const headerBtns = document.getElementById('headerBtns');
-    const logoutBox = document.getElementById('logoutBox');
-    const goDash = document.getElementById('goDashboard');
-
-    if (session && session.user) {
-      chip.textContent = 'Logado: ' + (session.user.email || '');
-      chip.style.display = 'inline-block';
-      headerBtns.style.display = 'none';
-      logoutBox.style.display = 'block';
-      goDash.style.display = 'block';
-    } else {
-      chip.style.display = 'none';
-      headerBtns.style.display = 'block';
-      logoutBox.style.display = 'none';
-      goDash.style.display = 'none';
-    }
-  }
-
-  // Se a sessão mudar para logado, navega para o dashboard
-  sb.auth.onAuthStateChange((event, session) => {
-    if (session?.user) window.location.assign(DASHBOARD_URL);
-  });
-
-  (async () => {
-    await atualizarUIAuth();
-    const { data: { session } } = await sb.auth.getSession();
-    if (session?.user) window.location.assign(DASHBOARD_URL);
-  })();
-
-  /* ===== Carousel JS simples ===== */
-  let current = 0;
-  const track = document.getElementById('carouselTrack');
-  const dots = Array.from(document.querySelectorAll('.dot'));
-  function updateCarousel(){
-    track.style.transform = `translateX(${-current*100}%)`;
-    dots.forEach((d,i)=>d.classList.toggle('active', i===current));
-  }
-  function goSlide(i){ current = Math.max(0, Math.min(i, dots.length-1)); updateCarousel(); }
-  function nextSlide(){ goSlide((current+1)%dots.length); }
-  function prevSlide(){ goSlide((current-1+dots.length)%dots.length); }
-  // auto-play suave
-  setInterval(()=>{ nextSlide(); }, 6000);
-
-  // expõe p/ HTML inline
-  window.openPanel = openPanel;
-  window.closePanel = closePanel;
-  window.registrarUsuario = registrarUsuario;
-  window.fazerLogin = fazerLogin;
-  window.sair = sair;
-  window.recuperarSenha = recuperarSenha;
-  window.prevSlide = prevSlide;
-  window.nextSlide = nextSlide;
-  window.goSlide = goSlide;
+  function openPanel(type){ document.getElementById('overlay').style.display='block'; document.getElementById('panel-'+type).classList.add('active'); }
+  function closePanel(){ document.getElementById('overlay').style.display='none'; document.querySelectorAll('.side-panel').forEach(p=>p.classList.remove('active')); }
+  async function registrarUsuario(){ const email=document.getElementById('emailCadastro').value.trim(); const senha=document.getElementById('senhaCadastro').value; const nome=document.getElementById('nomeCadastro').value.trim(); if(!email||!senha)return alert('Preencha email e senha.'); const {error}=await sb.auth.signUp({email,password:senha,options:{data:{nome},emailRedirectTo:getBaseSite()+'/reset.html'}}); if(error)alert('Erro: '+error.message); else alert('Verifique seu email.'); closePanel(); }
+  async function fazerLogin(){ const email=document.getElementById('emailLogin').value.trim(); const senha=document.getElementById('senhaLogin').value; const {error}=await sb.auth.signInWithPassword({email,password:senha}); if(error)return alert('Erro: '+error.message); window.location.assign(DASHBOARD_URL); }
+  async function sair(){ await sb.auth.signOut(); alert('Você saiu.'); }
+  async function recuperarSenha(){ const email=document.getElementById('emailRecuperar').value.trim(); const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:getBaseSite()+'/reset.html'}); if(error)alert('Erro: '+error.message); else alert('Link enviado.'); closePanel(); }
 </script>
 </body>
 </html>
