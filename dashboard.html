@@ -536,20 +536,12 @@ function matchesFilters(item){
 }
 
 /* ========= URL pesquisa por site ========= */
-function buildSearchUrlByLabel(label, eanOrObj){
+function buildSearchUrlByLabel(label, ean){
   const c = chosen.find(x => x.label === label);
   if (!c || !c.url) return null;
-  const tpl = String(c.url || '');
-  const isObj = (eanOrObj && typeof eanOrObj === 'object');
-  const ean = isObj ? String(eanOrObj.ean || '') : String(eanOrObj || '');
-  const id  = isObj ? String(eanOrObj.id || eanOrObj.codigo || '') : '';
-  const encEan = encodeURIComponent(ean);
-  const encId  = encodeURIComponent(id);
-  let out = tpl.replace(/\{ean\}/gi, encEan);
-  out = out.replace(/\{id\}/gi, encId);
-  return out;
-}
-/gi, enc);
+  const tpl = String(c.url);
+  const enc = encodeURIComponent(String(ean||''));
+  return tpl.replace(/{ean}/gi, enc);
 }
 
 /* ========= Células ========= */
@@ -575,8 +567,7 @@ function createPriceCell(item, label, isLocked, minLabel, maxLabel){
   const td=document.createElement('td'); if (isLocked) td.classList.add('locked-cell'); const d=item.sites[label];
   if (d){
     const dtStr=d.data?new Date(d.data).toLocaleString('pt-BR'):'';
-    const manualUrl = (d && (d.url || d.link || d.manual_url || d.page_url)) || null;
-    const url = manualUrl || buildSearchUrlByLabel(label, { ean: item.sku, id: (d && (d.id_no_site || d.codigo || d.cod_interno)) });
+    const url = buildSearchUrlByLabel(label, item.sku);
 
     if (!d.valid){
       const span=document.createElement('span');
@@ -1386,17 +1377,7 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
       }
     }
 
-    async function deleteProdutoSiteLink(ean, site_id){
-  const id_produto = await resolveProdutoIdByEan(ean);
-  if (!id_produto) return;
-  const { error } = await sb.from('links_produto_site')
-    .delete()
-    .eq('id_produto', Number(id_produto))
-    .eq('site_id', Number(site_id));
-  if (error) throw new Error(error.message || 'Falha ao remover link');
-}
-
-async function upsertProdutoSiteLink(ean, site_id, site_nome, url, descricao_produto, id_no_site){
+    async function upsertProdutoSiteLink(ean, site_id, site_nome, url, descricao_produto, id_no_site){
       const id_produto = await resolveProdutoIdByEan(ean);
       if (!id_produto){
         throw new Error('Produto não encontrado em cadastro_produtos para o EAN '+ean);
@@ -1624,22 +1605,18 @@ btnSave.addEventListener('click', async function(){
   const hasUrl = url.length > 0;
   const hasId  = idNoSiteRaw.length > 0;
 
-  // aceita um ou outro ou ambos (se ambos vazios, remover)
+  // aceita um ou outro ou ambos
   if (!hasUrl && !hasId){
-    try{
-      await deleteProdutoSiteLink(ean, site_id);
-      td.classList.remove('mm-na-hint');
-      closePop();
-      const ok = document.createElement('div');
-      ok.className = 'mm-pop-toast';
-      ok.textContent = 'Link removido!';
-      document.body.appendChild(ok);
-      setTimeout(()=>{ if (ok.parentNode) ok.parentNode.removeChild(ok); }, 1200);
-    }catch(ex){ showErr('Não foi possível remover o link: '+String(ex?.message||ex)); }
+    if (urlInput){
+      urlInput.setCustomValidity('Informe a URL ou o código do produto no site.');
+      urlInput.reportValidity();
+      setTimeout(()=>urlInput.setCustomValidity(''), 1200);
+      urlInput.focus();
+    }
     return;
   }
 
-  // Se tiver URL, valida. Se não tiver, envia como null efetivo (não string 'null').. Se não tiver, envia como null efetivo (não string 'null').
+  // Se tiver URL, valida. Se não tiver, envia como null efetivo (não string 'null').
   if (hasUrl){
     try{
       const u = new URL(url);
