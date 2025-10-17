@@ -6,85 +6,101 @@
 <title>MaiorMargem - Monitoramento de Preços</title>
 <style>
   :root { color-scheme: dark; }
-  body {
-    margin: 0;
-    font-family: 'Segoe UI', Arial, sans-serif;
-    background: #000 url('./Gemini_Generated_Image_ag5zswag5zswag5z.png') no-repeat center center fixed;
-    background-size: cover;
-    color: #fff;
+  /* Base */
+  body{
+    margin:0;
+    font-family:'Segoe UI',Arial,sans-serif;
+    background-color:#0b0b0b;
+    color:#fff;
+    line-height:1.45;
   }
-  a { color: #9cf; text-decoration: none; }
-
-  header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 15px 30px;
-    background: rgba(18, 18, 18, 0.85);
-    position: sticky;
-    top: 0;
-    z-index: 1000;
-    border-bottom: 1px solid #2a2a2a;
+  a{color:#9cf;text-decoration:none}
+  img{display:block;max-width:100%;height:auto}
+  /* Background image fixed, centered, not cropped */
+  .bg-hero{
+    position:relative;
+    min-height:64vh;
+    background-image:url('./Gemini_Generated_Image_ag5zswag5zswag5z.png');
+    background-size:contain;
+    background-repeat:no-repeat;
+    background-position:center top;
+    background-attachment:fixed;
+    display:flex;
+    align-items:flex-end;
+    justify-content:center;
+    padding:32px 16px 0;
   }
-  header img { height: 45px; }
-  .auth-chip {
-    background: #0e4;
-    color: #001;
-    padding: 6px 10px;
-    border-radius: 999px;
-    font-size: 12px;
-    margin-left: 12px;
-    display: none;
+  /* Soft gradient overlay from top to main section to avoid harsh cut */
+  .bg-hero::before{
+    content:"";
+    position:absolute; inset:0;
+    background:linear-gradient(180deg, rgba(0,0,0,.85) 0%, rgba(0,0,0,.4) 35%, rgba(0,0,0,0) 60%);
+    pointer-events:none;
   }
-  .header-buttons button {
-    background: #00b140;
-    color: #fff;
-    border: none;
-    padding: 10px 20px;
-    margin-left: 10px;
-    border-radius: 25px;
-    cursor: pointer;
-    font-size: 14px;
-    transition: transform .2s, background .3s;
+  /* Header */
+  header{display:flex;justify-content:space-between;align-items:center;padding:15px 30px;background:rgba(18,18,18,0.9);position:sticky;top:0;z-index:1000;border-bottom:1px solid #2a2a2a;backdrop-filter:saturate(120%) blur(6px)}
+  header img{height:45px}
+  .auth-chip{background:#0e4;color:#001;padding:6px 10px;border-radius:999px;font-size:12px;margin-left:12px;display:none}
+  .header-buttons button{background:#00b140;color:#fff;border:none;padding:10px 20px;margin-left:10px;border-radius:25px;cursor:pointer;font-size:14px;transition:transform .2s, background .3s}
+  .header-buttons button:hover{background:#009b38;transform:scale(1.05)}
+  /* Copy on top of the background */
+  .hero-copy{
+    position:relative;
+    z-index:2;
+    max-width:1100px;
+    margin:0 auto;
+    text-align:center;
+    padding:40px 20px 12px;
   }
-  .header-buttons button:hover { background: #009b38; transform: scale(1.05); }
-
-  .plans {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    padding: 80px 20px;
-    gap: 20px;
-    background: rgba(18,18,18,0.7);
-    backdrop-filter: blur(4px);
+  .hero-copy h1{font-size:34px;margin:0 0 8px;color:#00b140}
+  .hero-copy p{margin:0 auto;max-width:900px;color:#ddd}
+  /* Clean image strip, no overlap */
+  .showcase-strip{
+    position:relative;
+    z-index:2;
+    max-width:1200px;
+    margin:18px auto 24px;
+    padding:0 20px;
+    display:grid;
+    grid-template-columns:repeat(12,1fr);
+    gap:16px;
   }
-  .plan {
-    border: 1px solid #2a2a2a;
-    border-radius: 10px;
-    padding: 25px;
-    width: 260px;
-    background: rgba(28, 28, 28, 0.9);
-    box-shadow: 0 2px 12px rgba(0,0,0,.3);
-    text-align: center;
-    transition: transform .3s, border-color .3s;
+  .card-img{
+    grid-column:span 12;
+    border:1px solid #2a2a2a;
+    background:#141414;
+    border-radius:14px;
+    overflow:hidden;
+    box-shadow:0 10px 36px rgba(0,0,0,.45);
   }
-  .plan:hover { transform: translateY(-5px); border-color: #00b140; }
-  .plan h2 { color: #00b140; font-size: 20px; margin: 0; }
-  .plan ul { list-style: none; padding: 0; margin: 15px 0; text-align: left; }
-  .plan ul li { margin-bottom: 8px; }
-  .plan .price { font-size: 20px; color: #e63946; font-weight: bold; margin-top: 10px; }
-
-  .overlay { display: none; position: fixed; z-index: 1500; inset: 0; background: rgba(0,0,0,.5); }
-  .side-panel {
-    position: fixed; top: 0; right: -400px; width: 350px; height: 100%;
-    background: #1c1c1c; box-shadow: -4px 0 15px rgba(0,0,0,.5);
-    z-index: 2000; padding: 20px; transition: right .4s ease; overflow-y: auto;
+  .card-img img{width:100%;height:auto}
+  @media (min-width: 860px){
+    .card-img--wide{grid-column:span 7}
+    .card-img--tall{grid-column:span 5}
   }
-  .side-panel.active { right: 0; }
-  .side-panel h3 { color: #00b140; margin-top: 0; }
-  .side-panel input { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #2a2a2a; border-radius: 4px; background: #121212; color: #fff; }
-  .side-panel button { width: 100%; background: #00b140; color: #fff; padding: 10px; border: none; border-radius: 4px; cursor: pointer; }
-  .side-panel button:hover { background: #009b38; }
+  /* Plans */
+  .plans-wrap{
+    position:relative;
+    z-index:3;
+    padding:40px 20px 64px;
+    background:linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(18,18,18,0.85) 18%, rgba(18,18,18,0.95) 60%, rgba(18,18,18,1) 100%);
+    margin-top:-24px;
+  }
+  .plans{display:flex;flex-wrap:wrap;justify-content:center;gap:20px;max-width:1200px;margin:0 auto}
+  .plan{border:1px solid #2a2a2a;border-radius:10px;padding:25px;width:260px;background:#1c1c1c;box-shadow:0 2px 12px rgba(0,0,0,.3);text-align:center;transition:transform .3s, border-color .3s}
+  .plan:hover{transform:translateY(-5px);border-color:#00b140}
+  .plan h2{color:#00b140;font-size:20px;margin:0}
+  .plan ul{list-style:none;padding:0;margin:15px 0;text-align:left}
+  .plan ul li{margin-bottom:8px}
+  .plan .price{font-size:20px;color:#e63946;font-weight:bold;margin-top:10px}
+  /* Side panels */
+  .overlay{display:none;position:fixed;z-index:1500;inset:0;background:rgba(0,0,0,.5)}
+  .side-panel{position:fixed;top:0;right:-400px;width:350px;height:100%;background:#1c1c1c;box-shadow:-4px 0 15px rgba(0,0,0,.5);z-index:2000;padding:20px;transition:right .4s ease;overflow-y:auto}
+  .side-panel.active{right:0}
+  .side-panel h3{color:#00b140;margin-top:0}
+  .side-panel input{width:100%;padding:10px;margin:8px 0;border:1px solid #2a2a2a;border-radius:4px;background:#121212;color:#fff}
+  .side-panel button{width:100%;background:#00b140;color:#fff;padding:10px;border:none;border-radius:4px;cursor:pointer}
+  .side-panel button:hover{background:#009b38}
 </style>
 </head>
 <body>
@@ -106,26 +122,48 @@
   </div>
 </header>
 
-<section class="plans">
-  <div class="plan">
-    <h2>Trial</h2>
-    <ul><li>Monitorar 100 SKUs</li><li>Sites monitorados: 2</li><li>Análise mensal: 1 inclusa</li></ul>
-    <div class="price">Gratuito</div>
+<section class="bg-hero">
+  <div class="hero-copy">
+    <h1>Monitoramento Inteligente de Preços</h1>
+    <p>Visualize tendências, acompanhe concorrentes e tome decisões com dados em tempo real.</p>
   </div>
-  <div class="plan">
-    <h2>Básico</h2>
-    <ul><li>Monitorar 1.000 SKUs</li><li>Sites monitorados: 5</li><li>Análise semanal: 4 inclusas</li></ul>
-    <div class="price">R$ 129,90</div>
+</section>
+
+<!-- Image strip (não sobreposta, responsiva) -->
+<div class="showcase-strip" aria-label="Prévias do sistema">
+  <div class="card-img card-img--wide">
+    <img src="./Gemini_Generated_Image_ag5zswag5zswag5z.png" alt="Telas principais do sistema de preços">
   </div>
-  <div class="plan">
-    <h2>Intermediário</h2>
-    <ul><li>Monitorar 5.000 SKUs</li><li>Sites monitorados: 8</li><li>Análise semanal: 4 inclusas</li></ul>
-    <div class="price">R$ 159,90</div>
+  <div class="card-img card-img--tall">
+    <img src="./profiles.JPG" alt="Tela de perfis e preferências">
   </div>
-  <div class="plan">
-    <h2>Prime</h2>
-    <ul><li>Monitorar 20.000 SKUs</li><li>Sites monitorados: 12</li><li>Análise semanal: 4 inclusas</li></ul>
-    <div class="price">R$ 249,90</div>
+  <div class="card-img card-img--tall">
+    <img src="./tabelas.JPG" alt="Tabelas e relatórios de preços">
+  </div>
+</div>
+
+<section class="plans-wrap">
+  <div class="plans">
+    <div class="plan">
+      <h2>Trial</h2>
+      <ul><li>Monitorar 100 SKUs</li><li>Sites monitorados: 2</li><li>Análise mensal: 1 inclusa</li></ul>
+      <div class="price">Gratuito</div>
+    </div>
+    <div class="plan">
+      <h2>Básico</h2>
+      <ul><li>Monitorar 1.000 SKUs</li><li>Sites monitorados: 5</li><li>Análise semanal: 4 inclusas</li></ul>
+      <div class="price">R$ 129,90</div>
+    </div>
+    <div class="plan">
+      <h2>Intermediário</h2>
+      <ul><li>Monitorar 5.000 SKUs</li><li>Sites monitorados: 8</li><li>Análise semanal: 4 inclusas</li></ul>
+      <div class="price">R$ 159,90</div>
+    </div>
+    <div class="plan">
+      <h2>Prime</h2>
+      <ul><li>Monitorar 20.000 SKUs</li><li>Sites monitorados: 12</li><li>Análise semanal: 4 inclusas</li></ul>
+      <div class="price">R$ 249,90</div>
+    </div>
   </div>
 </section>
 
@@ -159,8 +197,10 @@
   <button onclick="recuperarSenha()">Enviar link</button>
 </div>
 
+<!-- 1) Config + 2) Supabase + 3) App -->
 <script src="config.js?v=11"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 <script>
   function getBaseSite() {
     try { if (window.CONFIG?.SITE_URL) return window.CONFIG.SITE_URL.replace(/\/+$/,''); }
@@ -169,15 +209,90 @@
   }
   const DASHBOARD_URL = getBaseSite() + '/dashboard.html';
 
+  function goDashboard(){ window.location.assign(DASHBOARD_URL); }
+  window.goDashboard = goDashboard;
+
   const { SUPABASE_URL, SUPABASE_ANON_KEY } = window.CONFIG || {};
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    alert('Erro de configuração: config.js não carregado (SUPABASE_URL/ANON_KEY ausentes).');
+    throw new Error('CONFIG ausente');
+  }
   const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
 
-  function openPanel(type){ document.getElementById('overlay').style.display='block'; document.getElementById('panel-'+type).classList.add('active'); }
-  function closePanel(){ document.getElementById('overlay').style.display='none'; document.querySelectorAll('.side-panel').forEach(p=>p.classList.remove('active')); }
-  async function registrarUsuario(){ const email=document.getElementById('emailCadastro').value.trim(); const senha=document.getElementById('senhaCadastro').value; const nome=document.getElementById('nomeCadastro').value.trim(); if(!email||!senha)return alert('Preencha email e senha.'); const {error}=await sb.auth.signUp({email,password:senha,options:{data:{nome},emailRedirectTo:getBaseSite()+'/reset.html'}}); if(error)alert('Erro: '+error.message); else alert('Verifique seu email.'); closePanel(); }
-  async function fazerLogin(){ const email=document.getElementById('emailLogin').value.trim(); const senha=document.getElementById('senhaLogin').value; const {error}=await sb.auth.signInWithPassword({email,password:senha}); if(error)return alert('Erro: '+error.message); window.location.assign(DASHBOARD_URL); }
-  async function sair(){ await sb.auth.signOut(); alert('Você saiu.'); }
-  async function recuperarSenha(){ const email=document.getElementById('emailRecuperar').value.trim(); const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:getBaseSite()+'/reset.html'}); if(error)alert('Erro: '+error.message); else alert('Link enviado.'); closePanel(); }
+  function openPanel(type) {
+    document.getElementById('overlay').style.display = 'block';
+    const el = document.getElementById('panel-' + type);
+    if (el) el.classList.add('active');
+  }
+  function closePanel() {
+    document.getElementById('overlay').style.display = 'none';
+    document.querySelectorAll('.side-panel').forEach(el => el.classList.remove('active'));
+  }
+  function isEmail(v){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
+
+  async function registrarUsuario() {
+    const btn   = document.getElementById('btnCadastrar');
+    const nome  = document.getElementById('nomeCadastro').value.trim();
+    const email = document.getElementById('emailCadastro').value.trim();
+    const senha = document.getElementById('senhaCadastro').value;
+
+    if (!email || !senha) { alert('Preencha email e senha.'); return; }
+    if (!isEmail(email))  { alert('Email inválido.'); return; }
+    if (senha.length < 6) { alert('A senha deve ter pelo menos 6 caracteres.'); return; }
+
+    const old = btn.textContent; btn.disabled = true; btn.textContent = 'Cadastrando...';
+
+    try {
+      const { data, error } = await sb.auth.signUp({
+        email, password: senha,
+        options: {
+          data: nome ? { nome } : {},
+          emailRedirectTo: getBaseSite() + '/reset.html'
+        }
+      });
+      if (error) {
+        const m = (error.message || '').toLowerCase();
+        if (m.includes('already') || m.includes('exists')) { alert('Este email já está cadastrado. Use o Login ou a Recuperação de Senha.'); return; }
+        if (m.includes('rate limit')) { alert('Muitos envios. Aguarde alguns minutos e tente novamente.'); return; }
+        alert('Erro no cadastro: ' + error.message); return;
+      }
+      if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+        alert('Este email já está cadastrado. Verifique sua caixa de entrada ou use Recuperar Senha.');
+        return;
+      }
+      alert('Cadastro criado! Verifique seu email para confirmar a conta.');
+      closePanel();
+    } catch(e) {
+      alert('Falha inesperada ao cadastrar: ' + (e?.message || e));
+    } finally {
+      btn.disabled = false; btn.textContent = old;
+    }
+  }
+
+  async function fazerLogin() {
+    const email = document.getElementById('emailLogin').value.trim();
+    const senha = document.getElementById('senhaLogin').value;
+    const { error } = await sb.auth.signInWithPassword({ email, password: senha });
+    if (error) {
+      alert('Erro no login: ' + error.message);
+      console.error('[LOGIN error]', error);
+      return;
+    }
+    window.location.assign(DASHBOARD_URL);
+  }
+
+  async function sair() {
+    await sb.auth.signOut();
+    alert('Você saiu da conta.');
+  }
+
+  async function recuperarSenha() {
+    const email = document.getElementById('emailRecuperar').value.trim();
+    if (!email) { alert('Informe o email.'); return; }
+    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: getBaseSite() + '/reset.html' });
+    if (error) alert('Erro: ' + error.message);
+    else { alert('Enviamos um link de recuperação para seu email.'); closePanel(); }
+  }
 </script>
 </body>
 </html>
