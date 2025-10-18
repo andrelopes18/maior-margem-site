@@ -4,32 +4,33 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Painel Administrativo</title>
-
-  <!-- Tailwind via CDN (ok para desenvolvimento; para produção use PostCSS/CLI) -->
+  <!-- Tailwind (CDN) - apenas para layout rápido -->
   <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- Supabase UMD -->
+  
+  <!-- Supabase UMD (expondo window.supabase) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 
-  <!-- Suas chaves (defina SUPABASE_URL e SUPABASE_ANON_KEY no escopo global) -->
+  <!-- Carrega suas chaves do arquivo config.js (deve expor variáveis globais) -->
   <script src="config.js"></script>
-
+  <!-- Resolver chaves vindas do config.js (sem placeholders no HTML) -->
   <script>
     function getSupabaseConfig() {
-      const url = [
+      const urlCandidates = [
         window.SUPABASE_URL,
         window.CONFIG_SUPABASE_URL,
         window.config?.SUPABASE_URL,
         window.CONFIG?.SUPABASE_URL,
         window.env?.SUPABASE_URL,
-      ].find(v => typeof v === 'string' && v.trim());
-      const key = [
+      ];
+      const keyCandidates = [
         window.SUPABASE_ANON_KEY,
         window.CONFIG_SUPABASE_ANON_KEY,
         window.config?.SUPABASE_ANON_KEY,
         window.CONFIG?.SUPABASE_ANON_KEY,
         window.env?.SUPABASE_ANON_KEY,
-      ].find(v => typeof v === 'string' && v.trim());
+      ];
+      const url = urlCandidates.find(v => typeof v === 'string' && v.trim());
+      const key = keyCandidates.find(v => typeof v === 'string' && v.trim());
       return { url, key };
     }
     function isValidUrl(u){ return typeof u === 'string' && /^https:\/\/.+\.supabase\.co\/?$/.test(u); }
@@ -37,7 +38,7 @@
   </script>
 
   <style>
-    .debug { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace; }
+    .debug { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
   </style>
 </head>
 <body class="bg-slate-100 min-h-screen">
@@ -52,14 +53,14 @@
     </div>
   </header>
 
-  <!-- Banner -->
+  <!-- Banner de erro/aviso -->
   <div id="banner" class="hidden mx-auto max-w-7xl px-4 mt-4 p-3 rounded-lg bg-red-100 text-red-800 text-sm"></div>
 
-  <!-- App -->
+  <!-- Conteúdo: escondido até autenticar + checar admin -->
   <main id="appRoot" class="hidden max-w-7xl mx-auto px-4 py-6">
     <div id="bootInfo" class="mb-4 text-sm text-slate-500">Carregando painel...</div>
 
-    <!-- Métricas -->
+    <!-- Cards de Métricas -->
     <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       <div class="p-5 rounded-2xl bg-white shadow-sm">
         <div class="text-slate-500 text-sm">Usuários cadastrados (total)</div>
@@ -79,7 +80,7 @@
       </div>
     </section>
 
-    <!-- Distribuição por plano -->
+    <!-- Usuários por Plano -->
     <section class="mt-6 p-5 rounded-2xl bg-white shadow-sm">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-lg font-semibold">Usuários por plano</h2>
@@ -88,7 +89,7 @@
       <div id="plansWrap" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3"></div>
     </section>
 
-    <!-- Tabela de usuários -->
+    <!-- Tabela de Usuários -->
     <section class="mt-6 p-5 rounded-2xl bg-white shadow-sm">
       <div class="flex items-center justify-between gap-3 mb-4">
         <h2 class="text-lg font-semibold">Todos os usuários</h2>
@@ -97,7 +98,6 @@
           <button id="btnBuscar" class="px-3 py-2 rounded-lg bg-slate-900 text-white text-sm">Buscar</button>
         </div>
       </div>
-
       <div class="overflow-x-auto">
         <table class="min-w-full text-sm">
           <thead>
@@ -113,7 +113,6 @@
           <tbody id="usersTbody"></tbody>
         </table>
       </div>
-
       <div class="flex items-center justify-between mt-4">
         <button id="prevPage" class="px-3 py-1.5 rounded-lg bg-slate-200">Anterior</button>
         <span id="pageInfo" class="text-slate-500 text-sm">Página 1</span>
@@ -134,7 +133,7 @@
   </template>
 
   <script>
-    /* ===== Helper UI ===== */
+    // ================= Helper de UI/Debug =================
     const banner = (msg, color = 'red') => {
       const el = document.getElementById('banner');
       el.textContent = msg;
@@ -142,11 +141,19 @@
       el.classList.remove('hidden');
       console.warn('[ADMIN]', msg);
     };
+
     window.addEventListener('error', (e) => banner('Erro de script: ' + (e?.error?.message || e.message)));
     window.addEventListener('unhandledrejection', (e) => banner('Promise rejeitada: ' + (e?.reason?.message || e.reason)));
 
-    /* ===== Estado ===== */
-    const state = { page: 1, pageSize: 20, q: '', session: null, user: null, isAdmin: false };
+    // ================= Estado =================
+    const state = {
+      page: 1,
+      pageSize: 20,
+      q: '',
+      session: null,
+      user: null,
+      isAdmin: false,
+    };
 
     const userEmailEl = document.getElementById('userEmail');
     const elTotalUsers = document.getElementById('totalUsers');
@@ -165,18 +172,21 @@
     const nextPage = document.getElementById('nextPage');
     const btnSair = document.getElementById('btnSair');
 
-    /* ===== Boot ===== */
+    // ================= Boot =================
     (async function guardAndBoot() {
       try {
         const { url, key } = getSupabaseConfig();
-        if (!isValidUrl(url) || !isValidKey(key)) {
-          banner('Chaves do Supabase ausentes/invalidas (config.js).');
-          return;
+        const urlOk = isValidUrl(url);
+        const keyOk = isValidKey(key);
+        if (!urlOk || !keyOk) {
+          banner('As chaves do Supabase não foram encontradas no config.js. Garanta que ele define SUPABASE_URL e SUPABASE_ANON_KEY no escopo global.');
+          return; // não prossegue
         }
+
         const sb = window.supabase.createClient(url, key);
         const { data: { session }, error } = await sb.auth.getSession();
         if (error) banner('Erro ao obter sessão: ' + error.message);
-        if (!session) { banner('Sem sessão. Faça login primeiro.'); return; }
+        if (!session) { banner('Sem sessão. Faça login primeiro na página index.html.'); return; }
 
         window.__supabase = sb;
         state.session = session;
@@ -184,14 +194,21 @@
         userEmailEl.textContent = state.user.email || '';
 
         const isAdmin = await checkIsAdmin();
-        if (!isAdmin) { banner('Acesso negado. Página exclusiva para administradores.'); return; }
+        if (!isAdmin) { banner('Acesso negado. Esta página é exclusiva para administradores.'); return; }
 
+        // OK para exibir app
         document.getElementById('appRoot').classList.remove('hidden');
         await loadAll();
-      } catch (e) { banner('Falha ao iniciar painel: ' + (e?.message || e)); }
+      } catch (e) {
+        banner('Falha ao iniciar painel: ' + (e?.message || e));
+      }
     })();
 
-    btnSair?.addEventListener('click', async () => { try { await (window.__supabase)?.auth.signOut(); } catch {} window.location.href = 'index.html'; });
+    btnSair?.addEventListener('click', async () => {
+      try { await (window.__supabase)?.auth.signOut(); } catch {}
+      window.location.href = 'index.html';
+    });
+
     btnRefresh?.addEventListener('click', loadAll);
     btnBuscar?.addEventListener('click', () => { state.q = qUser.value.trim(); state.page = 1; loadUsersTable(); });
     prevPage?.addEventListener('click', () => { if (state.page > 1) { state.page--; loadUsersTable(); } });
@@ -201,41 +218,62 @@
       try {
         let isAdmin = state.user?.user_metadata?.role === 'admin';
         if (!isAdmin) {
-          const { data, error } = await (window.__supabase).from('profiles').select('role').eq('id', state.user.id).maybeSingle();
+          const { data, error } = await (window.__supabase)
+            .from('profiles').select('role').eq('id', state.user.id).maybeSingle();
           if (error) banner('Erro checando role no profiles: ' + error.message);
           isAdmin = data?.role === 'admin';
         }
         state.isAdmin = !!isAdmin;
         return state.isAdmin;
-      } catch (e) { banner('Falha ao checar admin: ' + (e?.message || e)); return false; }
+      } catch (e) {
+        banner('Falha ao checar admin: ' + (e?.message || e));
+        return false;
+      }
     }
 
-    /* ===== Carregamento Geral ===== */
+    // ================= Carregamento Geral =================
     async function loadAll() {
       document.getElementById('bootInfo').textContent = 'Carregando métricas e tabela...';
-      await Promise.all([loadStats(), loadPlansDistribution(), loadUsersTable()]);
+      await Promise.all([
+        loadStats(),
+        loadPlansDistribution(),
+        loadUsersTable(),
+      ]);
       document.getElementById('bootInfo').textContent = '';
     }
 
-    /* ===== Métricas ===== */
+    // ================= Métricas =================
     async function loadStats() {
-      const totalUsers = await countRows('profiles'); elTotalUsers.textContent = formatNumber(totalUsers);
+      const totalUsers = await countRows('profiles');
+      elTotalUsers.textContent = formatNumber(totalUsers);
 
-      const firstDay = new Date(); firstDay.setDate(1); firstDay.setHours(0,0,0,0);
+      const firstDay = new Date();
+      firstDay.setDate(1); firstDay.setHours(0,0,0,0);
       const { count: monthCount } = await selectWithCount('profiles', q => q.gte('created_at', firstDay.toISOString()));
       elMonthUsers.textContent = formatNumber(monthCount || 0);
 
-      const totalProducts = await countRows('cadastro_produtos'); elTotalProducts.textContent = formatNumber(totalProducts);
+      const totalProducts = await countRows('cadastro_produtos');
+      elTotalProducts.textContent = formatNumber(totalProducts);
 
       const mrr = await computeMRR();
       elMRR.textContent = mrr != null ? formatCurrencyBRL(mrr / 100) : '—';
     }
-    async function countRows(table) { const { count, error } = await window.__supabase.from(table).select('*', { count: 'exact', head: true }); if (error) { banner(`countRows ${table}: ` + error.message, 'amber'); return 0; } return count || 0; }
-    async function selectWithCount(table, build) { let q = window.__supabase.from(table).select('*', { count: 'exact', head: true }); if (build) q = build(q); const { count, error } = await q; if (error) { banner(`selectWithCount ${table}: ` + error.message, 'amber'); return { count: 0, error }; } return { count }; }
 
-    /* MRR resiliente: tenta subscriptions; senão, cai para profiles(plan, plan_price_cents) */
+    async function countRows(table) {
+      const { count, error } = await window.__supabase.from(table).select('*', { count: 'exact', head: true });
+      if (error) { banner(`countRows ${table}: ` + error.message, 'amber'); return 0; }
+      return count || 0;
+    }
+
+    async function selectWithCount(table, build) {
+      let query = window.__supabase.from(table).select('*', { count: 'exact', head: true });
+      if (build) query = build(query);
+      const { count, error } = await query;
+      if (error) { banner(`selectWithCount ${table}: ` + error.message, 'amber'); return { count: 0, error }; }
+      return { count };
+    }
+
     async function computeMRR() {
-      // 1) subscriptions
       try {
         const { data, error } = await window.__supabase.from('subscriptions').select('status, price_cents');
         if (!error && Array.isArray(data)) {
@@ -243,48 +281,44 @@
           return active.reduce((acc, x) => acc + (x.price_cents || 0), 0);
         }
       } catch {}
-
-      // 2) profiles (sem is_active)
-      try {
-        const { data: profiles, error: e2 } = await window.__supabase
-          .from('profiles')
-          .select('plan, plan_price_cents');
-        if (e2) { banner('MRR (profiles): ' + e2.message, 'amber'); return null; }
-        const paid = (profiles || []).filter(p => !['free', 'trial', null, ''].includes((p.plan || '').toLowerCase()));
-        return paid.reduce((acc, p) => acc + (p.plan_price_cents || 0), 0);
-      } catch (e) {
-        banner('MRR: ' + (e?.message || e), 'amber');
-        return null;
-      }
+      const { data: profiles, error: e2 } = await window.__supabase
+        .from('profiles')
+        .select('plan, plan_price_cents, is_active');
+      if (e2) { banner('MRR (profiles): ' + e2.message, 'amber'); return null; }
+      const paid = (profiles || []).filter(p => (p.is_active ?? true) && !['free', 'trial', null, ''].includes((p.plan || '').toLowerCase()));
+      return paid.reduce((acc, p) => acc + (p.plan_price_cents || 0), 0);
     }
 
-    /* ===== Distribuição por Plano ===== */
+    // ================= Distribuição por Plano =================
     async function loadPlansDistribution() {
       plansWrap.innerHTML = '';
       const { data, error } = await window.__supabase.from('profiles').select('plan');
       if (error) { plansWrap.textContent = 'Erro ao carregar planos.'; banner('plans: ' + error.message, 'amber'); return; }
-      const map = new Map(); (data || []).forEach(p => { const key = (p.plan || 'sem_plano') + ''; map.set(key, (map.get(key) || 0) + 1); });
+      const map = new Map();
+      (data || []).forEach(p => { const key = (p.plan || 'sem_plano') + ''; map.set(key, (map.get(key) || 0) + 1); });
       for (const [plan, qty] of map.entries()) {
         const card = document.createElement('div');
         card.className = 'p-4 rounded-xl border bg-white';
-        card.innerHTML = `<div class="text-slate-500 text-sm">${escapeHtml(plan)}</div><div class="text-2xl font-semibold">${formatNumber(qty)}</div>`;
+        card.innerHTML = `<div class="text-slate-500 text-sm">${escapeHtml(plan)}</div>
+                          <div class="text-2xl font-semibold">${formatNumber(qty)}</div>`;
         plansWrap.appendChild(card);
       }
     }
 
-    /* ===== Tabela de usuários ===== */
+    // ================= Tabela de usuários =================
     async function loadUsersTable() {
       usersTbody.innerHTML = '';
-      const from = (state.page - 1) * state.pageSize, to = from + state.pageSize - 1;
+      const from = (state.page - 1) * state.pageSize;
+      const to = from + state.pageSize - 1;
 
-      let query = window.__supabase.from('profiles')
+      let query = window.__supabase
+        .from('profiles')
         .select('id, first_name, email, plan, plan_price_cents, created_at', { count: 'exact' })
         .order('created_at', { ascending: false })
         .range(from, to);
 
       if (state.q) {
-        // busca por email OU first_name
-        query = query.or(`email.ilike.%${state.q}%,first_name.ilike.%${state.q}%`);
+        query = query.or(`email.ilike.%${state.q}%,name.ilike.%${state.q}%`);
       }
 
       const { data, count, error } = await query;
@@ -300,45 +334,33 @@
     function addUserRow(row) {
       const tpl = document.getElementById('userRowTpl');
       const tr = tpl.content.cloneNode(true);
-      tr.querySelector('[data-el="name"]').textContent = row.first_name || '—';
+      tr.querySelector('[data-el="name"]').textContent = row.name || '—';
       tr.querySelector('[data-el="email"]').textContent = row.email || '—';
       tr.querySelector('[data-el="plan"]').textContent = row.plan || '—';
       tr.querySelector('[data-el="price"]').textContent = (row.plan_price_cents != null) ? (row.plan_price_cents / 100).toFixed(2) : '—';
       tr.querySelector('[data-el="created"]').textContent = formatDate(row.created_at);
 
       const actions = tr.querySelector('[data-el="actions"]');
-
       const sel = document.createElement('select');
       sel.className = 'px-2 py-1 rounded border';
-      ['free', 'trial', 'basico', 'intermediario', 'premium', 'admin'].forEach(p => {
+      ['free', 'trial', 'basic', 'pro', 'enterprise', 'admin'].forEach(p => {
         const opt = document.createElement('option');
         opt.value = p; opt.textContent = p; if ((row.plan || '').toLowerCase() === p) opt.selected = true;
         sel.appendChild(opt);
       });
-
       const inpPrice = document.createElement('input');
       inpPrice.type = 'number'; inpPrice.step = '1'; inpPrice.min = '0'; inpPrice.placeholder = 'Preço (centavos)';
       inpPrice.value = row.plan_price_cents ?? '';
       inpPrice.className = 'px-2 py-1 rounded border w-36 ml-2';
-
       const btnSave = document.createElement('button');
       btnSave.textContent = 'Salvar';
       btnSave.className = 'ml-2 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-sm hover:bg-emerald-500';
-      btnSave.addEventListener('click', async () => { await updateUserPlan(row.id, sel.value, inpPrice.value); });
-
-      /* === Botão: Zerar produtos (com DEBUG reforçado) === */
-      const btnWipe = document.createElement('button');
-      btnWipe.textContent = 'Zerar produtos';
-      btnWipe.title = 'Apaga todos os itens enviados pelo usuário na tabela produtos_cliente';
-      btnWipe.className = 'ml-2 px-3 py-1.5 rounded-lg bg-rose-600 text-white text-sm hover:bg-rose-500';
-      btnWipe.addEventListener('click', async () => {
-        await deleteUserProducts(row.id, row.email || row.first_name || row.id, { debug: true });
+      btnSave.addEventListener('click', async () => {
+        await updateUserPlan(row.id, sel.value, inpPrice.value);
       });
-
       actions.appendChild(sel);
       actions.appendChild(inpPrice);
       actions.appendChild(btnSave);
-      actions.appendChild(btnWipe);
 
       usersTbody.appendChild(tr);
     }
@@ -346,104 +368,23 @@
     async function updateUserPlan(id, plan, priceCents) {
       if (!confirm('Confirmar alteração de plano deste usuário?')) return;
       const price = Number(priceCents);
-      const { error } = await window.__supabase.from('profiles')
+      const { error } = await window.__supabase
+        .from('profiles')
         .update({ plan, plan_price_cents: isNaN(price) ? null : price })
         .eq('id', id);
-      if (error) { banner('Salvar plano: ' + error.message, 'amber'); }
-      else { alert('Plano atualizado com sucesso.'); await Promise.all([loadPlansDistribution(), loadStats(), loadUsersTable()]); }
-    }
-
-    /* ====== DEBUG: Zerar produtos do usuário ====== */
-    async function countUserProducts(userId) {
-      const { count, error } = await window.__supabase
-        .from('produtos_cliente')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', userId);
-      if (error) { banner('Contar produtos do usuário: ' + error.message, 'amber'); return 0; }
-      return count || 0;
-    }
-
-    async function deleteUserProducts(userId, label, opts = { debug: true }) {
-      const t0 = performance.now();
-      const who = label ? ` (${label})` : '';
-      try {
-        // pré-checagem: quantos itens há e se SELECT está liberado p/ esse filtro
-        const before = await countUserProducts(userId);
-        if (!confirm(`Isto irá APAGAR ${before} registro(s) em produtos_cliente para${who}. Deseja continuar?`)) return;
-
-        // tentamos deletar (se a policy bloquear o admin, o retorno vem vazio e 'ok')
-        const delRes = await window.__supabase
-          .from('produtos_cliente')
-          .delete()
-          .eq('user_id', userId)
-          .select(); // retorna linhas deletadas apenas se RLS permitir
-
-        const after = await countUserProducts(userId);
-        const took = Math.round(performance.now() - t0);
-
-        if (delRes.error) {
-          banner(`Falha ao apagar produtos do usuário${who}: ${delRes.error.message}`, 'red');
-        } else {
-          const deleted = Array.isArray(delRes.data) ? delRes.data.length : 0;
-          const okMsg = `Zerar produtos${who}: antes=${before}, deletados=${deleted}, depois=${after}, tempo=${took}ms.`;
-          // se não apagou, sinaliza em âmbar (provável RLS)
-          banner(okMsg, (after === 0) ? 'green' : 'amber');
-          if (after !== 0) {
-            banner(
-              `Aparentemente o DELETE foi bloqueado por RLS (admin ≠ dono dos registros). ` +
-              `Adicione uma policy de DELETE para admin ou execute via serviço seguro.`,
-              'amber'
-            );
-          }
-        }
-
-        if (opts.debug) {
-          console.groupCollapsed('%c[DEBUG wipe] produtos_cliente' , 'color:#e11d48;font-weight:bold');
-          console.log('Usuário alvo:', { userId, label });
-          console.log('Sessão corrente:', { adminUser: state.user?.id, adminEmail: state.user?.email, claims: state.user?.user_metadata || {} });
-          console.log('Contagem ANTES:', before);
-          if (delRes.error) {
-            console.error('DELETE error:', delRes.error);
-          } else {
-            console.log('DELETE status: ok');
-            console.log('Linhas deletadas (se RLS permitir SELECT no retorno):', delRes.data);
-            console.log('Qtd deletada (data.length):', Array.isArray(delRes.data) ? delRes.data.length : null);
-          }
-          console.log('Contagem DEPOIS:', after);
-          console.log('Tempo (ms):', took);
-          console.log('Provável causa se não zerou:',
-            '- Policy RLS só permite DELETE quando auth.uid() = user_id;',
-            '- Admin não é o dono dos registros (IDs diferentes).'
-          );
-          console.log('Solução 1 (recomendada): policy de DELETE para admin, ex.:');
-          console.log(`
-create policy "admin_can_delete_produtos_cliente"
-on produtos_cliente
-for delete
-to authenticated
-using (
-  exists (select 1
-            from profiles p
-           where p.id = auth.uid()
-             and p.role = 'admin')
-);
-          `.trim());
-          console.log('Solução 2: executar via função RPC SECURITY DEFINER no servidor (Edge Function / SQL), NUNCA no client com service key.');
-          console.groupEnd();
-        }
-
-        await Promise.all([loadStats(), loadUsersTable()]);
-      } catch (e) {
-        banner('Erro ao apagar produtos: ' + (e?.message || e), 'red');
-        if (opts.debug) console.error('[wipe:error]', e);
+      if (error) {
+        banner('Salvar plano: ' + error.message, 'amber');
+      } else {
+        alert('Plano atualizado com sucesso.');
+        await Promise.all([loadPlansDistribution(), loadStats(), loadUsersTable()]);
       }
     }
 
-    /* ===== Utils ===== */
+    // ================= Utils =================
     function formatNumber(n) { return new Intl.NumberFormat('pt-BR').format(n || 0); }
     function formatCurrencyBRL(n) { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n || 0); }
     function formatDate(iso) { if (!iso) return '—'; const d = new Date(iso); return d.toLocaleDateString('pt-BR', { year: 'numeric', month: '2-digit', day: '2-digit' }); }
-    function escapeHtml(s) { return (s ?? '').toString().replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+    function escapeHtml(s) { return (s ?? '').toString().replace(/[&<>"]+/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
   </script>
 </body>
 </html>
