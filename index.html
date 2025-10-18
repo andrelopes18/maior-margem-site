@@ -6,168 +6,146 @@
 <title>MaiorMargem - Monitoramento de Preços</title>
 <style>
   :root { color-scheme: dark; }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
 
-  /* ===== BASE ===== */
-  body {
+  /* ===== Base ===== */
+  * { box-sizing: border-box; }
+  body{
+    margin:0;
     font-family: "Segoe UI", Arial, sans-serif;
-    background: #000; /* fundo preto uniforme */
-    color: #fff;
-    overflow-x: hidden;
+    background:#0f0f0f;
+    color:#fff;
   }
+  a{ color:#9cf; text-decoration:none; }
+  img{ display:block; max-width:100%; height:auto; }
 
-  a { color: #9cf; text-decoration: none; }
-  img { display: block; width: 100%; height: auto; }
-
-  /* ===== HEADER ===== */
-  header {
-    position: sticky;
-    top: 0;
-    z-index: 1000;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px 24px;
-    background: rgba(0, 0, 0, 0.8);
+  /* ===== Header ===== */
+  header{
+    position:sticky; top:0; z-index:1000;
+    display:flex; justify-content:space-between; align-items:center;
+    padding:12px 24px;
+    background:rgba(20,20,20,.75);
     backdrop-filter: blur(6px);
-    border-bottom: 1px solid #111;
+    border-bottom:1px solid #242424;
+  }
+  header img{ height:44px; }
+  .header-buttons button{
+    background:#00b140; color:#fff; border:none;
+    padding:10px 18px; margin-left:10px; border-radius:24px;
+    cursor:pointer; font-size:14px; transition:transform .2s, background .25s;
+  }
+  .header-buttons button:hover{ background:#00a139; transform:translateY(-1px); }
+  .auth-chip{
+    display:none; margin-right:10px;
+    padding:6px 10px; border-radius:999px; font-size:12px;
+    background:#103b24; color:#b2ffd1; border:1px solid #1c6b3e;
   }
 
-  header img { height: 44px; }
-
-  .header-buttons button {
-    background: #00b140;
-    color: #fff;
-    border: none;
-    padding: 10px 18px;
-    margin-left: 10px;
-    border-radius: 24px;
-    cursor: pointer;
-    font-size: 14px;
-    transition: transform .2s, background .25s;
-  }
-
-  .header-buttons button:hover {
-    background: #009f3c;
-    transform: translateY(-1px);
-  }
-
-  .auth-chip {
-    display: none;
-    margin-right: 10px;
-    padding: 6px 10px;
-    border-radius: 999px;
-    font-size: 12px;
-    background: #103b24;
-    color: #b2ffd1;
-    border: 1px solid #1c6b3e;
-  }
-
-  /* ===== BANNER PRINCIPAL ===== */
-  #hero-wrap {
-    position: relative;
-    height: 140vh;
+  /* ===== HERO (banner principal com transição) ===== */
+  /* Wrapper com altura maior para criar o "percurso" do efeito */
+  #hero-wrap{
+    position:relative;
+    height: 140vh;           /* controla quanto tempo o banner fica na tela */
     overflow: clip;
-    background: #000;
   }
-
-  #hero-sticky {
+  /* Elemento sticky que “cola” no topo durante o scroll dentro do wrapper */
+  #hero-sticky{
     position: sticky;
     top: 0;
     height: 100vh;
     display: grid;
     place-items: center;
-    background: #000;
     isolation: isolate;
+    background: radial-gradient(1200px 600px at 50% 10%, rgba(0,177,64,.12), transparent 60%);
   }
 
-  .hero-banner {
-    width: 100vw;
-    height: 100vh;
-    overflow: hidden;
+  /* Conteúdo do banner (imagem) que será transformado via CSS var */
+  .hero-banner{
+    width:min(1400px, 92vw);
+    aspect-ratio: 27/11;     /* deixa estável enquanto carrega */
+    border-radius: 18px;
+    overflow:hidden;
+    box-shadow:
+      0 30px 90px rgba(0,0,0,.65),
+      inset 0 0 0 1px rgba(255,255,255,.05);
     transform-origin: center top;
-    transition: transform .3s ease, opacity .3s ease;
+    transition: box-shadow .3s ease;
+  }
+  .hero-banner img{
+    width:100%; height:100%; object-fit: cover;
+    display:block;
   }
 
-  .hero-banner img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
+  /* Efeito de redução/opacidade conforme o scroll.
+     --p vai de 0 (no topo) a 1 (final do percurso). */
+  #hero-sticky{
+    --p: 0; /* progress */
   }
-
-  #hero-sticky {
-    --p: 0;
-  }
-
-  .hero-banner {
-    transform: translateY(calc(var(--p) * -15vh)) scale(calc(1 - var(--p) * 0.3));
+  .hero-banner{
+    transform:
+      translateY(calc(var(--p) * -18vh))
+      scale(calc(1 - var(--p) * .18));
     opacity: calc(1 - var(--p));
   }
 
-  #hero-sticky[data-collapsed="true"] .hero-banner {
-    opacity: 0;
-    transform: scale(0.8);
+  /* Quando praticamente sumiu, reduz a sombra para não distrair */
+  #hero-sticky[data-collapsed="true"] .hero-banner{
+    box-shadow: 0 10px 40px rgba(0,0,0,.45);
   }
 
   /* ===== PLANOS ===== */
-  .plans {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 12px; /* diminui distância entre planos */
-    padding: 40px 10px 60px;
-    max-width: 1200px;
-    margin: 0 auto;
-    background: #000;
+  .plans{
+    display:flex; flex-wrap:wrap; justify-content:center; gap:22px;
+    padding: 46px 20px 80px;
+    max-width:1200px; margin:0 auto;
   }
-
-  .plans h1.section-title {
-    flex-basis: 100%;
+  .plans h1.section-title{
+    flex-basis:100%;
     font-size: clamp(22px, 3vw, 30px);
-    color: #00b140;
-    margin: 10px 0 20px;
-    text-align: center;
+    color:#00b140;
+    margin: 12px 0 6px;
+    text-align:center;
   }
-
-  .plan {
-    width: 240px;
-    text-align: center;
-    background: #121212;
-    border: 1px solid #1f1f1f;
-    border-radius: 14px;
-    padding: 20px 15px;
-    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
+  .plan{
+    width: 260px; text-align:center;
+    background:#161616;
+    border:1px solid #242424;
+    border-radius:14px;
+    padding:22px 20px;
+    box-shadow: 0 6px 22px rgba(0,0,0,.35);
     transition: transform .25s ease, border-color .25s ease;
   }
-
-  .plan:hover {
-    transform: translateY(-4px);
-    border-color: #00b140;
+  .plan:hover{ transform: translateY(-6px); border-color:#00b140; }
+  .plan h2{ margin:0; font-size:20px; color:#00b140; }
+  .plan ul{ margin:14px 0 10px; padding:0; list-style:none; text-align:left; color:#d6d6d6; }
+  .plan ul li{ margin:8px 0; }
+  .price{
+    margin-top:12px; font-weight:700; font-size:20px; color:#e63946;
   }
 
-  .plan h2 {
-    margin: 0;
-    font-size: 18px;
-    color: #00b140;
+  /* ===== Side panels (login/cadastro) ===== */
+  .overlay{ display:none; position:fixed; inset:0; z-index:1500; background:rgba(0,0,0,.5); }
+  .side-panel{
+    position:fixed; top:0; right:-400px; width:350px; height:100%;
+    background:#171717; z-index:2000; padding:20px; overflow:auto;
+    box-shadow:-4px 0 14px rgba(0,0,0,.55);
+    transition:right .35s ease;
+    border-left:1px solid #242424;
   }
-
-  .plan ul {
-    margin: 10px 0;
-    padding: 0;
-    list-style: none;
-    text-align: left;
-    color: #d6d6d6;
-    font-size: 14px;
+  .side-panel.active{ right:0; }
+  .side-panel h3{ color:#00b140; margin:0 0 10px; }
+  .side-panel input{
+    width:100%; padding:10px; margin:8px 0;
+    border:1px solid #2a2a2a; border-radius:6px;
+    background:#0f0f0f; color:#fff;
   }
-
-  .plan ul li { margin: 6px 0; }
-
-  .price {
-    margin-top: 10px;
-    font-weight: 700;
-    font-size: 18px;
-    color: #e63946;
+  .side-panel button{
+    width:100%; background:#00b140; color:#fff; border:none;
+    padding:10px; border-radius:6px; cursor:pointer;
   }
+  .side-panel button:hover{ background:#00a139; }
+
+  /* ===== Acessibilidade / util ===== */
+  .sr-only{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); border:0; }
 </style>
 </head>
 <body>
@@ -177,17 +155,23 @@
   <div style="display:flex; align-items:center;">
     <span id="authChip" class="auth-chip"></span>
     <div id="headerBtns" class="header-buttons">
-      <button>Cadastrar</button>
-      <button>Entrar</button>
+      <button onclick="openPanel('cadastro')">Cadastrar</button>
+      <button onclick="openPanel('login')">Entrar</button>
+    </div>
+    <div id="goDashboard" class="header-buttons" style="display:none;">
+      <button onclick="goDashboard()">Ir para o Dashboard</button>
+    </div>
+    <div id="logoutBox" class="header-buttons" style="display:none;">
+      <button onclick="sair()">Sair</button>
     </div>
   </div>
 </header>
 
-<!-- ===== Banner principal ===== -->
-<section id="hero-wrap">
+<!-- ===== Banner principal com transição ===== -->
+<section id="hero-wrap" aria-label="Banner principal">
   <div id="hero-sticky">
-    <figure class="hero-banner">
-      <img src="./banner.png" alt="Banner - MaiorMargem">
+    <figure class="hero-banner" aria-label="Dados de Mercado">
+      <img src="./banner maiormargem (1).png" alt="Banner - Dados de Mercado">
     </figure>
   </div>
 </section>
@@ -196,7 +180,7 @@
 <section class="plans" id="planos">
   <h1 class="section-title">Planos</h1>
 
-  <article class="plan">
+  <article class="plan" aria-label="Plano Trial">
     <h2>Trial</h2>
     <ul>
       <li>Monitorar 100 SKUs</li>
@@ -206,7 +190,7 @@
     <div class="price">Gratuito</div>
   </article>
 
-  <article class="plan">
+  <article class="plan" aria-label="Plano Básico">
     <h2>Básico</h2>
     <ul>
       <li>Monitorar 1.000 SKUs</li>
@@ -216,7 +200,7 @@
     <div class="price">R$ 129,90</div>
   </article>
 
-  <article class="plan">
+  <article class="plan" aria-label="Plano Intermediário">
     <h2>Intermediário</h2>
     <ul>
       <li>Monitorar 5.000 SKUs</li>
@@ -226,7 +210,7 @@
     <div class="price">R$ 159,90</div>
   </article>
 
-  <article class="plan">
+  <article class="plan" aria-label="Plano Prime">
     <h2>Prime</h2>
     <ul>
       <li>Monitorar 20.000 SKUs</li>
@@ -237,28 +221,176 @@
   </article>
 </section>
 
+<!-- Overlay e painéis -->
+<div id="overlay" class="overlay" onclick="closePanel()"></div>
+
+<div id="panel-cadastro" class="side-panel" role="dialog" aria-labelledby="cadTitle" aria-modal="true">
+  <h3 id="cadTitle">Cadastre-se</h3>
+  <input id="nomeCadastro" type="text" placeholder="Nome (opcional)">
+  <input id="emailCadastro" type="email" placeholder="Email">
+  <input id="senhaCadastro" type="password" placeholder="Senha">
+  <button id="btnCadastrar" onclick="registrarUsuario()">Cadastrar</button>
+</div>
+
+<div id="panel-login" class="side-panel" role="dialog" aria-labelledby="logTitle" aria-modal="true">
+  <h3 id="logTitle">Entrar</h3>
+  <input id="emailLogin" type="email" placeholder="Email">
+  <input id="senhaLogin" type="password" placeholder="Senha">
+  <button onclick="fazerLogin()">Login</button>
+  <div style="margin-top:10px; text-align:center;">
+    <a href="javascript:void(0)" onclick="openPanel('recuperar')" style="color:#9cf;">Esqueci minha senha</a>
+  </div>
+</div>
+
+<div id="panel-recuperar" class="side-panel" role="dialog" aria-labelledby="recTitle" aria-modal="true">
+  <h3 id="recTitle">Recuperar Senha</h3>
+  <input id="emailRecuperar" type="email" placeholder="Digite seu email">
+  <button onclick="recuperarSenha()">Enviar link</button>
+</div>
+
+<!-- Config + Supabase -->
+<script src="config.js?v=12"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 <script>
-  /* Transição do banner ao rolar */
-  const heroWrap = document.getElementById('hero-wrap');
+  /* ===== Helpers base e dashboard ===== */
+  function getBaseSite() {
+    try { if (window.CONFIG?.SITE_URL) return window.CONFIG.SITE_URL.replace(/\/+$/,''); }
+    catch(_) {}
+    return window.location.origin;
+  }
+  const DASHBOARD_URL = getBaseSite() + '/dashboard.html';
+  function goDashboard(){ window.location.assign(DASHBOARD_URL); }
+  window.goDashboard = goDashboard;
+
+  /* ===== Supabase ===== */
+  const { SUPABASE_URL, SUPABASE_ANON_KEY } = window.CONFIG || {};
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    console.warn('config.js não encontrado ou sem chaves do Supabase.');
+  }
+  const sb = (SUPABASE_URL && SUPABASE_ANON_KEY)
+    ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession:true, autoRefreshToken:true } })
+    : null;
+
+  async function atualizarUIAuth() {
+    if (!sb) return;
+    const { data: { session } } = await sb.auth.getSession();
+    const chip = document.getElementById('authChip');
+    const headerBtns = document.getElementById('headerBtns');
+    const logoutBox = document.getElementById('logoutBox');
+    const goDash = document.getElementById('goDashboard');
+
+    if (session?.user) {
+      chip.textContent = 'Logado: ' + (session.user.email || '');
+      chip.style.display = 'inline-block';
+      headerBtns.style.display = 'none';
+      logoutBox.style.display = 'block';
+      goDash.style.display = 'block';
+    } else {
+      chip.style.display = 'none';
+      headerBtns.style.display = 'block';
+      logoutBox.style.display = 'none';
+      goDash.style.display = 'none';
+    }
+  }
+
+  async function registrarUsuario() {
+    if (!sb) { alert('Configuração de autenticação ausente.'); return; }
+    const btn   = document.getElementById('btnCadastrar');
+    const nome  = document.getElementById('nomeCadastro').value.trim();
+    const email = document.getElementById('emailCadastro').value.trim();
+    const senha = document.getElementById('senhaCadastro').value;
+
+    if (!email || !senha) { alert('Preencha email e senha.'); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('Email inválido.'); return; }
+    if (senha.length < 6) { alert('A senha deve ter pelo menos 6 caracteres.'); return; }
+
+    const old = btn.textContent; btn.disabled = true; btn.textContent = 'Cadastrando...';
+    try {
+      const { data, error } = await sb.auth.signUp({
+        email, password: senha,
+        options: {
+          data: nome ? { nome } : {},
+          emailRedirectTo: getBaseSite() + '/reset.html'
+        }
+      });
+      if (error) { alert('Erro no cadastro: ' + error.message); return; }
+      if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+        alert('Este email já está cadastrado. Use o Login/Recuperar Senha.');
+        return;
+      }
+      alert('Cadastro criado! Verifique seu email para confirmar.');
+      closePanel();
+    } catch(e) {
+      alert('Falha ao cadastrar: ' + (e?.message || e));
+    } finally {
+      btn.disabled = false; btn.textContent = old;
+    }
+  }
+
+  async function fazerLogin() {
+    if (!sb) { alert('Configuração de autenticação ausente.'); return; }
+    const email = document.getElementById('emailLogin').value.trim();
+    const senha = document.getElementById('senhaLogin').value;
+    const { error } = await sb.auth.signInWithPassword({ email, password: senha });
+    if (error) { alert('Erro no login: ' + error.message); return; }
+    window.location.assign(DASHBOARD_URL);
+  }
+
+  async function sair() { if (sb) { await sb.auth.signOut(); await atualizarUIAuth(); } }
+
+  function openPanel(type) {
+    document.getElementById('overlay').style.display = 'block';
+    if (type === 'cadastro')   document.getElementById('panel-cadastro').classList.add('active');
+    if (type === 'login')      document.getElementById('panel-login').classList.add('active');
+    if (type === 'recuperar')  document.getElementById('panel-recuperar').classList.add('active');
+  }
+  function closePanel() {
+    document.getElementById('overlay').style.display = 'none';
+    ['panel-cadastro','panel-login','panel-recuperar'].forEach(id => {
+      document.getElementById(id).classList.remove('active');
+    });
+  }
+
+  window.openPanel = openPanel;
+  window.closePanel = closePanel;
+  window.registrarUsuario = registrarUsuario;
+  window.fazerLogin = fazerLogin;
+  window.sair = sair;
+
+  (async () => { if (sb){ await atualizarUIAuth(); sb.auth.onAuthStateChange(()=>atualizarUIAuth()); } })();
+
+  /* ===== Efeito de transição do banner =====
+     Calcula o progresso do scroll dentro do #hero-wrap e injeta em --p (0..1) */
+  const heroWrap   = document.getElementById('hero-wrap');
   const heroSticky = document.getElementById('hero-sticky');
 
-  function updateHeroProgress() {
-    const winH = window.innerHeight;
-    const wrapTop = heroWrap.offsetTop;
-    const total = heroWrap.offsetHeight - winH;
-    const scY = window.scrollY;
+  function updateHeroProgress(){
+    const winH   = window.innerHeight;
+    const wrapTop= heroWrap.offsetTop;
+    const total  = heroWrap.offsetHeight - winH;    // trecho onde o sticky permanece
+    const scY    = window.scrollY;
+
     let prog = 0;
     if (scY > wrapTop) {
-      prog = Math.min(1, Math.max(0, (scY - wrapTop) / Math.max(1, total)));
+      prog = Math.min(1, Math.max(0, (scY - wrapTop) / Math.max(1,total)));
     }
     heroSticky.style.setProperty('--p', prog.toFixed(4));
     heroSticky.dataset.collapsed = (prog > 0.98) ? "true" : "false";
   }
-
   updateHeroProgress();
-  window.addEventListener('scroll', updateHeroProgress, { passive: true });
+  window.addEventListener('scroll', updateHeroProgress, { passive:true });
   window.addEventListener('resize', updateHeroProgress);
-</script>
 
+  // Opcional: ao clicar em "Planos" (se criar um link) rolar suave.
+  if ('scrollBehavior' in document.documentElement.style) {
+    document.querySelectorAll('a[href="#planos"]').forEach(a=>{
+      a.addEventListener('click', e=>{
+        e.preventDefault();
+        document.getElementById('planos').scrollIntoView({ behavior:'smooth', block:'start' });
+      });
+    });
+  }
+</script>
 </body>
 </html>
