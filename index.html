@@ -12,7 +12,7 @@
   body{
     margin:0;
     font-family:"Segoe UI", Arial, sans-serif;
-    background:#0f0f0f;
+    background:#000; /* fundo preto em toda a página */
     color:#fff;
   }
   a{ color:#9cf; text-decoration:none; }
@@ -67,11 +67,11 @@
   }
   .plan{
     width:260px; text-align:center;
-    background:#161616;
+    background:#111; /* escurecido para combinar com o fundo */
     border:1px solid #242424;
     border-radius:14px;
     padding:22px 20px;
-    box-shadow:0 6px 22px rgba(0,0,0,.35);
+    box-shadow:0 6px 22px rgba(0,0,0,.45);
     transition: transform .25s ease, border-color .25s ease;
   }
   .plan:hover{ transform:translateY(-6px); border-color:#00b140; }
@@ -148,7 +148,7 @@
 <script src="config.js?v=12"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-  // Suporte de login permanece igual (idêntico ao original)
+  // Funções de autenticação permanecem idênticas ao original
 </script>
 
 </body>
