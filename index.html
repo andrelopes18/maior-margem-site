@@ -1,62 +1,157 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>MaiorMargem - Monitoramento de Preços</title>
 <style>
   :root { color-scheme: dark; }
-  /* Base */
-  html,body{margin:0;height:100%;background:#0b0b0b;color:#fff;font-family:'Segoe UI',Arial,sans-serif}
-  a{color:#9cf;text-decoration:none}
-  img{display:block;max-width:100%;height:auto}
-  /* Header */
-  header{display:flex;justify-content:space-between;align-items:center;padding:15px 30px;background:rgba(18,18,18,.95);position:sticky;top:0;z-index:1000;border-bottom:1px solid #222;backdrop-filter:saturate(120%) blur(6px)}
-  header img{height:45px}
-  .header-buttons button{background:#00b140;color:#fff;border:none;padding:10px 20px;margin-left:10px;border-radius:25px;cursor:pointer;font-size:14px;transition:transform .2s, background .3s}
-  .header-buttons button:hover{background:#009b38;transform:scale(1.05)}
-  .auth-chip{display:none;background:#0e4;color:#001;padding:6px 10px;border-radius:999px;font-size:12px;margin-left:12px}
-  /* Title (above banner) */
-  .page-title{max-width:1100px;margin:28px auto 8px;padding:0 20px}
-  .page-title h1{margin:0 0 6px;font-size:34px;color:#00b140}
-  .page-title p{margin:0;color:#ddd}
-  /* HERO: big banner that shrinks */
-  .hero-wrap{position:relative;height:70vh;min-height:420px;margin:10px auto 0;max-width:1400px}
-  .hero-banner{position:sticky;top:74px;height:calc(70vh - 74px);display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:2}
-  .hero-img{width:100%;max-width:1300px;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.6);border:1px solid #242424;will-change:transform,opacity}
-  .hero-gradient{position:absolute;inset:0;background:linear-gradient(180deg, rgba(0,0,0,.85) 0%, rgba(0,0,0,0) 40%, rgba(0,0,0,0) 70%, rgba(0,0,0,.9) 100%);z-index:1;pointer-events:none}
-  /* Dock area where the banner lands */
-  .dock-area{max-width:1200px;margin:0 auto;padding:10px 20px}
-  .dock-card{border:1px solid #2a2a2a;background:#121212;border-radius:14px;padding:12px;box-shadow:0 10px 36px rgba(0,0,0,.45)}
-  .dock-card img{border-radius:10px}
-  /* Gallery aside the dock to avoid overlap */
-  .gallery{max-width:1200px;margin:20px auto 30px;padding:0 20px;display:grid;grid-template-columns:repeat(12,1fr);gap:16px}
-  .g-item{grid-column:span 12;border:1px solid #2a2a2a;background:#121212;border-radius:14px;overflow:hidden;box-shadow:0 6px 28px rgba(0,0,0,.35)}
-  @media(min-width: 900px){ .g-item--half{grid-column:span 6} }
-  /* Plans */
-  .plans{display:flex;flex-wrap:wrap;justify-content:center;padding:40px 20px;gap:20px;background:#121212}
-  .plan{border:1px solid #2a2a2a;border-radius:10px;padding:25px;width:260px;background:#1c1c1c;box-shadow:0 2px 12px rgba(0,0,0,.3);text-align:center;transition:transform .3s, border-color .3s}
-  .plan:hover{transform:translateY(-5px);border-color:#00b140}
-  .plan h2{color:#00b140;font-size:20px;margin:0}
-  .plan ul{list-style:none;padding:0;margin:15px 0;text-align:left}
-  .plan ul li{margin-bottom:8px}
-  .plan .price{font-size:20px;color:#e63946;font-weight:bold;margin-top:10px}
-  /* Panels */
-  .overlay{display:none;position:fixed;z-index:1500;inset:0;background:rgba(0,0,0,.5)}
-  .side-panel{position:fixed;top:0;right:-400px;width:350px;height:100%;background:#1c1c1c;box-shadow:-4px 0 15px rgba(0,0,0,.5);z-index:2000;padding:20px;transition:right .4s ease;overflow-y:auto}
-  .side-panel.active{right:0}
-  .side-panel h3{color:#00b140;margin-top:0}
-  .side-panel input{width:100%;padding:10px;margin:8px 0;border:1px solid #2a2a2a;border-radius:4px;background:#121212;color:#fff}
-  .side-panel button{width:100%;background:#00b140;color:#fff;padding:10px;border:none;border-radius:4px;cursor:pointer}
-  .side-panel button:hover{background:#009b38}
-  /* Floating clone styles */
-  .floating{position:fixed;left:0;top:0;will-change:transform,width,height;z-index:999;pointer-events:none;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.6);border:1px solid #242424}
-  .hidden{opacity:0;pointer-events:none}
+
+  /* ===== Base ===== */
+  * { box-sizing: border-box; }
+  body{
+    margin:0;
+    font-family: "Segoe UI", Arial, sans-serif;
+    background:#0f0f0f;
+    color:#fff;
+  }
+  a{ color:#9cf; text-decoration:none; }
+  img{ display:block; max-width:100%; height:auto; }
+
+  /* ===== Header ===== */
+  header{
+    position:sticky; top:0; z-index:1000;
+    display:flex; justify-content:space-between; align-items:center;
+    padding:12px 24px;
+    background:rgba(20,20,20,.75);
+    backdrop-filter: blur(6px);
+    border-bottom:1px solid #242424;
+  }
+  header img{ height:44px; }
+  .header-buttons button{
+    background:#00b140; color:#fff; border:none;
+    padding:10px 18px; margin-left:10px; border-radius:24px;
+    cursor:pointer; font-size:14px; transition:transform .2s, background .25s;
+  }
+  .header-buttons button:hover{ background:#00a139; transform:translateY(-1px); }
+  .auth-chip{
+    display:none; margin-right:10px;
+    padding:6px 10px; border-radius:999px; font-size:12px;
+    background:#103b24; color:#b2ffd1; border:1px solid #1c6b3e;
+  }
+
+  /* ===== HERO (banner principal com transição) ===== */
+  /* Wrapper com altura maior para criar o "percurso" do efeito */
+  #hero-wrap{
+    position:relative;
+    height: 140vh;           /* controla quanto tempo o banner fica na tela */
+    overflow: clip;
+  }
+  /* Elemento sticky que “cola” no topo durante o scroll dentro do wrapper */
+  #hero-sticky{
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    display: grid;
+    place-items: center;
+    isolation: isolate;
+    background: radial-gradient(1200px 600px at 50% 10%, rgba(0,177,64,.12), transparent 60%);
+  }
+
+  /* Conteúdo do banner (imagem) que será transformado via CSS var */
+  .hero-banner{
+    width:min(1400px, 92vw);
+    aspect-ratio: 27/11;     /* deixa estável enquanto carrega */
+    border-radius: 18px;
+    overflow:hidden;
+    box-shadow:
+      0 30px 90px rgba(0,0,0,.65),
+      inset 0 0 0 1px rgba(255,255,255,.05);
+    transform-origin: center top;
+    transition: box-shadow .3s ease;
+  }
+  .hero-banner img{
+    width:100%; height:100%; object-fit: cover;
+    display:block;
+  }
+
+  /* Efeito de redução/opacidade conforme o scroll.
+     --p vai de 0 (no topo) a 1 (final do percurso). */
+  #hero-sticky{
+    --p: 0; /* progress */
+  }
+  .hero-banner{
+    transform:
+      translateY(calc(var(--p) * -18vh))
+      scale(calc(1 - var(--p) * .18));
+    opacity: calc(1 - var(--p));
+  }
+
+  /* Quando praticamente sumiu, reduz a sombra para não distrair */
+  #hero-sticky[data-collapsed="true"] .hero-banner{
+    box-shadow: 0 10px 40px rgba(0,0,0,.45);
+  }
+
+  /* ===== PLANOS ===== */
+  .plans{
+    display:flex; flex-wrap:wrap; justify-content:center; gap:22px;
+    padding: 46px 20px 80px;
+    max-width:1200px; margin:0 auto;
+  }
+  .plans h1.section-title{
+    flex-basis:100%;
+    font-size: clamp(22px, 3vw, 30px);
+    color:#00b140;
+    margin: 12px 0 6px;
+    text-align:center;
+  }
+  .plan{
+    width: 260px; text-align:center;
+    background:#161616;
+    border:1px solid #242424;
+    border-radius:14px;
+    padding:22px 20px;
+    box-shadow: 0 6px 22px rgba(0,0,0,.35);
+    transition: transform .25s ease, border-color .25s ease;
+  }
+  .plan:hover{ transform: translateY(-6px); border-color:#00b140; }
+  .plan h2{ margin:0; font-size:20px; color:#00b140; }
+  .plan ul{ margin:14px 0 10px; padding:0; list-style:none; text-align:left; color:#d6d6d6; }
+  .plan ul li{ margin:8px 0; }
+  .price{
+    margin-top:12px; font-weight:700; font-size:20px; color:#e63946;
+  }
+
+  /* ===== Side panels (login/cadastro) ===== */
+  .overlay{ display:none; position:fixed; inset:0; z-index:1500; background:rgba(0,0,0,.5); }
+  .side-panel{
+    position:fixed; top:0; right:-400px; width:350px; height:100%;
+    background:#171717; z-index:2000; padding:20px; overflow:auto;
+    box-shadow:-4px 0 14px rgba(0,0,0,.55);
+    transition:right .35s ease;
+    border-left:1px solid #242424;
+  }
+  .side-panel.active{ right:0; }
+  .side-panel h3{ color:#00b140; margin:0 0 10px; }
+  .side-panel input{
+    width:100%; padding:10px; margin:8px 0;
+    border:1px solid #2a2a2a; border-radius:6px;
+    background:#0f0f0f; color:#fff;
+  }
+  .side-panel button{
+    width:100%; background:#00b140; color:#fff; border:none;
+    padding:10px; border-radius:6px; cursor:pointer;
+  }
+  .side-panel button:hover{ background:#00a139; }
+
+  /* ===== Acessibilidade / util ===== */
+  .sr-only{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); border:0; }
 </style>
 </head>
 <body>
+
 <header>
-  <img src="https://via.placeholder.com/180x45?text=MaiorMargem" alt="MaiorMargem">
+  <img src="https://via.placeholder.com/180x44?text=MaiorMargem" alt="MaiorMargem"/>
   <div style="display:flex; align-items:center;">
     <span id="authChip" class="auth-chip"></span>
     <div id="headerBtns" class="header-buttons">
@@ -72,59 +167,63 @@
   </div>
 </header>
 
-<div class="page-title">
-  <h1>Monitoramento Inteligente de Preços</h1>
-  <p>Visualize tendências, acompanhe concorrentes e tome decisões com dados em tempo real.</p>
-</div>
-
-<!-- HERO large banner -->
-<div class="hero-wrap">
-  <div class="hero-banner" id="heroBanner">
-    <img class="hero-img" id="heroImg" src="./Gemini_Generated_Image_ag5zswag5zswag5z.png" alt="Telas principais do sistema de preços">
-  </div>
-  <div class="hero-gradient"></div>
-</div>
-
-<!-- D O C K   A R E A  (local alvo do banner após a rolagem) -->
-<div class="dock-area">
-  <div class="dock-card">
-    <img id="bannerDock" src="./Gemini_Generated_Image_ag5zswag5zswag5z.png" alt="Banner reduzido" class="hidden">
-  </div>
-</div>
-
-<!-- Outras imagens laterais (não sobrepostas) -->
-<div class="gallery" aria-label="Prévias do sistema">
-  <div class="g-item g-item--half"><img src="./profiles.JPG" alt="Tela de perfis e preferências"></div>
-  <div class="g-item g-item--half"><img src="./tabelas.JPG" alt="Tabelas e relatórios de preços"></div>
-</div>
-
-<section class="plans">
-  <div class="plan">
-    <h2>Trial</h2>
-    <ul><li>Monitorar 100 SKUs</li><li>Sites monitorados: 2</li><li>Análise mensal: 1 inclusa</li></ul>
-    <div class="price">Gratuito</div>
-  </div>
-  <div class="plan">
-    <h2>Básico</h2>
-    <ul><li>Monitorar 1.000 SKUs</li><li>Sites monitorados: 5</li><li>Análise semanal: 4 inclusas</li></ul>
-    <div class="price">R$ 129,90</div>
-  </div>
-  <div class="plan">
-    <h2>Intermediário</h2>
-    <ul><li>Monitorar 5.000 SKUs</li><li>Sites monitorados: 8</li><li>Análise semanal: 4 inclusas</li></ul>
-    <div class="price">R$ 159,90</div>
-  </div>
-  <div class="plan">
-    <h2>Prime</h2>
-    <ul><li>Monitorar 20.000 SKUs</li><li>Sites monitorados: 12</li><li>Análise semanal: 4 inclusas</li></ul>
-    <div class="price">R$ 249,90</div>
+<!-- ===== Banner principal com transição ===== -->
+<section id="hero-wrap" aria-label="Banner principal">
+  <div id="hero-sticky">
+    <figure class="hero-banner" aria-label="Dados de Mercado">
+      <img src="./banner maiormargem (1).png" alt="Banner - Dados de Mercado">
+    </figure>
   </div>
 </section>
 
-<!-- Overlay -->
+<!-- ===== Planos ===== -->
+<section class="plans" id="planos">
+  <h1 class="section-title">Planos</h1>
+
+  <article class="plan" aria-label="Plano Trial">
+    <h2>Trial</h2>
+    <ul>
+      <li>Monitorar 100 SKUs</li>
+      <li>Sites monitorados: 2</li>
+      <li>Análise mensal: 1 inclusa</li>
+    </ul>
+    <div class="price">Gratuito</div>
+  </article>
+
+  <article class="plan" aria-label="Plano Básico">
+    <h2>Básico</h2>
+    <ul>
+      <li>Monitorar 1.000 SKUs</li>
+      <li>Sites monitorados: 5</li>
+      <li>Análise semanal: 4 inclusas</li>
+    </ul>
+    <div class="price">R$ 129,90</div>
+  </article>
+
+  <article class="plan" aria-label="Plano Intermediário">
+    <h2>Intermediário</h2>
+    <ul>
+      <li>Monitorar 5.000 SKUs</li>
+      <li>Sites monitorados: 8</li>
+      <li>Análise semanal: 4 inclusas</li>
+    </ul>
+    <div class="price">R$ 159,90</div>
+  </article>
+
+  <article class="plan" aria-label="Plano Prime">
+    <h2>Prime</h2>
+    <ul>
+      <li>Monitorar 20.000 SKUs</li>
+      <li>Sites monitorados: 12</li>
+      <li>Análise semanal: 4 inclusas</li>
+    </ul>
+    <div class="price">R$ 249,90</div>
+  </article>
+</section>
+
+<!-- Overlay e painéis -->
 <div id="overlay" class="overlay" onclick="closePanel()"></div>
 
-<!-- Painéis -->
 <div id="panel-cadastro" class="side-panel" role="dialog" aria-labelledby="cadTitle" aria-modal="true">
   <h3 id="cadTitle">Cadastre-se</h3>
   <input id="nomeCadastro" type="text" placeholder="Nome (opcional)">
@@ -149,123 +248,149 @@
   <button onclick="recuperarSenha()">Enviar link</button>
 </div>
 
-<script src="config.js?v=11"></script>
+<!-- Config + Supabase -->
+<script src="config.js?v=12"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 <script>
+  /* ===== Helpers base e dashboard ===== */
   function getBaseSite() {
-    try { if (window.CONFIG?.SITE_URL) return window.CONFIG.SITE_URL.replace(/\\/+$/,''); }
+    try { if (window.CONFIG?.SITE_URL) return window.CONFIG.SITE_URL.replace(/\/+$/,''); }
     catch(_) {}
     return window.location.origin;
   }
   const DASHBOARD_URL = getBaseSite() + '/dashboard.html';
+  function goDashboard(){ window.location.assign(DASHBOARD_URL); }
+  window.goDashboard = goDashboard;
 
+  /* ===== Supabase ===== */
   const { SUPABASE_URL, SUPABASE_ANON_KEY } = window.CONFIG || {};
-  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    console.warn('config.js não encontrado ou sem chaves do Supabase.');
+  }
+  const sb = (SUPABASE_URL && SUPABASE_ANON_KEY)
+    ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession:true, autoRefreshToken:true } })
+    : null;
 
-  function openPanel(type){ document.getElementById('overlay').style.display='block'; const el=document.getElementById('panel-'+type); if(el) el.classList.add('active'); }
-  function closePanel(){ document.getElementById('overlay').style.display='none'; document.querySelectorAll('.side-panel').forEach(p=>p.classList.remove('active')); }
-  async function registrarUsuario(){ const email=document.getElementById('emailCadastro').value.trim(); const senha=document.getElementById('senhaCadastro').value; const nome=document.getElementById('nomeCadastro').value.trim(); if(!email||!senha)return alert('Preencha email e senha.'); const {error}=await sb.auth.signUp({email,password:senha,options:{data:{nome},emailRedirectTo:getBaseSite()+'/reset.html'}}); if(error)alert('Erro: '+error.message); else alert('Verifique seu email.'); closePanel(); }
-  async function fazerLogin(){ const email=document.getElementById('emailLogin').value.trim(); const senha=document.getElementById('senhaLogin').value; const {error}=await sb.auth.signInWithPassword({email,password:senha}); if(error)return alert('Erro: '+error.message); window.location.assign(DASHBOARD_URL); }
-  async function sair(){ await sb.auth.signOut(); alert('Você saiu.'); }
-  async function recuperarSenha(){ const email=document.getElementById('emailRecuperar').value.trim(); const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:getBaseSite()+'/reset.html'}); if(error)alert('Erro: '+error.message); else alert('Link enviado.'); closePanel(); }
+  async function atualizarUIAuth() {
+    if (!sb) return;
+    const { data: { session } } = await sb.auth.getSession();
+    const chip = document.getElementById('authChip');
+    const headerBtns = document.getElementById('headerBtns');
+    const logoutBox = document.getElementById('logoutBox');
+    const goDash = document.getElementById('goDashboard');
 
-  // ===== Scroll shrink & dock =====
-  (function(){
-    const hero = document.getElementById('heroBanner');
-    const heroImg = document.getElementById('heroImg');
-    const dockImg = document.getElementById('bannerDock');
-    let docked = false;
-    let animating = false;
-
-    function getRects(){
-      const h = heroImg.getBoundingClientRect();
-      const d = dockImg.getBoundingClientRect();
-      return {h,d};
+    if (session?.user) {
+      chip.textContent = 'Logado: ' + (session.user.email || '');
+      chip.style.display = 'inline-block';
+      headerBtns.style.display = 'none';
+      logoutBox.style.display = 'block';
+      goDash.style.display = 'block';
+    } else {
+      chip.style.display = 'none';
+      headerBtns.style.display = 'block';
+      logoutBox.style.display = 'none';
+      goDash.style.display = 'none';
     }
+  }
 
-    function createClone(rect){
-      const clone = heroImg.cloneNode(true);
-      clone.removeAttribute('id');
-      clone.classList.add('floating');
-      clone.style.width = rect.width + 'px';
-      clone.style.height = rect.height + 'px';
-      clone.style.left = rect.left + 'px';
-      clone.style.top = rect.top + 'px';
-      clone.style.transform = 'translate(0,0)';
-      document.body.appendChild(clone);
-      return clone;
-    }
+  async function registrarUsuario() {
+    if (!sb) { alert('Configuração de autenticação ausente.'); return; }
+    const btn   = document.getElementById('btnCadastrar');
+    const nome  = document.getElementById('nomeCadastro').value.trim();
+    const email = document.getElementById('emailCadastro').value.trim();
+    const senha = document.getElementById('senhaCadastro').value;
 
-    function dock(){
-      if (docked || animating) return;
-      animating = true;
-      const {h,d} = getRects();
-      const clone = createClone(h);
-      heroImg.classList.add('hidden');
-      dockImg.classList.add('hidden');
+    if (!email || !senha) { alert('Preencha email e senha.'); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('Email inválido.'); return; }
+    if (senha.length < 6) { alert('A senha deve ter pelo menos 6 caracteres.'); return; }
 
-      const dx = (d.left - h.left);
-      const dy = (d.top - h.top);
-      const sx = d.width / h.width;
-      const sy = d.height / h.height;
-
-      requestAnimationFrame(()=>{
-        clone.style.transition = 'transform 400ms ease, width 400ms ease, height 400ms ease, left 400ms ease, top 400ms ease';
-        clone.style.left = h.left + 'px';
-        clone.style.top = h.top + 'px';
-        clone.style.transformOrigin = 'top left';
-        clone.style.transform = `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`;
+    const old = btn.textContent; btn.disabled = true; btn.textContent = 'Cadastrando...';
+    try {
+      const { data, error } = await sb.auth.signUp({
+        email, password: senha,
+        options: {
+          data: nome ? { nome } : {},
+          emailRedirectTo: getBaseSite() + '/reset.html'
+        }
       });
-
-      setTimeout(()=>{
-        clone.remove();
-        dockImg.classList.remove('hidden');
-        docked = true; animating = false;
-      }, 420);
+      if (error) { alert('Erro no cadastro: ' + error.message); return; }
+      if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+        alert('Este email já está cadastrado. Use o Login/Recuperar Senha.');
+        return;
+      }
+      alert('Cadastro criado! Verifique seu email para confirmar.');
+      closePanel();
+    } catch(e) {
+      alert('Falha ao cadastrar: ' + (e?.message || e));
+    } finally {
+      btn.disabled = false; btn.textContent = old;
     }
+  }
 
-    function undock(){
-      if (!docked || animating) return;
-      animating = true;
-      const {h,d} = getRects();
-      const clone = createClone(d);
-      dockImg.classList.add('hidden');
+  async function fazerLogin() {
+    if (!sb) { alert('Configuração de autenticação ausente.'); return; }
+    const email = document.getElementById('emailLogin').value.trim();
+    const senha = document.getElementById('senhaLogin').value;
+    const { error } = await sb.auth.signInWithPassword({ email, password: senha });
+    if (error) { alert('Erro no login: ' + error.message); return; }
+    window.location.assign(DASHBOARD_URL);
+  }
 
-      const dx = (h.left - d.left);
-      const dy = (h.top - d.top);
-      const sx = h.width / d.width;
-      const sy = h.height / d.height;
+  async function sair() { if (sb) { await sb.auth.signOut(); await atualizarUIAuth(); } }
 
-      requestAnimationFrame(()=>{
-        clone.style.transition = 'transform 400ms ease';
-        clone.style.transformOrigin = 'top left';
-        clone.style.transform = `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`;
+  function openPanel(type) {
+    document.getElementById('overlay').style.display = 'block';
+    if (type === 'cadastro')   document.getElementById('panel-cadastro').classList.add('active');
+    if (type === 'login')      document.getElementById('panel-login').classList.add('active');
+    if (type === 'recuperar')  document.getElementById('panel-recuperar').classList.add('active');
+  }
+  function closePanel() {
+    document.getElementById('overlay').style.display = 'none';
+    ['panel-cadastro','panel-login','panel-recuperar'].forEach(id => {
+      document.getElementById(id).classList.remove('active');
+    });
+  }
+
+  window.openPanel = openPanel;
+  window.closePanel = closePanel;
+  window.registrarUsuario = registrarUsuario;
+  window.fazerLogin = fazerLogin;
+  window.sair = sair;
+
+  (async () => { if (sb){ await atualizarUIAuth(); sb.auth.onAuthStateChange(()=>atualizarUIAuth()); } })();
+
+  /* ===== Efeito de transição do banner =====
+     Calcula o progresso do scroll dentro do #hero-wrap e injeta em --p (0..1) */
+  const heroWrap   = document.getElementById('hero-wrap');
+  const heroSticky = document.getElementById('hero-sticky');
+
+  function updateHeroProgress(){
+    const winH   = window.innerHeight;
+    const wrapTop= heroWrap.offsetTop;
+    const total  = heroWrap.offsetHeight - winH;    // trecho onde o sticky permanece
+    const scY    = window.scrollY;
+
+    let prog = 0;
+    if (scY > wrapTop) {
+      prog = Math.min(1, Math.max(0, (scY - wrapTop) / Math.max(1,total)));
+    }
+    heroSticky.style.setProperty('--p', prog.toFixed(4));
+    heroSticky.dataset.collapsed = (prog > 0.98) ? "true" : "false";
+  }
+  updateHeroProgress();
+  window.addEventListener('scroll', updateHeroProgress, { passive:true });
+  window.addEventListener('resize', updateHeroProgress);
+
+  // Opcional: ao clicar em "Planos" (se criar um link) rolar suave.
+  if ('scrollBehavior' in document.documentElement.style) {
+    document.querySelectorAll('a[href="#planos"]').forEach(a=>{
+      a.addEventListener('click', e=>{
+        e.preventDefault();
+        document.getElementById('planos').scrollIntoView({ behavior:'smooth', block:'start' });
       });
-
-      setTimeout(()=>{
-        clone.remove();
-        heroImg.classList.remove('hidden');
-        docked = false; animating = false;
-      }, 420);
-    }
-
-    function onScroll(){
-      // Shrink effect while scrolling towards the dock
-      const dockTop = document.querySelector('.dock-area').getBoundingClientRect().top + window.scrollY;
-      const start = hero.offsetTop;
-      const end = dockTop - 160; // point to start docking
-      const y = window.scrollY;
-      const progress = Math.min(1, Math.max(0, (y - start) / (end - start)));
-      const scale = 1 - (0.35 * progress); // shrink to ~65%
-      heroImg.style.transform = `scale(${scale})`;
-
-      if (y >= end) dock();
-      else undock();
-    }
-
-    window.addEventListener('scroll', onScroll, {passive:true});
-    window.addEventListener('resize', ()=>{ if(docked){ undock(); dock(); } });
-  })();
+    });
+  }
 </script>
 </body>
 </html>
