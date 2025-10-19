@@ -866,8 +866,12 @@ function buildQuery(){
     q = q.ilike('ean', `%${eanQ}%`);
   }
   if (descQ){
-    q = q.or(`descricao.ilike.%${descQ}%,descricao_cliente.ilike.%${descQ}%`);
+  const parts = descQ.split(/\s+/).filter(Boolean);
+  const first = parts[0];
+  if (first){
+    q = q.or(`descricao.ilike.%${first}%,descricao_cliente.ilike.%${first}%`);
   }
+}
 
   return q;
 }
@@ -919,7 +923,12 @@ async function fetchFavsDirect(){
     const eanQ  = (currentEanQ||'').trim();
     const descQ = (currentDescQ||'').trim();
     if (eanQ){ q = q.ilike('ean', `%${eanQ}%`); }
-    if (descQ){ q = q.or(`descricao.ilike.%${descQ}%,descricao_cliente.ilike.%${descQ}%`); }
+    if (descQ){
+      const terms = descQ.split(/\s+/).filter(Boolean);
+      for (const term of terms){
+        q = q.or(`descricao.ilike.%${term}%,descricao_cliente.ilike.%${term}%`);
+      }
+    }
 
 
     if (siteIds.length){ q = q.in('site_id', siteIds); }
