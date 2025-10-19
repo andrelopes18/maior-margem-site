@@ -916,6 +916,12 @@ async function fetchFavsDirect(){
       'ean, site_id, site_nome, preco, data, descricao, preco_num, meu_preco, descricao_cliente'
     ).in('ean', favs).order('descricao', { ascending:true, nullsFirst:false }).order('ean', { ascending:true, nullsFirst:true }).order('site_id', { ascending:true });
 
+    const eanQ  = (currentEanQ||'').trim();
+    const descQ = (currentDescQ||'').trim();
+    if (eanQ){ q = q.ilike('ean', `%${eanQ}%`); }
+    if (descQ){ q = q.or(`descricao.ilike.%${descQ}%,descricao_cliente.ilike.%${descQ}%`); }
+
+
     if (siteIds.length){ q = q.in('site_id', siteIds); }
 
     const { data, error, status } = await q;
@@ -940,18 +946,11 @@ function resetAndQuery(){
   dlog({step:'resetAndQuery'});
   produtosMap.clear(); produtosList=[]; serverOffset=0; serverExhausted=false; favFirstAutoRenderDone=false;
   generalView=[]; resetGeneralDom(); renderFavs(); updateFavHeight(); updateCounts();
-
   const hasActiveFilter = ((currentEanQ||'').trim().length>0) || ((currentDescQ||'').trim().length>0);
-
+  // Carrega favoritos diretamente somente quando NÃO há filtro ativo e o escopo inclui favoritos
   if (!hasActiveFilter && (searchScope==='both' || searchScope==='favorites')){
     try{ if (typeof fetchFavsDirect==='function') fetchFavsDirect(); }catch(_){}
   }
-
-  fetchNextPage();
-});
-  produtosMap.clear(); produtosList=[]; serverOffset=0; serverExhausted=false; favFirstAutoRenderDone=false;
-  generalView=[]; resetGeneralDom(); renderFavs(); updateFavHeight(); updateCounts();
-  try{ if (typeof fetchFavsDirect==='function') fetchFavsDirect(); }catch(_){}
   fetchNextPage();
 }
 
