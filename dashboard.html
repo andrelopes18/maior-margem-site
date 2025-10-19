@@ -95,8 +95,7 @@
     #chartPopover .close { background:transparent; border:1px solid #333; color:#ddd; padding:2px 8px; border-radius:6px; cursor:pointer; }
     #chartPopover .msg { font-size:12px; color:#9aa0a6; }
   
-    .mm-logo{ height:42px; display:block; }
-</style>
+    .mm-logo{ height:42px; display:block; }</style>
   <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="./config.js"></script>
 <style>html.mm-no-horizontal-overflow, body.mm-no-horizontal-overflow{overflow-x:hidden;}</style>
@@ -939,6 +938,17 @@ async function fetchFavsDirect(){
 /* ========= Reset ========= */
 function resetAndQuery(){
   dlog({step:'resetAndQuery'});
+  produtosMap.clear(); produtosList=[]; serverOffset=0; serverExhausted=false; favFirstAutoRenderDone=false;
+  generalView=[]; resetGeneralDom(); renderFavs(); updateFavHeight(); updateCounts();
+
+  const hasActiveFilter = ((currentEanQ||'').trim().length>0) || ((currentDescQ||'').trim().length>0);
+
+  if (!hasActiveFilter && (searchScope==='both' || searchScope==='favorites')){
+    try{ if (typeof fetchFavsDirect==='function') fetchFavsDirect(); }catch(_){}
+  }
+
+  fetchNextPage();
+});
   produtosMap.clear(); produtosList=[]; serverOffset=0; serverExhausted=false; favFirstAutoRenderDone=false;
   generalView=[]; resetGeneralDom(); renderFavs(); updateFavHeight(); updateCounts();
   try{ if (typeof fetchFavsDirect==='function') fetchFavsDirect(); }catch(_){}
