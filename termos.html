@@ -361,7 +361,7 @@
     ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession:true, autoRefreshToken:true } })
     : null;
 
-  function isEmail(v){ return /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(v); }
+  function isEmail(v){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
 
   /* ===== Painéis ===== */
   function openPanel(type) {
@@ -430,9 +430,8 @@
       console.error('[LOGIN error]', error);
       return;
     }
-    // Não redirecionamos automaticamente aqui; apenas atualizamos o cabeçalho
-    await atualizarUIAuth();
-    closePanel();
+    // ✅ Redireciona automaticamente após login bem-sucedido
+    window.location.href = DASHBOARD_URL;
   }
 
   /* ===== Recuperar senha ===== */
@@ -449,11 +448,11 @@
   async function sair() {
     if (!sb) return;
     await sb.auth.signOut();
-    await atualizarUIAuth();
     alert('Você saiu da conta.');
+    location.reload();
   }
 
-  /* ===== UI Auth (sem redirecionamento nesta página) ===== */
+  /* ===== UI Auth (somente para exibir chips/menus; não redireciona aqui) ===== */
   async function atualizarUIAuth() {
     const chip = document.getElementById('authChip');
     const guest = document.getElementById('menuGuest');
