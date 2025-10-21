@@ -1,60 +1,517 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MaiorMargem — Termos e Condições</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MaiorMargem — Termos de Uso e Política de Privacidade</title>
   <style>
-    body {
-      margin: 0;
-      background: #000;
-      color: #fff;
-      font-family: 'Segoe UI', Arial, sans-serif;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
+    :root { color-scheme: dark; }
+    /* ===== Base ===== */
+    * { box-sizing: border-box; }
+    body{ margin:0; font-family:'Segoe UI',Arial,sans-serif; background:#000; color:#fff; }
+    a{ color:#9cf; text-decoration:none; }
+    img{ display:block; max-width:100%; height:auto; }
+    main{ max-width:1100px; margin:40px auto 80px; padding:0 20px; }
+    h1{ font-size:clamp(26px,3.4vw,36px); color:#00b140; margin:10px 0 18px; }
+    h2{ font-size:clamp(18px,2.2vw,24px); color:#00b140; margin:30px 0 12px; }
+    h3{ font-size:clamp(16px,2vw,20px); color:#69d48e; margin:20px 0 8px; }
+    p, li{ color:#d8d8d8; line-height:1.65; }
+    .muted{ color:#aaa; font-size:14px; }
+    .card{
+      background:#0e0e0e; border:1px solid #222; border-radius:16px; padding:22px;
+      box-shadow:0 10px 28px rgba(0,0,0,.35); margin-bottom:16px;
     }
-    .container {
-      width: 85%;
-      max-width: 800px;
-      height: 80vh;
-      border: 1px solid #333;
-      border-radius: 10px;
-      padding: 20px;
-      overflow-y: auto;
-      background: #0a0a0a;
-      line-height: 1.7;
-      font-size: 13px;
-      text-align: justify;
-      box-shadow: 0 0 15px rgba(0,0,0,0.5);
+    .grid-2{ display:grid; grid-template-columns:1fr; gap:16px; }
+    @media(min-width: 900px){ .grid-2{ grid-template-columns:1fr 1fr; } }
+    .toc{ background:#0a0a0a; border:1px solid #1f1f1f; border-radius:12px; padding:16px; }
+    .toc a{ display:block; padding:6px 0; color:#cfe9ff; }
+    .badge{ display:inline-block; padding:2px 8px; border:1px solid #1f1f1f; border-radius:999px; color:#cfcfcf; font-size:12px; }
+    .note{ background:#0a0a0a; border-left:3px solid #00b140; padding:12px 14px; border-radius:10px; }
+    .list-tight li{ margin:6px 0; }
+
+    /* ===== Header ===== */
+    header{
+      display:flex; justify-content:space-between; align-items:center;
+      padding:12px 24px; background:#000; position:sticky; top:0; z-index:1000;
+      border-bottom:1px solid #1a1a1a;
     }
-    h1 {
-      text-align: center;
-      color: #00b140;
-      margin-bottom: 20px;
-      font-size: 18px;
+    header img{ height:44px; }
+    .auth-chip{
+      display:none; margin-left:12px; padding:6px 10px; border-radius:999px; font-size:12px;
+      background:#103b24; color:#b2ffd1; border:1px solid #1c6b3e;
     }
-    p {
-      margin-bottom: 14px;
+    nav ul{ display:flex; gap:14px; list-style:none; padding:0; margin:0; align-items:center; }
+    nav a{ color:#ddd; font-weight:500; }
+    nav a:hover{ color:#fff; }
+    .header-buttons button{
+      background:#00b140; color:#fff; border:none; padding:10px 18px; margin-left:10px;
+      border-radius:24px; cursor:pointer; font-size:14px; transition: transform .2s, background .25s;
     }
-    ::-webkit-scrollbar {
-      width: 8px;
+    .header-buttons button:hover{ background:#009b38; transform: translateY(-1px); }
+
+    /* ===== Side panels (login/cadastro/recuperar) ===== */
+    .overlay{ display:none; position:fixed; inset:0; z-index:1500; background:rgba(0,0,0,.5); }
+    .side-panel{
+      position:fixed; top:0; right:-400px; width:350px; height:100%;
+      background:#1c1c1c; box-shadow:-4px 0 15px rgba(0,0,0,.5); z-index:2000; padding:20px;
+      transition:right .4s ease; overflow-y:auto; border-left:1px solid #242424;
     }
-    ::-webkit-scrollbar-thumb {
-      background-color: #333;
-      border-radius: 4px;
+    .side-panel.active{ right:0; }
+    .side-panel h3{ color:#00b140; margin:0 0 10px; }
+    .side-panel input{
+      width:100%; padding:10px; margin:8px 0; border:1px solid #2a2a2a; border-radius:6px; background:#121212; color:#fff;
     }
-    ::-webkit-scrollbar-track {
-      background-color: #111;
-    }
+    .side-panel button{ width:100%; background:#00b140; color:#fff; padding:10px; border:none; border-radius:6px; cursor:pointer; }
+    .side-panel button:hover{ background:#009b38; }
+
+    /* ===== Footer ===== */
+    footer{ border-top:1px solid #1a1a1a; padding:26px 24px; color:#bdbdbd; background:#000; }
+    footer a{ color:#9cf; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>Termos e Condições de Uso</h1>
-    <p>MaiorMargem — Termos e Condições</p><p>Termos e Condições de Uso</p><p>MaiorMargem — Termos de Uso e Política de Privacidade</p><p>Home</p><p>Dashboard</p><p>Planos</p><p>Meus Dados</p><p>Termos</p><p>Sair</p><p>Entrar</p><p>Cadastrar</p><p>Termos de Uso e Política de Privacidade</p><p>Versão: 1.0 — Última atualização:</p><p>Este documento rege o uso da plataforma</p><p>MaiorMargem</p><p>e explica como tratamos dados pessoais em conformidade</p><p>com a</p><p>LGPD (Lei nº 13.709/2018)</p><p>.</p><p>Navegue por seções</p><p>1. Quem somos</p><p>2. Aceite e elegibilidade</p><p>3. Descrição do serviço</p><p>4. Planos, cobrança e reembolso</p><p>5. Uso lícito e restrições</p><p>6. Propriedade intelectual</p><p>7. Dados pessoais e LGPD</p><p>8. Direitos do titular</p><p>9. Cookies e tecnologias</p><p>10. Segurança da informação</p><p>11. Retenção e descarte</p><p>12. Responsabilidades e garantias</p><p>13. Alterações destes Termos</p><p>15. Lei aplicável e foro</p><p>1. Quem somos</p><p>Razão social / Nome:</p><p>[NOME_EMPRESA]</p><p>CNPJ/CPF:</p><p>[CNPJ_OU_CPF]</p><p>Endereço:</p><p>[ENDERECO_COMPLETO]</p><p>E-mail de contato:</p><p>[EMAIL_SUPORTE]</p><p>2. Aceite e elegibilidade</p><p>Ao criar uma conta, contratar um plano ou utilizar a plataforma, você concorda integralmente com estes Termos.</p><p>Você declara ter capacidade legal para contratar. Se atuar em nome de empresa, declara ter poderes para vinculá-la.</p><p>Podemos solicitar confirmação de e-mail e realizar verificações antifraude para proteção dos usuários e do sistema.</p><p>3. Descrição do serviço</p><p>O</p><p>MaiorMargem</p><p>é um sistema online que</p><p>rastrea preços públicos apresentados na web de forma livre</p><p>e</p><p>realiza</p><p>tabulação e visualização comparativa</p><p>para auxiliar decisões comerciais dos usuários.</p><p>Os dados coletados se referem a valores e informações</p><p>publicamente disponíveis</p><p>em sites de terceiros.</p><p>Podemos</p><p>armazenar o histórico desses dados</p><p>para possibilitar comparativos ao longo do tempo, tendências e auditoria interna.</p><p>As informações e resultados exibidos dependem da disponibilidade pública e integridade das fontes consultadas.</p><p>Não garantimos a veracidade, atualização ou disponibilidade contínua de dados de terceiros.</p><p>Base legal para o tratamento de dados de mercado (preços públicos):</p><p>legítimo interesse</p><p>(art. 7º, IX, LGPD),</p><p>resguardando-se direitos e liberdades dos titulares e respeitando termos de uso das fontes públicas.</p><p>4. Planos, cobrança e reembolso</p><p>Oferecemos</p><p>assinaturas mensais recorrentes</p><p>e</p><p>planos anuais recorrentes</p><p>.</p><p>Os valores, recursos e limites de cada plano estão detalhados em</p><p>Planos</p><p>e podem ser atualizados.</p><p>A cobrança é recorrente até que o usuário solicite o cancelamento ou haja inadimplência.</p><p>Direito de arrependimento:</p><p>reembolso total em até</p><p>7 (sete) dias</p><p>corridos após a contratação.</p><p>Após esse prazo, não há reembolso proporcional, salvo previsão legal expressa.</p><p>Impostos e taxas de meios de pagamento podem ser aplicados conforme legislação e intermediadores financeiros.</p><p>5. Uso lícito e restrições</p><p>É vedado utilizar a plataforma para atividades ilícitas, violação de direitos de terceiros, engenharia reversa ou sobrecarga de sistemas.</p><p>É proibido contornar mecanismos técnicos de proteção, sob pena de suspensão ou encerramento da conta.</p><p>Você é responsável pelo sigilo das credenciais de acesso e por atividades realizadas na sua conta.</p><p>Podemos suspender ou encerrar contas por violação destes Termos ou por ordens de autoridades competentes.</p><p>6. Propriedade intelectual</p><p>O software, a marca, os painéis, layouts e conteúdos autorais disponibilizados pelo</p><p>MaiorMargem</p><p>são protegidos</p><p>por direitos de propriedade intelectual. Não é permitido reproduzir, distribuir, criar obras derivadas ou explorar comercialmente</p><p>nosso conteúdo e código, salvo autorização expressa.</p><p>7. Dados pessoais e LGPD</p><p>7.1. Quais dados coletamos</p><p>Dados de conta</p><p>: e-mail, senha (hash), nome (se fornecido), status de assinatura.</p><p>Dados técnicos</p><p>: endereço IP, logs de acesso, identificadores de dispositivo, data e hora.</p><p>Geolocalização</p><p>(opcional): coletada apenas se você</p><p>consentir</p><p>, para personalizar preços por região.</p><p>Dados de uso</p><p>: páginas acessadas, cliques e interações (para segurança, métricas e melhoria do serviço).</p><p>7.2. Bases legais</p><p>Execução de contrato</p><p>: criação e manutenção da conta, prestação do serviço contratado.</p><p>Consentimento</p><p>: geolocalização e comunicações de marketing (quando aplicável). Você pode revogar a qualquer momento.</p><p>Legítimo interesse</p><p>: segurança da aplicação, melhoria contínua, estatísticas, e tratamento de</p><p>dados de mercado públicos</p><p>.</p><p>Obrigação legal</p><p>: conservação de registros para cumprimento de obrigações fiscais/contábeis e ordens de autoridade.</p><p>7.3. Finalidades</p><p>Autenticar usuários e viabilizar funcionalidades do sistema.</p><p>Personalizar resultados por região quando houver consentimento de geolocalização.</p><p>Manter a segurança, prevenir fraudes e cumprir obrigações legais.</p><p>Medir performance, melhorar a experiência e desenvolver novos recursos.</p><p>Gerir relacionamento (suporte, avisos de conta, comunicações transacionais).</p><p>7.4. Compartilhamento</p><p>Podemos compartilhar dados pessoais com</p><p>operadores (processadores)</p><p>que nos prestam serviços de infraestrutura,</p><p>autenticação, armazenamento e analytics, sempre vinculados a contratos e medidas de segurança compatíveis com a LGPD.</p><p>Não vendemos dados pessoais.</p><p>7.5. Transferência internacional</p><p>Alguns provedores podem operar fora do Brasil. Nesses casos, adotamos salvaguardas adequadas, como cláusulas contratuais e medidas</p><p>de segurança, conforme artigos 33 a 36 da LGPD.</p><p>8. Direitos do titular</p><p>Confirmação da existência de tratamento e</p><p>acesso</p><p>aos dados.</p><p>Correção</p><p>de dados incompletos, inexatos ou desatualizados.</p><p>Anonimização, bloqueio ou eliminação</p><p>de dados desnecessários ou excessivos.</p><p>Portabilidade</p><p>a outro fornecedor, observados segredos comercial e industrial.</p><p>Informação sobre compartilhamentos e sobre a possibilidade e as consequências de não fornecer consentimento.</p><p>Revogação do consentimento</p><p>a qualquer tempo, mediante manifestação expressa.</p><p>Oposição a tratamento realizado com base em</p><p>legítimo interesse</p><p>, quando cabível.</p><p>Para exercer seus direitos, entre em contato conforme a seção .</p><p>9. Cookies e tecnologias similares</p><p>Utilizamos cookies essenciais para login, segurança e funcionamento do site. Podemos empregar cookies de análise (analytics) para medir uso e desempenho.</p><p>Você pode gerenciar preferências no seu navegador; contudo, a desativação de cookies essenciais poderá comprometer funcionalidades.</p><p>10. Segurança da informação</p><p>Adotamos medidas técnicas e administrativas para proteger dados pessoais contra acessos não autorizados, incidentes e usos indevidos.</p><p>Recomendamos o uso de senhas fortes e não compartilhamento de credenciais.</p><p>Em caso de incidente com risco relevante, notificaremos as autoridades e os titulares, conforme LGPD.</p><p>11. Retenção e descarte</p><p>Mantemos dados pessoais pelo tempo necessário ao cumprimento das finalidades descritas e de obrigações legais.</p><p>Logs essenciais de segurança podem ser mantidos por períodos compatíveis com requisitos normativos. Após os prazos,</p><p>promovemos o descarte seguro ou anonimização.</p><p>12. Responsabilidades e garantias</p><p>O serviço é fornecido “no estado em que se encontra”, sem garantias de disponibilidade ininterrupta.</p><p>Não nos responsabilizamos por conteúdo, políticas, disponibilidade ou precisão de sites de terceiros.</p><p>Na máxima extensão permitida por lei, nossa responsabilidade total por danos diretos limita-se ao total pago pelo usuário nos 12 meses anteriores ao evento.</p><p>13. Alterações destes Termos</p><p>Podemos atualizar estes Termos e a Política de Privacidade para refletir mudanças legais, técnicas ou operacionais.</p><p>A versão vigente será sempre a disponibilizada nesta página, com data de última atualização. Mudanças relevantes poderão ser notificadas aos usuários registrados.</p><p>15. Lei aplicável e foro</p><p>Aplica-se a legislação brasileira. Fica eleito o foro de [CIDADE/UF], com renúncia a qualquer outro, por mais privilegiado que seja,</p><p>salvo disposição legal em contrário.</p><p>©</p><p>MaiorMargem. Todos os direitos reservados. —</p><p>LGPD-compliant</p><p>Cadastre-se</p><p>Cadastrar</p><p>Entrar</p><p>Login</p><p>Esqueci minha senha</p><p>Recuperar Senha</p><p>Enviar link</p><p>©</p><p>MaiorMargem</p><p>Termos</p><p>·</p><p>Planos</p><p>·</p><p>Home</p>
+
+<header>
+  <div style="display:flex; align-items:center; gap:16px;">
+    <a href="./index.html" aria-label="Início">
+      <img src="./logo_maiormargem.png" alt="MaiorMargem">
+    </a>
+    <span id="authChip" class="auth-chip"></span>
   </div>
+
+  <!-- Menu quando LOGADO -->
+  <nav id="menuLogado" style="display:none;">
+    <ul>
+      <li><a href="./index.html">Home</a></li>
+      <li><a href="./dashboard.html">Dashboard</a></li>
+      <li><a href="./planos.html">Planos</a></li>
+      <li><a href="./meusdados.html">Meus Dados</a></li>
+      <li><a href="./termos.html">Termos</a></li>
+      <li><a href="javascript:void(0)" onclick="sair()" style="color:#ffb3b3">Sair</a></li>
+    </ul>
+  </nav>
+
+  <!-- Botões quando NÃO logado -->
+  <div id="menuGuest" class="header-buttons" style="display:none;">
+    <button onclick="openPanel('login')">Entrar</button>
+    <button onclick="openPanel('cadastro')">Cadastrar</button>
+  </div>
+</header>
+
+<main>
+  <div class="card" style="margin-top:14px;">
+    <div class="grid-2">
+      <div>
+        <h1>Termos de Uso e Política de Privacidade</h1>
+        <p class="muted">Versão: 1.0 — Última atualização: <span id="lastUpdate"></span></p>
+        <p class="note">
+          Este documento rege o uso da plataforma <strong>MaiorMargem</strong> e explica como tratamos dados pessoais em conformidade
+          com a <strong>LGPD (Lei nº 13.709/2018)</strong>.
+        </p>
+      </div>
+      <div class="toc">
+        <strong style="display:block; margin-bottom:8px;">Navegue por seções</strong>
+        <a href="#quem-somos">1. Quem somos</a>
+        <a href="#aceite">2. Aceite e elegibilidade</a>
+        <a href="#servico">3. Descrição do serviço</a>
+        <a href="#planos">4. Planos, cobrança e reembolso</a>
+        <a href="#uso-licito">5. Uso lícito e restrições</a>
+        <a href="#propriedade">6. Propriedade intelectual</a>
+        <a href="#dados-pessoais">7. Dados pessoais e LGPD</a>
+        <a href="#direitos-titular">8. Direitos do titular</a>
+        <a href="#cookies">9. Cookies e tecnologias</a>
+        <a href="#seguranca">10. Segurança da informação</a>
+        <a href="#retencao">11. Retenção e descarte</a>
+        <a href="#responsabilidades">12. Responsabilidades e garantias</a>
+        <a href="#alteracoes">13. Alterações destes Termos</a>
+        <a href="#contato">14. Contato do Encarregado (DPO)</a>
+        <a href="#foro">15. Lei aplicável e foro</a>
+      </div>
+    </div>
+  </div>
+
+  <section id="quem-somos" class="card">
+    <h2>1. Quem somos</h2>
+    <p>
+      <strong>Razão social / Nome:</strong> [NOME_EMPRESA]<br>
+      <strong>CNPJ/CPF:</strong> [CNPJ_OU_CPF]<br>
+      <strong>Endereço:</strong> [ENDERECO_COMPLETO]<br>
+      <strong>E-mail de contato:</strong> [EMAIL_SUPORTE]
+    </p>
+  </section>
+
+  <section id="aceite" class="card">
+    <h2>2. Aceite e elegibilidade</h2>
+    <ul class="list-tight">
+      <li>Ao criar uma conta, contratar um plano ou utilizar a plataforma, você concorda integralmente com estes Termos.</li>
+      <li>Você declara ter capacidade legal para contratar. Se atuar em nome de empresa, declara ter poderes para vinculá-la.</li>
+      <li>Podemos solicitar confirmação de e-mail e realizar verificações antifraude para proteção dos usuários e do sistema.</li>
+    </ul>
+  </section>
+
+  <section id="servico" class="card">
+    <h2>3. Descrição do serviço</h2>
+    <p>
+      O <strong>MaiorMargem</strong> é um sistema online que <strong>rastrea preços públicos apresentados na web de forma livre</strong> e
+      realiza <strong>tabulação e visualização comparativa</strong> para auxiliar decisões comerciais dos usuários.
+    </p>
+    <ul class="list-tight">
+      <li>Os dados coletados se referem a valores e informações <strong>publicamente disponíveis</strong> em sites de terceiros.</li>
+      <li>Podemos <strong>armazenar o histórico desses dados</strong> para possibilitar comparativos ao longo do tempo, tendências e auditoria interna.</li>
+      <li>As informações e resultados exibidos dependem da disponibilidade pública e integridade das fontes consultadas.</li>
+      <li>Não garantimos a veracidade, atualização ou disponibilidade contínua de dados de terceiros.</li>
+    </ul>
+    <p class="note">
+      Base legal para o tratamento de dados de mercado (preços públicos): <strong>legítimo interesse</strong> (art. 7º, IX, LGPD),
+      resguardando-se direitos e liberdades dos titulares e respeitando termos de uso das fontes públicas.
+    </p>
+  </section>
+
+  <section id="planos" class="card">
+    <h2>4. Planos, cobrança e reembolso</h2>
+    <ul class="list-tight">
+      <li>Oferecemos <strong>assinaturas mensais recorrentes</strong> e <strong>planos anuais recorrentes</strong>.</li>
+      <li>Os valores, recursos e limites de cada plano estão detalhados em <a href="./planos.html">Planos</a> e podem ser atualizados.</li>
+      <li>A cobrança é recorrente até que o usuário solicite o cancelamento ou haja inadimplência.</li>
+      <li><strong>Direito de arrependimento:</strong> reembolso total em até <strong>7 (sete) dias</strong> corridos após a contratação.</li>
+      <li>Após esse prazo, não há reembolso proporcional, salvo previsão legal expressa.</li>
+      <li>Impostos e taxas de meios de pagamento podem ser aplicados conforme legislação e intermediadores financeiros.</li>
+    </ul>
+  </section>
+
+  <section id="uso-licito" class="card">
+    <h2>5. Uso lícito e restrições</h2>
+    <ul class="list-tight">
+      <li>É vedado utilizar a plataforma para atividades ilícitas, violação de direitos de terceiros, engenharia reversa ou sobrecarga de sistemas.</li>
+      <li>É proibido contornar mecanismos técnicos de proteção, sob pena de suspensão ou encerramento da conta.</li>
+      <li>Você é responsável pelo sigilo das credenciais de acesso e por atividades realizadas na sua conta.</li>
+      <li>Podemos suspender ou encerrar contas por violação destes Termos ou por ordens de autoridades competentes.</li>
+    </ul>
+  </section>
+
+  <section id="propriedade" class="card">
+    <h2>6. Propriedade intelectual</h2>
+    <p>
+      O software, a marca, os painéis, layouts e conteúdos autorais disponibilizados pelo <strong>MaiorMargem</strong> são protegidos
+      por direitos de propriedade intelectual. Não é permitido reproduzir, distribuir, criar obras derivadas ou explorar comercialmente
+      nosso conteúdo e código, salvo autorização expressa.
+    </p>
+  </section>
+
+  <section id="dados-pessoais" class="card">
+    <h2>7. Dados pessoais e LGPD</h2>
+    <h3>7.1. Quais dados coletamos</h3>
+    <ul class="list-tight">
+      <li><strong>Dados de conta</strong>: e-mail, senha (hash), nome (se fornecido), status de assinatura.</li>
+      <li><strong>Dados técnicos</strong>: endereço IP, logs de acesso, identificadores de dispositivo, data e hora.</li>
+      <li><strong>Geolocalização</strong> (opcional): coletada apenas se você <u>consentir</u>, para personalizar preços por região.</li>
+      <li><strong>Dados de uso</strong>: páginas acessadas, cliques e interações (para segurança, métricas e melhoria do serviço).</li>
+    </ul>
+
+    <h3>7.2. Bases legais</h3>
+    <ul class="list-tight">
+      <li><strong>Execução de contrato</strong>: criação e manutenção da conta, prestação do serviço contratado.</li>
+      <li><strong>Consentimento</strong>: geolocalização e comunicações de marketing (quando aplicável). Você pode revogar a qualquer momento.</li>
+      <li><strong>Legítimo interesse</strong>: segurança da aplicação, melhoria contínua, estatísticas, e tratamento de <em>dados de mercado públicos</em>.</li>
+      <li><strong>Obrigação legal</strong>: conservação de registros para cumprimento de obrigações fiscais/contábeis e ordens de autoridade.</li>
+    </ul>
+
+    <h3>7.3. Finalidades</h3>
+    <ul class="list-tight">
+      <li>Autenticar usuários e viabilizar funcionalidades do sistema.</li>
+      <li>Personalizar resultados por região quando houver consentimento de geolocalização.</li>
+      <li>Manter a segurança, prevenir fraudes e cumprir obrigações legais.</li>
+      <li>Medir performance, melhorar a experiência e desenvolver novos recursos.</li>
+      <li>Gerir relacionamento (suporte, avisos de conta, comunicações transacionais).</li>
+    </ul>
+
+    <h3>7.4. Compartilhamento</h3>
+    <p>
+      Podemos compartilhar dados pessoais com <strong>operadores (processadores)</strong> que nos prestam serviços de infraestrutura,
+      autenticação, armazenamento e analytics, sempre vinculados a contratos e medidas de segurança compatíveis com a LGPD.
+      Não vendemos dados pessoais.
+    </p>
+
+    <h3>7.5. Transferência internacional</h3>
+    <p>
+      Alguns provedores podem operar fora do Brasil. Nesses casos, adotamos salvaguardas adequadas, como cláusulas contratuais e medidas
+      de segurança, conforme artigos 33 a 36 da LGPD.
+    </p>
+  </section>
+
+  <section id="direitos-titular" class="card">
+    <h2>8. Direitos do titular</h2>
+    <ul class="list-tight">
+      <li>Confirmação da existência de tratamento e <strong>acesso</strong> aos dados.</li>
+      <li><strong>Correção</strong> de dados incompletos, inexatos ou desatualizados.</li>
+      <li><strong>Anonimização, bloqueio ou eliminação</strong> de dados desnecessários ou excessivos.</li>
+      <li><strong>Portabilidade</strong> a outro fornecedor, observados segredos comercial e industrial.</li>
+      <li>Informação sobre compartilhamentos e sobre a possibilidade e as consequências de não fornecer consentimento.</li>
+      <li><strong>Revogação do consentimento</strong> a qualquer tempo, mediante manifestação expressa.</li>
+      <li>Oposição a tratamento realizado com base em <em>legítimo interesse</em>, quando cabível.</li>
+    </ul>
+    <p>Para exercer seus direitos, entre em contato conforme a seção <a href="#contato">14</a>.</p>
+  </section>
+
+  <section id="cookies" class="card">
+    <h2>9. Cookies e tecnologias similares</h2>
+    <p>
+      Utilizamos cookies essenciais para login, segurança e funcionamento do site. Podemos empregar cookies de análise (analytics) para medir uso e desempenho.
+      Você pode gerenciar preferências no seu navegador; contudo, a desativação de cookies essenciais poderá comprometer funcionalidades.
+    </p>
+  </section>
+
+  <section id="seguranca" class="card">
+    <h2>10. Segurança da informação</h2>
+    <ul class="list-tight">
+      <li>Adotamos medidas técnicas e administrativas para proteger dados pessoais contra acessos não autorizados, incidentes e usos indevidos.</li>
+      <li>Recomendamos o uso de senhas fortes e não compartilhamento de credenciais.</li>
+      <li>Em caso de incidente com risco relevante, notificaremos as autoridades e os titulares, conforme LGPD.</li>
+    </ul>
+  </section>
+
+  <section id="retencao" class="card">
+    <h2>11. Retenção e descarte</h2>
+    <p>
+      Mantemos dados pessoais pelo tempo necessário ao cumprimento das finalidades descritas e de obrigações legais.
+      Logs essenciais de segurança podem ser mantidos por períodos compatíveis com requisitos normativos. Após os prazos,
+      promovemos o descarte seguro ou anonimização.
+    </p>
+  </section>
+
+  <section id="responsabilidades" class="card">
+    <h2>12. Responsabilidades e garantias</h2>
+    <ul class="list-tight">
+      <li>O serviço é fornecido “no estado em que se encontra”, sem garantias de disponibilidade ininterrupta.</li>
+      <li>Não nos responsabilizamos por conteúdo, políticas, disponibilidade ou precisão de sites de terceiros.</li>
+      <li>Na máxima extensão permitida por lei, nossa responsabilidade total por danos diretos limita-se ao total pago pelo usuário nos 12 meses anteriores ao evento.</li>
+    </ul>
+  </section>
+
+  <section id="alteracoes" class="card">
+    <h2>13. Alterações destes Termos</h2>
+    <p>
+      Podemos atualizar estes Termos e a Política de Privacidade para refletir mudanças legais, técnicas ou operacionais.
+      A versão vigente será sempre a disponibilizada nesta página, com data de última atualização. Mudanças relevantes poderão ser notificadas aos usuários registrados.
+    </p>
+  </section>
+
+  <section id="contato" class="card">
+    <h2>14. Contato do Encarregado (DPO)</h2>
+    <p>
+      <strong>Encarregado pelo tratamento de dados (DPO):</strong> [ENCARREGADO_DADOS]<br>
+      <strong>E-mail do DPO:</strong> [EMAIL_DPO]<br>
+      <strong>Canal de atendimento ao titular:</strong> [EMAIL_SUPORTE]
+    </p>
+  </section>
+
+  <section id="foro" class="card">
+    <h2>15. Lei aplicável e foro</h2>
+    <p>
+      Aplica-se a legislação brasileira. Fica eleito o foro de [CIDADE/UF], com renúncia a qualquer outro, por mais privilegiado que seja,
+      salvo disposição legal em contrário.
+    </p>
+  </section>
+
+  <div class="card">
+    <p class="muted">
+      © <span id="yearNow"></span> MaiorMargem. Todos os direitos reservados. —
+      <span class="badge">LGPD-compliant</span>
+    </p>
+  </div>
+</main>
+
+<!-- Overlay e painéis (somente se não logado) -->
+<div id="overlay" class="overlay" onclick="closePanel()"></div>
+
+<div id="panel-cadastro" class="side-panel" role="dialog" aria-labelledby="cadTitle" aria-modal="true">
+  <h3 id="cadTitle">Cadastre-se</h3>
+  <input id="nomeCadastro" type="text" placeholder="Nome (opcional)">
+  <input id="emailCadastro" type="email" placeholder="Email">
+  <input id="senhaCadastro" type="password" placeholder="Senha">
+  <button id="btnCadastrar" onclick="registrarUsuario()">Cadastrar</button>
+</div>
+
+<div id="panel-login" class="side-panel" role="dialog" aria-labelledby="logTitle" aria-modal="true">
+  <h3 id="logTitle">Entrar</h3>
+  <input id="emailLogin" type="email" placeholder="Email">
+  <input id="senhaLogin" type="password" placeholder="Senha">
+  <button onclick="fazerLogin()">Login</button>
+  <div style="margin-top:10px; text-align:center;">
+    <a href="javascript:void(0)" onclick="openPanel('recuperar')" style="color:#9cf;">Esqueci minha senha</a>
+  </div>
+</div>
+
+<div id="panel-recuperar" class="side-panel" role="dialog" aria-labelledby="recTitle" aria-modal="true">
+  <h3 id="recTitle">Recuperar Senha</h3>
+  <input id="emailRecuperar" type="email" placeholder="Digite seu email">
+  <button onclick="recuperarSenha()">Enviar link</button>
+</div>
+
+<!-- Scripts -->
+<script src="config.js?v=11"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  /* ===== Helpers base ===== */
+  function getBaseSite() {
+    try { if (window.CONFIG?.SITE_URL) return window.CONFIG.SITE_URL.replace(/\/+$/,''); }
+    catch(_) {}
+    return window.location.origin;
+  }
+  const DASHBOARD_URL = getBaseSite() + '/dashboard.html';
+
+  /* ===== Supabase ===== */
+  const { SUPABASE_URL, SUPABASE_ANON_KEY } = window.CONFIG || {};
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    console.error('Erro de configuração: config.js não carregado (SUPABASE_URL/ANON_KEY ausentes).');
+  }
+  const sb = (SUPABASE_URL && SUPABASE_ANON_KEY)
+    ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession:true, autoRefreshToken:true } })
+    : null;
+
+  function isEmail(v){ return /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(v); }
+
+  /* ===== Painéis ===== */
+  function openPanel(type) {
+    document.getElementById('overlay').style.display = 'block';
+    if (type === 'cadastro')   document.getElementById('panel-cadastro').classList.add('active');
+    if (type === 'login')      document.getElementById('panel-login').classList.add('active');
+    if (type === 'recuperar')  document.getElementById('panel-recuperar').classList.add('active');
+  }
+  function closePanel() {
+    document.getElementById('overlay').style.display = 'none';
+    ['panel-cadastro','panel-login','panel-recuperar'].forEach(id => {
+      document.getElementById(id).classList.remove('active');
+    });
+  }
+
+  /* ===== Cadastro ===== */
+  async function registrarUsuario() {
+    if (!sb) { alert('Configuração ausente.'); return; }
+    const btn   = document.getElementById('btnCadastrar');
+    const nome  = document.getElementById('nomeCadastro').value.trim();
+    const email = document.getElementById('emailCadastro').value.trim();
+    const senha = document.getElementById('senhaCadastro').value;
+
+    if (!email || !senha) { alert('Preencha email e senha.'); return; }
+    if (!isEmail(email))  { alert('Email inválido.'); return; }
+    if (senha.length < 6) { alert('A senha deve ter pelo menos 6 caracteres.'); return; }
+
+    const old = btn.textContent; btn.disabled = true; btn.textContent = 'Cadastrando...';
+
+    try {
+      const { data, error } = await sb.auth.signUp({
+        email, password: senha,
+        options: {
+          data: nome ? { nome } : {},
+          emailRedirectTo: getBaseSite() + '/reset.html'
+        }
+      });
+      if (error) {
+        const m = (error.message || '').toLowerCase();
+        if (m.includes('already') || m.includes('exists')) { alert('Este email já está cadastrado. Use o Login ou a Recuperação de Senha.'); return; }
+        if (m.includes('rate limit')) { alert('Muitos envios. Aguarde alguns minutos e tente novamente.'); return; }
+        alert('Erro no cadastro: ' + error.message); return;
+      }
+      if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+        alert('Este email já está cadastrado. Verifique sua caixa de entrada ou use Recuperar Senha.');
+        return;
+      }
+      alert('Cadastro criado! Verifique seu email para confirmar a conta.');
+      closePanel();
+    } catch(e) {
+      alert('Falha inesperada ao cadastrar: ' + (e?.message || e));
+    } finally {
+      btn.disabled = false; btn.textContent = old;
+    }
+  }
+
+  /* ===== Login ===== */
+  async function fazerLogin() {
+    if (!sb) { alert('Configuração ausente.'); return; }
+    const email = document.getElementById('emailLogin').value.trim();
+    const senha = document.getElementById('senhaLogin').value;
+
+    const { error } = await sb.auth.signInWithPassword({ email, password: senha });
+    if (error) {
+      alert('Erro no login: ' + error.message);
+      console.error('[LOGIN error]', error);
+      return;
+    }
+    // Não redirecionamos automaticamente aqui; apenas atualizamos o cabeçalho
+    await atualizarUIAuth();
+    closePanel();
+  }
+
+  /* ===== Recuperar senha ===== */
+  async function recuperarSenha() {
+    if (!sb) { alert('Configuração ausente.'); return; }
+    const email = document.getElementById('emailRecuperar').value.trim();
+    if (!email) { alert('Informe o email.'); return; }
+    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: getBaseSite() + '/reset.html' });
+    if (error) alert('Erro: ' + error.message);
+    else { alert('Enviamos um link de recuperação para seu email.'); closePanel(); }
+  }
+
+  /* ===== Logout ===== */
+  async function sair() {
+    if (!sb) return;
+    await sb.auth.signOut();
+    await atualizarUIAuth();
+    alert('Você saiu da conta.');
+  }
+
+  /* ===== UI Auth (sem redirecionamento nesta página) ===== */
+  async function atualizarUIAuth() {
+    const chip = document.getElementById('authChip');
+    const guest = document.getElementById('menuGuest');
+    const logado = document.getElementById('menuLogado');
+
+    if (!sb) { guest.style.display='block'; logado.style.display='none'; return; }
+
+    const { data: { session } } = await sb.auth.getSession();
+    if (session && session.user) {
+      chip.textContent = 'Logado: ' + (session.user.email || '');
+      chip.style.display = 'inline-block';
+      logado.style.display = 'block';
+      guest.style.display = 'none';
+    } else {
+      chip.style.display = 'none';
+      logado.style.display = 'none';
+      guest.style.display = 'block';
+    }
+  }
+
+  // Inicialização
+  (async () => {
+    document.getElementById('yearNow').textContent = new Date().getFullYear();
+    const opts = { year: 'numeric', month: 'long', day: '2-digit' };
+    document.getElementById('lastUpdate').textContent = new Date().toLocaleDateString('pt-BR', opts);
+    await atualizarUIAuth();
+  })();
+
+  // Expor globais
+  window.openPanel = openPanel;
+  window.closePanel = closePanel;
+  window.registrarUsuario = registrarUsuario;
+  window.fazerLogin = fazerLogin;
+  window.recuperarSenha = recuperarSenha;
+  window.sair = sair;
+</script>
+
+<footer>
+  <div style="max-width:1100px; margin:0 auto; display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+    <div>© <span id="yearNowFooter"></span> MaiorMargem</div>
+    <div>
+      <a href="./termos.html">Termos</a> ·
+      <a href="./planos.html">Planos</a> ·
+      <a href="./index.html">Home</a>
+    </div>
+  </div>
+  <script>
+    document.getElementById('yearNowFooter').textContent = new Date().getFullYear();
+  </script>
+</footer>
+
 </body>
 </html>
