@@ -1010,10 +1010,7 @@ function buildPrintHTMLFromFav() {
   }
   const css = '*{box-sizing:border-box;} body{font-family:Arial,sans-serif;color:#000;background:#fff;padding:24px;} h1{margin:0 0 4px 0;font-size:18px;} .meta{color:#444;font-size:12px;margin-bottom:14px;} table{width:100%;border-collapse:collapse;} thead th{text-align:left;font-weight:700;padding:6px 0;} tbody td{padding:4px 0;} @media print{body{padding:0;}}';
   const now=new Date(); const meta = now.toLocaleDateString('pt-BR')+' '+now.toLocaleTimeString('pt-BR');
-  return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório — Favoritos</title><style>'+css+'</style></head><body><h1>Relatório — Favoritos</h1><div class="meta">Gerado em '+meta+'</div><table>'+thead+'<tbody>'+tbody+'</tbody></table><footer style="text-align:center; padding:14px 0; font-size:13px; color:#aaa; border-top:1px solid #1a1a1a; background:#000;">
-  © 2025 MaiorMargem · <a href="termos.html" style="color:#9cf; text-decoration:none;">Termos de Uso</a>
-</footer>
-</body></html>';
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório — Favoritos</title><style>'+css+'</style></head><body><h1>Relatório — Favoritos</h1><div class="meta">Gerado em '+meta+'</div><table>'+thead+'<tbody>'+tbody+'</tbody></table></body></html>';
 }
 function printFavReport(){
   const iframe = document.createElement('iframe');
@@ -1317,8 +1314,7 @@ function updateFavHeight(){ if (favHeightUser){ applyFavHeight(favHeightUser); r
 
 <footer style="text-align:center; padding:14px 0; font-size:13px; color:#aaa; border-top:1px solid #1a1a1a; background:#000;">
   © 2025 MaiorMargem · <a href="termos.html" style="color:#9cf; text-decoration:none;">Termos de Uso</a>
-</footer>
-</body>
+</footer></body>
 </html>
 
 <!-- ===== MaiorMargem: bloco de contexto para salvar link direto por site (fallback sem EAN) ===== -->
