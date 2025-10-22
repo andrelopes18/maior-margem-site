@@ -1319,6 +1319,24 @@ function installMinimizeButtons(){
     right.appendChild(btn);
   });
 }
+
+/* ===== Logout (igual ao index) ===== */
+async function sair(){
+  try{
+    await sb.auth.signOut();
+  }catch(_){}
+  const base = (window.CONFIG && window.CONFIG.SITE_URL) ? window.CONFIG.SITE_URL.replace(/\/+$/,'') : '';
+  const url = base ? (base + '/index.html') : 'index.html';
+  window.location.assign(url);
+}
+if (btnSair){
+  btnSair.addEventListener('click', sair);
+}
+
 </script>
+<footer style="text-align:center; padding:14px 0; font-size:13px; color:#aaa; border-top:1px solid #1a1a1a; background:#000;">
+  © 2025 MaiorMargem · <a href="termos.html" style="color:#9cf; text-decoration:none;">Termos de Uso</a>
+</footer>
+
 </body>
 </html>
