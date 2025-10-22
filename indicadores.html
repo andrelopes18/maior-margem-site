@@ -153,21 +153,21 @@
       display:none; box-shadow: 0 8px 22px rgba(0,0,0,.55);
     }
   
-    /* ===== Menu do usuário (hover) ===== */
-    .userbox{ position:relative; }
-    .user-chip{ cursor:pointer; }
-    .user-menu{
-      display:none; position:absolute; right:0; top:calc(100% + 6px);
-      background:#0e141b; border:1px solid #2d3b4a; border-radius:10px;
-      box-shadow: 0 12px 28px rgba(0,0,0,.55);
-      padding:6px; min-width:200px; z-index:1200;
+    /* ===== Brand (logo + título) ===== */
+    header { position: relative; }
+    .brand { display:flex; align-items:center; gap:10px; }
+    .brand .mm-logo { height:36px; width:auto; display:block; }
+
+    /* ===== Atalho central (mini gráfico → Dashboard) ===== */
+    .center-shortcut { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); }
+    .ind-link{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:8px 10px; border-radius:999px; text-decoration:none;
+      background:#121212; border:1px solid #2a2a2a; color:#eaeaea;
+      box-shadow: 0 6px 18px rgba(0,0,0,.25);
     }
-    .user-menu a{
-      display:block; padding:8px 10px; border-radius:8px; text-decoration:none;
-      color:#e6f3ff; border:1px solid transparent;
-    }
-    .user-menu a:hover{ background:#111a23; border-color:#2d3b4a; }
-    .userbox:hover .user-menu{ display:block; }
+    .ind-link:hover{ background:#1a1a1a; border-color:#3a3a3a; }
+    .ind-link svg{ width:18px; height:18px; display:block; }
 
 </style>
   <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
@@ -175,14 +175,27 @@
 </head>
 <body>
 <header>
-  <h1>MaiorMargem — Indicadores & Tendências</h1>
-  <div class="userbox"><span id="planChip" class="chip plan">Plano: —</span>
-    <span id="userChip" class="chip user-chip">Usuário</span>
-    <div class="user-menu" id="userMenu">
-      <a href="meusdados.html">Meus dados</a>
-      <a href="planos.html">Planos</a>
-    </div>
+  
+<div class="brand">
+  <img src="logo_maiormargem.png" alt="MaiorMargem" class="mm-logo">
+  <h1>MaiorMargem — Indicadores &amp; Tendências</h1>
+</div>
+<div class="center-shortcut">
+  <a class="ind-link" href="dashboard.html" title="Ir para o Dashboard">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="3" y="13" width="3" height="6" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>
+      <rect x="9" y="9"  width="3" height="10" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>
+      <rect x="15" y="5" width="3" height="14" rx="1" fill="#2d2d2d" stroke="#3b3b3b" stroke-width="1"></rect>
+      <path d="M3,18 L7,14 L12,15 L17,8 L21,10" fill="none" stroke="#00d084" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
+    </svg>
+    <span>Dashboard</span>
+  </a>
+</div>
 
+  <div class="userbox">
+    <a href="dashboard.html" class="btn ghost" id="btnDashboard" title="Abrir Dashboard">Ir para o Dashboard</a>
+    <span id="planChip" class="chip plan">Plano: —</span>
+    <span id="userChip" class="chip">Usuário</span>
     <button id="btnSair" class="btn" type="button">Sair</button>
   </div>
 </header>
@@ -1096,7 +1109,25 @@ function applyVisibleHeights(){
     const rowH  = row ? row.getBoundingClientRect().height : 38;
     wrap.style.maxHeight = (headH + rowH * vis + 6) + 'px';
     wrap.style.overflow = 'auto';
-  });
+  
+  // Equalizar altura dos dois quadros de Oportunidades
+  const wb = document.getElementById('wrapBaratos');
+  const wc = document.getElementById('wrapCaros');
+  if (wb && wc && wb.style.display !== 'none' && wc.style.display !== 'none') {
+    const getH = (wrap) => {
+      const table = wrap.querySelector('table');
+      const thead = table ? table.querySelector('thead') : null;
+      const row   = table ? table.querySelector('tbody tr') : null;
+      const headH = thead ? thead.getBoundingClientRect().height : 40;
+      const rowH  = row ? row.getBoundingClientRect().height : 38;
+      return (headH + rowH * vis + 6);
+    };
+    const h = Math.max(getH(wb), getH(wc));
+    wb.style.maxHeight = h + 'px';
+    wc.style.maxHeight = h + 'px';
+    wb.style.overflow = wc.style.overflow = 'auto';
+  }
+});
 }
 
 /* ================= RELATÓRIOS DE BUSCA (inalterados) ================= */
