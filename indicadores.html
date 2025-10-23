@@ -942,45 +942,81 @@ function renderCaros(){
   decorateHeaders('caros');
 }
 
-/* ========= Maiores alterações (inalterado) ========= */
+/* ========= Maiores alterações (NOVA LÓGICA: período atual vs período anterior) ========= */
 async function loadMaioresAlt(){
   const lim = DEFAULT_TOP_LIMIT;
   const siteIds = getSelectedSiteIds(); // null = todos
 
-  const { data, error } = await applyDateFilter(
-    sb.from(VIEW).select('ean, descricao, site_id, site_nome, preco_num, data')
+  const { from, to } = getPeriod();
+  if (!from || !to) { lastAlt = []; renderAlt(); return; }
+
+  // Define período anterior com a MESMA duração, imediatamente antes do "from"
+  const durMs = to.getTime() - from.getTime();
+  const prevTo  = new Date(from.getTime() - 1000);           // 1s antes do início atual
+  const prevFrom= new Date(prevTo.getTime() - durMs);
+
+  // Helper para buscar "último preço por (ean, site)" em um intervalo
+  async function fetchLatestByKey(start, end){
+    let q = sb.from(VIEW)
+      .select('ean, descricao, site_id, site_nome, preco_num, data')
+      .gte('data', start.toISOString())
+      .lte('data', end.toISOString())
       .not('preco_num','is',null)
-      .order('data',{ascending:true})
-      .limit(Math.max(12000, lim*50))
-  );
-  if (error) throw error;
+      .order('data', { ascending:false });
 
-  const key = (r)=> String(r.ean)+'|'+String(r.site_id);
-  const first = new Map(), last = new Map(), descBy = new Map(), siteBy = new Map();
-  for (const r of (data||[])){
-    const sid = Number(r.site_id);
-    if (siteIds && !siteIds.includes(sid)) continue;
+    if (siteIds) q = q.in('site_id', siteIds);
 
-    const k=key(r), pn=Number(r.preco_num); if(!isFinite(pn)) continue;
-    if (!first.has(k)) first.set(k, pn);
-    last.set(k, pn);
-    descBy.set(String(r.ean), r.descricao||'');
-    siteBy.set(String(r.site_id), r.site_nome||r.site_id);
+    // limite generoso; se necessário, evoluir p/ paginação
+    const { data, error } = await q.limit(Math.max(40000, lim*400));
+    if (error) throw error;
+
+    const latest = new Map(); // key => row
+    const descBy = new Map();
+    const siteBy = new Map();
+    for (const r of (data||[])){
+      const k = String(r.ean)+'|'+String(r.site_id);
+      if (!latest.has(k)){
+        latest.set(k, r); // como está desc, o primeiro é o mais recente no intervalo
+      }
+      if (!descBy.has(String(r.ean))) descBy.set(String(r.ean), r.descricao||'');
+      if (!siteBy.has(String(r.site_id))) siteBy.set(String(r.site_id), r.site_nome||r.site_id);
+    }
+    return { latest, descBy, siteBy };
   }
-  const arr=[];
-  for (const [k, fa] of first){
-    const la = last.get(k);
-    if (!isFiniteNum(la)) continue;
-    const delta = la - fa;
-    if (delta === 0) continue;
+
+  // Busca período atual e anterior
+  const [{ latest:curr, descBy:descA, siteBy:siteA }, { latest:prev, descBy:descB, siteBy:siteB }] =
+    await Promise.all([ fetchLatestByKey(from, to), fetchLatestByKey(prevFrom, prevTo) ]);
+
+  // Junta chaves que existem nos dois períodos
+  const arr = [];
+  for (const [k, rCurr] of curr.entries()){
+    if (!prev.has(k)) continue;
+    const rPrev = prev.get(k);
+
+    const fa = Number(rPrev.preco_num);
+    const la = Number(rCurr.preco_num);
+    if (!isFiniteNum(fa) || !isFiniteNum(la)) continue;
+    if (fa === la) continue; // só quem alterou
+
     const [ean, site_id] = k.split('|');
+    const delta = la - fa;
     const perc  = fa ? (delta/fa)*100 : 0;
+
     arr.push({
-      ean, site: siteBy.get(site_id)||site_id, desc: descBy.get(ean)||'',
-      prev: fa, curr: la, delta, perc
+      ean,
+      site: (siteA.get(site_id) || siteB.get(site_id) || site_id),
+      desc: (descA.get(ean) || descB.get(ean) || ''),
+      prev: fa,
+      curr: la,
+      delta,
+      perc
     });
   }
+
+  // Ordena por variação percentual (módulo) desc
   arr.sort((a,b)=> Math.abs(b.perc) - Math.abs(a.perc));
+
   lastAlt = arr.slice(0, lim);
   renderAlt();
 }
