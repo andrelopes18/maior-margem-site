@@ -169,6 +169,22 @@
     .ind-link:hover{ background:#1a1a1a; border-color:#3a3a3a; }
     .ind-link svg{ width:18px; height:18px; display:block; }
 
+
+    /* ===== Dropdown do usuário (igual ao Dashboard) ===== */
+    .userChipWrap { position: relative; display:inline-block; }
+    .dropdown {
+      position:absolute; right:0; top:calc(100% + 6px);
+      display:none; min-width:180px; padding:6px;
+      background:#0f0f0f; border:1px solid #2d3b4a; border-radius:10px;
+      box-shadow:0 10px 30px rgba(0,0,0,.5); z-index:9999;
+    }
+    .userChipWrap:hover .dropdown, .userChipWrap.open .dropdown { display:block; }
+    .dd-item {
+      width:100%; background:transparent; border:none; color:#eee;
+      text-align:left; padding:10px 12px; border-radius:8px; cursor:pointer; font-size:14px;
+    }
+    .dd-item:hover { background:#111a23; }
+
 </style>
   <script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="./config.js"></script>
@@ -194,7 +210,13 @@
 
   <div class="userbox">
     <span id="planChip" class="chip plan">Plano: —</span>
-    <span id="userChip" class="chip">Usuário</span>
+    <div class="userChipWrap">
+      <span id="userChip" class="chip">Usuário</span>
+      <div class="dropdown" role="menu" aria-hidden="true">
+        <button class="dd-item" id="ddMeusDados" type="button">Meus dados</button>
+        <button class="dd-item" id="ddPlanos" type="button">Planos</button>
+      </div>
+    </div>
     <button id="btnSair" class="btn" type="button">Sair</button>
   </div>
 </header>
@@ -459,6 +481,8 @@ const userChip = document.getElementById('userChip');
 const btnSair  = document.getElementById('btnSair');
 const statusEl = document.getElementById('status');
 const errEl    = document.getElementById('err');
+const ddMeusDados = document.getElementById('ddMeusDados');
+const ddPlanos    = document.getElementById('ddPlanos');
 
 function setStatus(t){ statusEl.textContent = t||''; }
 function showErr(msg){ errEl.style.display = 'block'; errEl.textContent = msg; console.error(msg); }
@@ -1379,6 +1403,9 @@ async function sair(){
   const url = base ? (base + '/index.html') : 'index.html';
   window.location.assign(url);
 }
+if (ddMeusDados) ddMeusDados.addEventListener('click', ()=> location.href='meusdados.html');
+if (ddPlanos) ddPlanos.addEventListener('click', ()=> location.href='planos.html');
+
 if (btnSair){
   btnSair.addEventListener('click', sair);
 }
