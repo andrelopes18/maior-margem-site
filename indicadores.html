@@ -949,8 +949,7 @@ async function loadMaioresAlt(){
   const siteIds = getSelectedSiteIds(); // null = todos
 
   let q = sb.from('v_maiores_diferencas_preco')
-    .select('site_id, ean, ultimo_preco, data_ultimo_preco, penultimo_preco, data_penultimo_preco, diff_preco')
-    .neq('diff_preco', 0)
+    .select('site_id, ean, ultimo_preco, penultimo_preco, diff_preco')
     .order('diff_preco', { ascending:false })
     .limit(Math.max(4000, lim*50));
 
@@ -959,96 +958,21 @@ async function loadMaioresAlt(){
   const { data, error } = await q;
   if (error){ console.error(error); lastAlt=[]; renderAlt(); return; }
 
-  const arr = (data||[]).map(r => {
+  lastAlt = (data||[]).map(r => {
     const prev = Number(r.penultimo_preco);
     const curr = Number(r.ultimo_preco);
     const delta = Number(r.diff_preco);
-    const perc = (prev && isFinite(prev)) ? (delta/prev)*100 : 0;
+    const perc = (prev && isFinite(prev) && prev !== 0) ? ( (curr - prev) / prev * 100 ) : 0;
     return {
-      desc: String(r.ean||''),       // usamos EAN como "descrição" provisória
+      desc: String(r.ean||''),   // provisório: usa EAN na coluna de descrição
       ean: String(r.ean||''),
-      site: String(r.site_id),
-      prev, curr, delta,
-      perc
+      site: String(r.site_id||''),
+      prev, curr, delta, perc
     };
   });
-
-  lastAlt = arr.slice(0, lim);
   renderAlt();
 }
-= getPeriod();
-  if (!from || !to) { lastAlt = []; renderAlt(); return; }
 
-  // Define período anterior com a MESMA duração, imediatamente antes do "from"
-  const durMs = to.getTime() - from.getTime();
-  const prevTo  = new Date(from.getTime() - 1000);           // 1s antes do início atual
-  const prevFrom= new Date(prevTo.getTime() - durMs);
-
-  // Helper para buscar "último preço por (ean, site)" em um intervalo
-  async function fetchLatestByKey(start, end){
-    let q = sb.from(VIEW)
-      .select('ean, descricao, site_id, site_nome, preco_num, data')
-      .gte('data', start.toISOString())
-      .lte('data', end.toISOString())
-      .not('preco_num','is',null)
-      .order('data', { ascending:false });
-
-    if (siteIds) q = q.in('site_id', siteIds);
-
-    // limite generoso; se necessário, evoluir p/ paginação
-    const { data, error } = await q.limit(Math.max(40000, lim*400));
-    if (error) throw error;
-
-    const latest = new Map(); // key => row
-    const descBy = new Map();
-    const siteBy = new Map();
-    for (const r of (data||[])){
-      const k = String(r.ean)+'|'+String(r.site_id);
-      if (!latest.has(k)){
-        latest.set(k, r); // como está desc, o primeiro é o mais recente no intervalo
-      }
-      if (!descBy.has(String(r.ean))) descBy.set(String(r.ean), r.descricao||'');
-      if (!siteBy.has(String(r.site_id))) siteBy.set(String(r.site_id), r.site_nome||r.site_id);
-    }
-    return { latest, descBy, siteBy };
-  }
-
-  // Busca período atual e anterior
-  const [{ latest:curr, descBy:descA, siteBy:siteA }, { latest:prev, descBy:descB, siteBy:siteB }] =
-    await Promise.all([ fetchLatestByKey(from, to), fetchLatestByKey(prevFrom, prevTo) ]);
-
-  // Junta chaves que existem nos dois períodos
-  const arr = [];
-  for (const [k, rCurr] of curr.entries()){
-    if (!prev.has(k)) continue;
-    const rPrev = prev.get(k);
-
-    const fa = Number(rPrev.preco_num);
-    const la = Number(rCurr.preco_num);
-    if (!isFiniteNum(fa) || !isFiniteNum(la)) continue;
-    if (fa === la) continue; // só quem alterou
-
-    const [ean, site_id] = k.split('|');
-    const delta = la - fa;
-    const perc  = fa ? (delta/fa)*100 : 0;
-
-    arr.push({
-      ean,
-      site: (siteA.get(site_id) || siteB.get(site_id) || site_id),
-      desc: (descA.get(ean) || descB.get(ean) || ''),
-      prev: fa,
-      curr: la,
-      delta,
-      perc
-    });
-  }
-
-  // Ordena por variação percentual (módulo) desc
-  arr.sort((a,b)=> Math.abs(b.perc) - Math.abs(a.perc));
-
-  lastAlt = arr.slice(0, lim);
-  renderAlt();
-}
 function renderAlt(){
   const st = sortState.alt;
   const data = sortArray(lastAlt, st.key, st.dir);
