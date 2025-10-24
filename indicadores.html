@@ -375,7 +375,7 @@
     </div>
 
     <div class="panel">
-      <header><h2>Maiores alterações de preço</h2></header>
+      <header><h2>Maiores alterações de preço</h2><div id="altPager" style="display:flex; gap:8px; align-items:center;"></div></header>
       <div class="content">
         <div class="tablewrap" id="wrapAlt">
           <table id="tblMaioresAlt">
@@ -473,6 +473,10 @@ const VIEW = 'vw_precos_dinamica';
 const DEFAULT_TOP_LIMIT = 100;
 const DEFAULT_OUTLIER_TOL = 0.50; // filtro não-visível para outliers (±50% da mediana)
 const DEFAULT_VISIBLE_ROWS = 15;  // manter 15 linhas visíveis nas Oportunidades
+
+// ===== Maiores Alterações: paginação =====
+const ALT_PAGE_SIZE = 50;
+let altPage = 1;
 
 /* ========= Util ========= */
 const NA = '---';
@@ -944,6 +948,44 @@ function renderCaros(){
 
 /* ========= Maiores alterações (NOVA LÓGICA: período atual vs período anterior) ========= */
 
+
+/* ===== Enriquecimento de descrição por EAN ===== */
+async function enrichAltDescriptions(rows){
+  try{
+    const unique = Array.from(new Set(rows.map(r => String(r.ean)))).filter(Boolean);
+    if (!unique.length) return rows;
+
+    // Primeiro: produtos_cliente (ean13)
+    let descByEan = new Map();
+    try{
+      const { data: pc } = await sb.from('produtos_cliente').select('ean13, descricao').in('ean13', unique);
+      (pc||[]).forEach(r => {
+        if (r && r.ean13){ descByEan.set(String(r.ean13), r.descricao || ''); }
+      });
+    }catch{}
+
+    // Fallback: cadastro_produtos (ean1) para os que faltaram
+    const missing = unique.filter(e => !descByEan.has(String(e)));
+    if (missing.length){
+      try{
+        const { data: cp } = await sb.from('cadastro_produtos').select('ean1, descricao').in('ean1', missing);
+        (cp||[]).forEach(r => {
+          if (r && r.ean1 && !descByEan.has(String(r.ean1))){
+            descByEan.set(String(r.ean1), r.descricao || '');
+          }
+        });
+      }catch{}
+    }
+
+    // Aplica no array
+    rows.forEach(r => {
+      const d = descByEan.get(String(r.ean));
+      if (d){ r.desc = d; }
+    });
+  }catch(e){ console.warn('enrichAltDescriptions falhou:', e?.message||e); }
+  return rows;
+}
+
 async function loadMaioresAlt(){
   const lim = DEFAULT_TOP_LIMIT;
   const siteIds = getSelectedSiteIds(); // null = todos
@@ -960,26 +1002,39 @@ async function loadMaioresAlt(){
   const { data, error } = await q;
   if (error){ console.error(error); lastAlt=[]; renderAlt(); return; }
 
-  lastAlt = (data||[]).map(r => {
+  let arr = (data||[]).map(r => {
     const prev = Number(r.penultimo_preco);
     const curr = Number(r.ultimo_preco);
     const delta = Number(r.diff_preco);
     const perc = (prev && isFinite(prev) && prev !== 0) ? ( (curr - prev) / prev * 100 ) : 0;
     return {
-      desc: String(r.ean||''),   // provisório: usa EAN na coluna de descrição
+      desc: String(r.ean||''),   // será enriquecido
       ean: String(r.ean||''),
       site: String(r.site_id||''),
       prev, curr, delta, perc
     };
   });
+
+  // Enriquecer descrições por EAN (produtos_cliente -> cadastro_produtos)
+  arr = await enrichAltDescriptions(arr);
+
+  lastAlt = arr;
+  altPage = 1; // reset page ao recarregar
   renderAlt();
 }
+
 
 function renderAlt(){
   const st = sortState.alt;
   const data = sortArray(lastAlt, st.key, st.dir);
+
+  // Paginação (50 por página)
+  const start = (altPage - 1) * ALT_PAGE_SIZE;
+  const end = start + ALT_PAGE_SIZE;
+  const pageData = data.slice(start, end);
+
   const tb = document.querySelector('#tblMaioresAlt tbody'); tb.innerHTML='';
-  data.forEach(r=>{
+  pageData.forEach(r=>{
     const tr=document.createElement('tr');
     tr.innerHTML = `
       <td>${(r.desc||'').replace(/</g,'&lt;')}</td>
@@ -992,8 +1047,55 @@ function renderAlt(){
     `;
     tb.appendChild(tr);
   });
+
+  updateAltPager(data.length);
   applyVisibleHeights();
   decorateHeaders('alt');
+}
+</td>
+      <td class="mono">${r.ean}</td>
+      <td>${r.site||NA}</td>
+      <td class="right">${formatBRL(r.prev)}</td>
+      <td class="right">${formatBRL(r.curr)}</td>
+      <td class="right">${formatBRL(r.delta)}</td>
+      <td class="right">${(r.perc>=0?'+':'')+r.perc.toFixed(1)}%</td>
+    `;
+    tb.appendChild(tr);
+  });
+  applyVisibleHeights();
+  decorateHeaders('alt');
+}
+
+
+/* ===== Paginação Maiores Alterações ===== */
+function updateAltPager(totalItems){
+  const pager = document.getElementById('altPager');
+  if (!pager) return;
+  const totalPages = Math.max(1, Math.ceil(totalItems / ALT_PAGE_SIZE));
+  if (altPage > totalPages) altPage = totalPages;
+
+  pager.innerHTML = '';
+  const btnPrev = document.createElement('button');
+  btnPrev.className = 'btn ghost';
+  btnPrev.textContent = '◀ Anterior';
+  btnPrev.disabled = (altPage <= 1);
+  btnPrev.addEventListener('click', ()=>{ if (altPage>1){ altPage--; renderAlt(); } });
+
+  const span = document.createElement('span');
+  span.className = 'muted';
+  span.textContent = `Página ${altPage} de ${totalPages}`;
+
+  const btnNext = document.createElement('button');
+  btnNext.className = 'btn ghost';
+  btnNext.textContent = 'Próxima ▶';
+  btnNext.disabled = (altPage >= totalPages);
+  btnNext.addEventListener('click', ()=>{
+    if (altPage < totalPages){ altPage++; renderAlt(); }
+  });
+
+  pager.appendChild(btnPrev);
+  pager.appendChild(span);
+  pager.appendChild(btnNext);
 }
 
 /* ========= Região (inalterado) ========= */
