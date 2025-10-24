@@ -381,14 +381,14 @@
           <table id="tblMaioresAlt">
             <thead>
               <tr>
-                <th class="sortable" data-col="desc"  data-table="alt">Descrição<span class="arrow"></span></th>
-                <th class="sortable" data-col="ean"   data-table="alt">EAN<span class="arrow"></span></th>
                 <th class="sortable" data-col="site"  data-table="alt">Site<span class="arrow"></span></th>
-                <th class="right sortable" data-col="prev" data-table="alt">Preço Ant.<span class="arrow"></span></th>
-                <th class="right sortable" data-col="curr" data-table="alt">Preço Atual<span class="arrow"></span></th>
-                <th class="right sortable" data-col="delta" data-table="alt">Δ Abs.<span class="arrow"></span></th>
-                <th class="right sortable" data-col="perc"  data-table="alt">Δ %<span class="arrow"></span></th>
-              </tr>
+                <th class="sortable" data-col="ean"   data-table="alt">EAN<span class="arrow"></span></th>
+                <th class="right sortable" data-col="curr" data-table="alt">Último preço<span class="arrow"></span></th>
+                <th class="sortable" data-col="dt_curr" data-table="alt">Data (último)<span class="arrow"></span></th>
+                <th class="right sortable" data-col="prev" data-table="alt">Penúltimo preço<span class="arrow"></span></th>
+                <th class="sortable" data-col="dt_prev" data-table="alt">Data (penúltimo)<span class="arrow"></span></th>
+                <th class="right sortable" data-col="delta" data-table="alt">Diferença<span class="arrow"></span></th>
+</tr>
             </thead>
             <tbody></tbody>
           </table>
@@ -584,7 +584,7 @@ let lastWordList   = [];
 const sortState = {
   baratos: { key:'gap_up', dir:'desc' },
   caros:   { key:'diff',   dir:'desc' },
-  alt:     { key:'perc',   dir:'desc' },
+  alt:     { key:'delta',   dir:'desc' },
   abaixo:  { key:'delta',  dir:'asc'  }
 };
 const collator = new Intl.Collator('pt-BR', { sensitivity:'base', numeric:true });
@@ -1020,14 +1020,32 @@ async function loadMaioresAlt(){
   lastAlt = arr.slice(0, lim);
   renderAlt();
 }
+
 function renderAlt(){
   const st = sortState.alt;
   const data = sortArray(lastAlt, st.key, st.dir);
   const tb = document.querySelector('#tblMaioresAlt tbody'); tb.innerHTML='';
+  const fmtDate = (iso)=>{
+    if(!iso) return '—';
+    try{ return new Date(iso).toLocaleString('pt-BR'); }catch(e){ return String(iso); }
+  };
   data.forEach(r=>{
     const tr=document.createElement('tr');
     tr.innerHTML = `
-      <td>${(r.desc||'').replace(/</g,'&lt;')}</td>
+      <td class="mono">${r.site}</td>
+      <td class="mono">${r.ean}</td>
+      <td class="right">${formatBRL(r.curr)}</td>
+      <td>${fmtDate(r.dt_curr)}</td>
+      <td class="right">${formatBRL(r.prev)}</td>
+      <td>${fmtDate(r.dt_prev)}</td>
+      <td class="right">${formatBRL(r.delta)}</td>
+    `;
+    tb.appendChild(tr);
+  });
+  applyVisibleHeights();
+  decorateHeaders('alt');
+}
+</td>
       <td class="mono">${r.ean}</td>
       <td>${r.site||NA}</td>
       <td class="right">${formatBRL(r.prev)}</td>
@@ -1534,16 +1552,13 @@ if (btnSair){
     const term  = getDescricaoFiltro();
 
     let q = supa.from('v_maiores_diferencas_preco')
-                .select('site_id, ean, ultimo_preco, data_ultimo_preco, penultimo_preco, data_penultimo_preco, diff_preco', { count: 'exact' })
+                .select('site_id, ean, ultimo_preco, data_ultimo_preco, penultimo_preco, data_penultimo_preco, diff_preco')
                 .order('diff_preco', { ascending:false });
 
     if(sites && sites.length){
       q = q.in('site_id', sites);
     }
 
-    if(term){
-      q = q.ilike('descricao', `%${term}%`);
-    }
 
     const { data, error } = await q;
     if(error){
