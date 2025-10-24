@@ -948,25 +948,21 @@ async function loadMaioresAlt(){
   const lim = DEFAULT_TOP_LIMIT;
   const siteIds = getSelectedSiteIds(); // null = todos
 
-  // Read radio filter
-  const sel = document.querySelector('input[name="altVar"]:checked');
-  const varMode = sel ? sel.value : 'all';
-
   let q = sb.from('v_maiores_diferencas_preco')
     .select('site_id, ean, ultimo_preco, data_ultimo_preco, penultimo_preco, data_penultimo_preco, diff_preco')
-    .neq('diff_preco', 0) // somente itens com variação
+    .neq('diff_preco', 0)
     .order('diff_preco', { ascending:false })
     .limit(Math.max(4000, lim*50));
 
   if (siteIds) q = q.in('site_id', siteIds);
 
-  if (varMode === 'pos')      q = q.gt('diff_preco', 0);
-  else if (varMode === 'neg') q = q.lt('diff_preco', 0);
-
   const { data, error } = await q;
   if (error){ console.error(error); lastAlt=[]; renderAlt(); return; }
 
-  lastAlt = (data||[]).map(r => ({
+  const sel = document.querySelector('input[name="altVar"]:checked');
+  const varMode = sel ? sel.value : 'all';
+
+  let arr = (data||[]).map(r => ({
     site: String(r.site_id),
     ean: String(r.ean||''),
     prev: Number(r.penultimo_preco),
@@ -975,6 +971,11 @@ async function loadMaioresAlt(){
     dt_prev: r.data_penultimo_preco,
     dt_curr: r.data_ultimo_preco
   }));
+
+  if (varMode === 'pos') arr = arr.filter(r => r.delta > 0);
+  else if (varMode === 'neg') arr = arr.filter(r => r.delta < 0);
+
+  lastAlt = arr;
   renderAlt();
 }
 = getPeriod();
