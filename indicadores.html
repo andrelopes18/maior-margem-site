@@ -381,14 +381,14 @@
           <table id="tblMaioresAlt">
             <thead>
               <tr>
-                <th class="sortable" data-col="site"  data-table="alt">Site<span class="arrow"></span></th>
+                <th class="sortable" data-col="desc"  data-table="alt">Descrição<span class="arrow"></span></th>
                 <th class="sortable" data-col="ean"   data-table="alt">EAN<span class="arrow"></span></th>
-                <th class="right sortable" data-col="curr" data-table="alt">Último preço<span class="arrow"></span></th>
-                <th class="sortable" data-col="dt_curr" data-table="alt">Data (último)<span class="arrow"></span></th>
-                <th class="right sortable" data-col="prev" data-table="alt">Penúltimo preço<span class="arrow"></span></th>
-                <th class="sortable" data-col="dt_prev" data-table="alt">Data (penúltimo)<span class="arrow"></span></th>
-                <th class="right sortable" data-col="delta" data-table="alt">Diferença<span class="arrow"></span></th>
-</tr>
+                <th class="sortable" data-col="site"  data-table="alt">Site<span class="arrow"></span></th>
+                <th class="right sortable" data-col="prev" data-table="alt">Preço Ant.<span class="arrow"></span></th>
+                <th class="right sortable" data-col="curr" data-table="alt">Preço Atual<span class="arrow"></span></th>
+                <th class="right sortable" data-col="delta" data-table="alt">Δ Abs.<span class="arrow"></span></th>
+                <th class="right sortable" data-col="perc"  data-table="alt">Δ %<span class="arrow"></span></th>
+              </tr>
             </thead>
             <tbody></tbody>
           </table>
@@ -584,7 +584,7 @@ let lastWordList   = [];
 const sortState = {
   baratos: { key:'gap_up', dir:'desc' },
   caros:   { key:'diff',   dir:'desc' },
-  alt:     { key:'delta',   dir:'desc' },
+  alt:     { key:'perc',   dir:'desc' },
   abaixo:  { key:'delta',  dir:'asc'  }
 };
 const collator = new Intl.Collator('pt-BR', { sensitivity:'base', numeric:true });
@@ -943,81 +943,33 @@ function renderCaros(){
 }
 
 /* ========= Maiores alterações (NOVA LÓGICA: período atual vs período anterior) ========= */
+
 async function loadMaioresAlt(){
   const lim = DEFAULT_TOP_LIMIT;
   const siteIds = getSelectedSiteIds(); // null = todos
 
-  const { from, to } = getPeriod();
-  if (!from || !to) { lastAlt = []; renderAlt(); return; }
+  let q = sb.from('v_maiores_diferencas_preco')
+    .select('site_id, ean, ultimo_preco, penultimo_preco, diff_preco')
+    .order('diff_preco', { ascending:false })
+    .limit(Math.max(4000, lim*50));
 
-  // Define período anterior com a MESMA duração, imediatamente antes do "from"
-  const durMs = to.getTime() - from.getTime();
-  const prevTo  = new Date(from.getTime() - 1000);           // 1s antes do início atual
-  const prevFrom= new Date(prevTo.getTime() - durMs);
+  if (siteIds) q = q.in('site_id', siteIds);
 
-  // Helper para buscar "último preço por (ean, site)" em um intervalo
-  async function fetchLatestByKey(start, end){
-    let q = sb.from(VIEW)
-      .select('ean, descricao, site_id, site_nome, preco_num, data')
-      .gte('data', start.toISOString())
-      .lte('data', end.toISOString())
-      .not('preco_num','is',null)
-      .order('data', { ascending:false });
+  const { data, error } = await q;
+  if (error){ console.error(error); lastAlt=[]; renderAlt(); return; }
 
-    if (siteIds) q = q.in('site_id', siteIds);
-
-    // limite generoso; se necessário, evoluir p/ paginação
-    const { data, error } = await q.limit(Math.max(40000, lim*400));
-    if (error) throw error;
-
-    const latest = new Map(); // key => row
-    const descBy = new Map();
-    const siteBy = new Map();
-    for (const r of (data||[])){
-      const k = String(r.ean)+'|'+String(r.site_id);
-      if (!latest.has(k)){
-        latest.set(k, r); // como está desc, o primeiro é o mais recente no intervalo
-      }
-      if (!descBy.has(String(r.ean))) descBy.set(String(r.ean), r.descricao||'');
-      if (!siteBy.has(String(r.site_id))) siteBy.set(String(r.site_id), r.site_nome||r.site_id);
-    }
-    return { latest, descBy, siteBy };
-  }
-
-  // Busca período atual e anterior
-  const [{ latest:curr, descBy:descA, siteBy:siteA }, { latest:prev, descBy:descB, siteBy:siteB }] =
-    await Promise.all([ fetchLatestByKey(from, to), fetchLatestByKey(prevFrom, prevTo) ]);
-
-  // Junta chaves que existem nos dois períodos
-  const arr = [];
-  for (const [k, rCurr] of curr.entries()){
-    if (!prev.has(k)) continue;
-    const rPrev = prev.get(k);
-
-    const fa = Number(rPrev.preco_num);
-    const la = Number(rCurr.preco_num);
-    if (!isFiniteNum(fa) || !isFiniteNum(la)) continue;
-    if (fa === la) continue; // só quem alterou
-
-    const [ean, site_id] = k.split('|');
-    const delta = la - fa;
-    const perc  = fa ? (delta/fa)*100 : 0;
-
-    arr.push({
-      ean,
-      site: (siteA.get(site_id) || siteB.get(site_id) || site_id),
-      desc: (descA.get(ean) || descB.get(ean) || ''),
-      prev: fa,
-      curr: la,
-      delta,
-      perc
-    });
-  }
-
-  // Ordena por variação percentual (módulo) desc
-  arr.sort((a,b)=> Math.abs(b.perc) - Math.abs(a.perc));
-
-  lastAlt = arr.slice(0, lim);
+  lastAlt = (data||[]).map(r => {
+    const prev = Number(r.penultimo_preco);
+    const curr = Number(r.ultimo_preco);
+    const delta = Number(r.diff_preco);
+    const perc = (prev && isFinite(prev) && prev !== 0) ? ( (curr - prev) / prev * 100 ) : 0;
+    return {
+      desc: String(r.ean||''),   // provisório: usa EAN na coluna de descrição
+      ean: String(r.ean||''),
+      site: String(r.site_id||''),
+      prev, curr, delta, perc
+    };
+  });
   renderAlt();
 }
 
@@ -1025,27 +977,10 @@ function renderAlt(){
   const st = sortState.alt;
   const data = sortArray(lastAlt, st.key, st.dir);
   const tb = document.querySelector('#tblMaioresAlt tbody'); tb.innerHTML='';
-  const fmtDate = (iso)=>{
-    if(!iso) return '—';
-    try{ return new Date(iso).toLocaleString('pt-BR'); }catch(e){ return String(iso); }
-  };
   data.forEach(r=>{
     const tr=document.createElement('tr');
     tr.innerHTML = `
-      <td class="mono">${r.site}</td>
-      <td class="mono">${r.ean}</td>
-      <td class="right">${formatBRL(r.curr)}</td>
-      <td>${fmtDate(r.dt_curr)}</td>
-      <td class="right">${formatBRL(r.prev)}</td>
-      <td>${fmtDate(r.dt_prev)}</td>
-      <td class="right">${formatBRL(r.delta)}</td>
-    `;
-    tb.appendChild(tr);
-  });
-  applyVisibleHeights();
-  decorateHeaders('alt');
-}
-</td>
+      <td>${(r.desc||'').replace(/</g,'&lt;')}</td>
       <td class="mono">${r.ean}</td>
       <td>${r.site||NA}</td>
       <td class="right">${formatBRL(r.prev)}</td>
@@ -1468,144 +1403,6 @@ if (btnSair){
 <footer style="text-align:center; padding:14px 0; font-size:13px; color:#aaa; border-top:1px solid #1a1a1a; background:#000;">
   © 2025 MaiorMargem · <a href="termos.html" style="color:#9cf; text-decoration:none;">Termos de Uso</a>
 </footer>
-
-
-<section id="maiores-alteracoes-preco" class="panel">
-  <header>
-    <h2>Maiores alterações de preço</h2>
-    <div class="muted">Lendo da view (ordenado por maior variação). Filtros: sites + descrição. Sem filtro de data.</div>
-  </header>
-  <div class="content">
-    <div class="status" id="mdp-status">Carregando...</div>
-    <div class="tablewrap">
-      <table id="mdp-grid">
-        <thead>
-          <tr>
-            <th>Site</th>
-            <th>Descrição</th>
-            <th class="right">Último preço</th>
-            <th>Data (último)</th>
-            <th class="right">Penúltimo preço</th>
-            <th>Data (penúltimo)</th>
-            <th class="right">Diferença</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </div>
-</section>
-<script>
-(function(){
-  const supa = window.supabase;
-  const STATUS = document.getElementById('mdp-status');
-  const TBODY  = document.querySelector('#mdp-grid tbody');
-
-  function getSelectedSites(){
-    const tagsWrap = document.querySelector('#comboSitesTags, .combo-btn .tags');
-    let ids = [];
-    if(tagsWrap){
-      tagsWrap.querySelectorAll('[data-site-id]').forEach(el=>{
-        const v = (el.getAttribute('data-site-id')||'').trim();
-        if(v) ids.push(v);
-      });
-    }
-    if(ids.length===0){
-      const sel = document.querySelector('#cmbSites, select[name="sites"], select[data-role="sites"]');
-      if(sel && sel.options){
-        ids = Array.from(sel.options).filter(o=>o.selected).map(o=>o.value).filter(Boolean);
-      }
-    }
-    if(ids.length===0){
-      const body = document.body;
-      const raw = body.getAttribute('data-sites')||'';
-      if(raw) ids = raw.split(',').map(s=>s.trim()).filter(Boolean);
-    }
-    return ids;
-  }
-
-  function getDescricaoFiltro(){
-    const el = document.querySelector('#txtDescricao, input[name="descricao"], input[data-role="descricao"]');
-    return el ? (el.value||'').trim().toLowerCase() : '';
-  }
-
-  function formatMoney(v){
-    if(v===null || v===undefined || v==='') return '—';
-    const num = Number(v);
-    if(Number.isNaN(num)) return String(v);
-    return num.toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
-  }
-
-  function fmtDate(iso){
-    if(!iso) return '—';
-    try{
-      const d = new Date(iso);
-      return d.toLocaleString('pt-BR');
-    }catch(e){ return iso; }
-  }
-
-  async function loadGrid(){
-    STATUS.textContent = 'Carregando...';
-    TBODY.innerHTML = '';
-
-    const sites = getSelectedSites();
-    const term  = getDescricaoFiltro();
-
-    let q = supa.from('v_maiores_diferencas_preco')
-                .select('site_id, ean, ultimo_preco, data_ultimo_preco, penultimo_preco, data_penultimo_preco, diff_preco')
-                .order('diff_preco', { ascending:false });
-
-    if(sites && sites.length){
-      q = q.in('site_id', sites);
-    }
-
-
-    const { data, error } = await q;
-    if(error){
-      console.error(error);
-      STATUS.textContent = 'Erro ao carregar dados da view.';
-      return;
-    }
-
-    if(!data || data.length===0){
-      STATUS.textContent = 'Sem resultados para os filtros atuais.';
-      return;
-    }
-    STATUS.textContent = `Exibindo ${data.length} registros`;
-
-    const frag = document.createDocumentFragment();
-    data.forEach(r=>{
-      const siteText = r.site_nome || r.site_id || '—';
-      const tr = document.createElement('tr');
-
-      tr.innerHTML = `
-        <td class="mono">${siteText}</td>
-        <td>${r.descricao||'—'}</td>
-        <td class="right"><span class="price ${Number(r.ultimo_preco) >= Number(r.penultimo_preco) ? 'max' : 'min'}">${formatMoney(r.ultimo_preco)}</span></td>
-        <td>${fmtDate(r.data_ultimo_preco)}</td>
-        <td class="right">${formatMoney(r.penultimo_preco)}</td>
-        <td>${fmtDate(r.data_penultimo_preco)}</td>
-        <td class="right"><span class="pill">${formatMoney(r.diff_preco)}</span></td>
-      `;
-      frag.appendChild(tr);
-    });
-    TBODY.appendChild(frag);
-  }
-
-  let descEl = document.querySelector('#txtDescricao, input[name="descricao"], input[data-role="descricao"]');
-  if(descEl){ descEl.addEventListener('input', ()=> loadGrid()); }
-
-  document.addEventListener('click', (e)=>{
-    const t = e.target;
-    if(t.closest('.combo-list') || t.closest('.combo-btn')){
-      setTimeout(loadGrid, 150);
-    }
-  });
-
-  window.refreshMaioresDiferencasPreco = loadGrid;
-  loadGrid();
-})();
-</script>
 
 </body>
 </html>
