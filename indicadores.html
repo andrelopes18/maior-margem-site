@@ -1451,5 +1451,171 @@ if (btnSair){
   © 2025 MaiorMargem · <a href="termos.html" style="color:#9cf; text-decoration:none;">Termos de Uso</a>
 </footer>
 
+
+<section id="maiores-diferencas-preco" class="panel">
+  <header>
+    <h2>Maiores diferenças de preço</h2>
+    <div class="muted">Lendo da view (ordenado por maior variação). Filtros: sites + descrição. Sem filtro de data.</div>
+  </header>
+  <div class="content">
+    <div class="status" id="mdp-status">Carregando...</div>
+    <div class="tablewrap">
+      <table id="mdp-grid">
+        <thead>
+          <tr>
+            <th>Site</th>
+            <th>Descrição</th>
+            <th class="right">Último preço</th>
+            <th>Data (último)</th>
+            <th class="right">Penúltimo preço</th>
+            <th>Data (penúltimo)</th>
+            <th class="right">Diferença</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+<script>
+// --- Maiores diferenças de preço — leitura direta de VIEW ---
+// Requisitos esperados já existentes na página:
+//  - supabase client global: window.supabase
+//  - filtros: #txtDescricao (input texto), #comboSitesTags (tags) OU #cmbSites (select multiple) ou data attr em body
+//  - não tocar nos outros painéis
+
+(function(){
+  const supa = window.supabase;
+  if(!supa){ console.warn("Supabase client não encontrado."); }
+
+  const STATUS = document.getElementById('mdp-status');
+  const TBODY  = document.querySelector('#mdp-grid tbody');
+
+  // Helper para obter sites selecionados (tenta várias convenções já usadas na página)
+  function getSelectedSites(){
+    // 1) chips/tags dentro de #comboSitesTags
+    const tagsWrap = document.querySelector('#comboSitesTags, .combo-btn .tags');
+    let ids = [];
+    if(tagsWrap){
+      tagsWrap.querySelectorAll('[data-site-id]').forEach(el=>{
+        const v = (el.getAttribute('data-site-id')||'').trim();
+        if(v) ids.push(v);
+      });
+    }
+    // 2) selects múltiplos
+    if(ids.length===0){
+      const sel = document.querySelector('#cmbSites, select[name="sites"], select[data-role="sites"]');
+      if(sel && sel.options){
+        ids = Array.from(sel.options).filter(o=>o.selected).map(o=>o.value).filter(Boolean);
+      }
+    }
+    // 3) data-* no body (fallback)
+    if(ids.length===0){
+      const body = document.body;
+      const raw = body.getAttribute('data-sites')||'';
+      if(raw) ids = raw.split(',').map(s=>s.trim()).filter(Boolean);
+    }
+    return ids;
+  }
+
+  function getDescricaoFiltro(){
+    const el = document.querySelector('#txtDescricao, input[name="descricao"], input[data-role="descricao"]');
+    return el ? (el.value||'').trim().toLowerCase() : '';
+  }
+
+  function formatMoney(v){
+    if(v===null || v===undefined || v==='') return '—';
+    const num = Number(v);
+    if(Number.isNaN(num)) return String(v);
+    return num.toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
+  }
+
+  function fmtDate(iso){
+    if(!iso) return '—';
+    try{
+      const d = new Date(iso);
+      return d.toLocaleString('pt-BR');
+    }catch(e){ return iso; }
+  }
+
+  async function loadGrid(){
+    STATUS.textContent = 'Carregando...';
+    TBODY.innerHTML = '';
+
+    const sites = getSelectedSites();
+    const term  = getDescricaoFiltro();
+
+    // Nome da VIEW esperado (ajuste no backend): v_maiores_diferencas_preco
+    // Colunas esperadas: site_id, site_nome (opcional), descricao, ultimo_preco, data_ultimo_preco, penultimo_preco, data_penultimo_preco, diff_preco
+    let q = supa.from('v_maiores_diferencas_preco')
+                .select('site_id, site_nome, descricao, ultimo_preco, data_ultimo_preco, penultimo_preco, data_penultimo_preco, diff_preco', { count: 'exact' })
+                .order('diff_preco', { ascending:false });
+
+    // Filtrar por sites selecionados (se houver)
+    if(sites && sites.length){
+      q = q.in('site_id', sites);
+    }
+
+    // Descrição (contém, case-insensitive)
+    if(term){
+      // usa ilike para "contém"
+      q = q.ilike('descricao', `%${term}%`);
+    }
+
+    const { data, error } = await q;
+    if(error){
+      console.error(error);
+      STATUS.textContent = 'Erro ao carregar dados da view.';
+      return;
+    }
+
+    // Render
+    if(!data || data.length===0){
+      STATUS.textContent = 'Sem resultados para os filtros atuais.';
+      return;
+    }
+    STATUS.textContent = `Exibindo ${data.length} registros`;
+
+    const frag = document.createDocumentFragment();
+    data.forEach(r=>{
+      // Caso site_nome não exista na VIEW, exibe o ID.
+      const siteText = r.site_nome || r.site_id || '—';
+      const tr = document.createElement('tr');
+
+      tr.innerHTML = `
+        <td class="mono">${siteText}</td>
+        <td>${r.descricao||'—'}</td>
+        <td class="right"><span class="price ${Number(r.ultimo_preco) >= Number(r.penultimo_preco) ? 'max' : 'min'}">${formatMoney(r.ultimo_preco)}</span></td>
+        <td>${fmtDate(r.data_ultimo_preco)}</td>
+        <td class="right">${formatMoney(r.penultimo_preco)}</td>
+        <td>${fmtDate(r.data_penultimo_preco)}</td>
+        <td class="right"><span class="pill">${formatMoney(r.diff_preco)}</span></td>
+      `;
+      frag.appendChild(tr);
+    });
+    TBODY.appendChild(frag);
+  }
+
+  // Observadores dos filtros já presentes na página
+  let descEl = document.querySelector('#txtDescricao, input[name="descricao"], input[data-role="descricao"]');
+  if(descEl){ descEl.addEventListener('input', ()=> loadGrid()); }
+
+  // Hooks possíveis para combo de sites
+  document.addEventListener('click', (e)=>{
+    // quando fechar o combo de sites (heurística), recarrega
+    const t = e.target;
+    if(t.closest('.combo-list') || t.closest('.combo-btn')){
+      setTimeout(loadGrid, 150);
+    }
+  });
+
+  // Expor para outras abas atualizarem quando filtros globais mudarem
+  window.refreshMaioresDiferencasPreco = loadGrid;
+
+  // Primeira carga
+  loadGrid();
+})();
+</script>
+
 </body>
 </html>
