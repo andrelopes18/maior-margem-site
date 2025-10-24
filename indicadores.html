@@ -964,7 +964,7 @@ async function enrichAltDescriptions(rows){
       });
     }catch{}
 
-    // Fallback: cadastro_produtos (ean1) para os que faltaram
+    // Fallback: cadastro_produtos (ean1)
     const missing = unique.filter(e => !descByEan.has(String(e)));
     if (missing.length){
       try{
@@ -977,7 +977,6 @@ async function enrichAltDescriptions(rows){
       }catch{}
     }
 
-    // Aplica no array
     rows.forEach(r => {
       const d = descByEan.get(String(r.ean));
       if (d){ r.desc = d; }
@@ -1015,7 +1014,7 @@ async function loadMaioresAlt(){
     };
   });
 
-  // Enriquecer descrições por EAN (produtos_cliente -> cadastro_produtos)
+  // Enriquecer descrições por EAN
   arr = await enrichAltDescriptions(arr);
 
   lastAlt = arr;
@@ -1097,8 +1096,8 @@ function updateAltPager(totalItems){
   pager.appendChild(span);
   pager.appendChild(btnNext);
 }
-
 /* ========= Região (inalterado) ========= */
+
 async function loadRegiao(){
   try{
     const { data: rs } = await sb.from('sites').select('id, regiao').limit(1);
