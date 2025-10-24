@@ -786,6 +786,73 @@ async function fetchMyPriceMap(eanList){
   return map;
 }
 
+/* ========= Normalização de EAN e busca de descrição por EAN (NOVO) ========= */
+const onlyDigits = (s)=> (String(s||'')).replace(/\\D+/g,'');
+function toCandidates(code){
+  const d = onlyDigits(code);
+  const out = new Set();
+  if (!d) return out;
+  out.add(d);
+  if (d.length === 12) out.add('0'+d);
+  if (d.length === 14 && d.startsWith('0')) out.add(d.slice(1));
+  if (d.length < 13) out.add(d.padStart(13,'0'));
+  if (d.length > 13) out.add(d.slice(-13));
+  return out;
+}
+
+/** Busca a descrição do item pelo cliente (produtos_cliente.descricao) usando EAN,
+ * com fallback em cadastro_produtos.descricao.
+ * Tenta filtrar por user_id se existir; se a coluna não existir, ignora o filtro. */
+async function getDescriptionsByEan(eanList){
+  const map = new Map();
+  if (!eanList || !eanList.length) return map;
+
+  // Mapeia candidatos (ex.: 12, 13, 14 dígitos) -> EAN original
+  const candidateToOriginal = new Map();
+  const candidates = new Set();
+  eanList.forEach(e=>{
+    toCandidates(e).forEach(c=>{ candidates.add(c); if(!candidateToOriginal.has(c)) candidateToOriginal.set(c, e); });
+  });
+  const candArr = Array.from(candidates);
+
+  // 1) produtos_cliente (preferência do cliente)
+  try{
+    const { data:{ session } } = await sb.auth.getSession();
+    let q = sb.from('produtos_cliente').select('ean13, descricao');
+    // tenta aplicar filtro por usuário, se a coluna existir nas RLS/políticas
+    try { q = q.eq('user_id', session?.user?.id || ''); } catch(_) {}
+    const rs = await q.in('ean13', candArr);
+    const data = rs.data || [];
+    data.forEach(r=>{
+      if (!r || !r.ean13) return;
+      const orig = candidateToOriginal.get(String(r.ean13)) || String(r.ean13);
+      if (!map.has(orig)) map.set(orig, r.descricao || '');
+    });
+  }catch(e){
+    console.warn('produtos_cliente lookup falhou:', e?.message||e);
+  }
+
+  // 2) cadastro_produtos (fallback para o que faltar)
+  const missing = eanList.filter(e => !map.has(String(e)));
+  if (missing.length){
+    const moreCand = new Set();
+    missing.forEach(e=> toCandidates(e).forEach(c=> moreCand.add(c)));
+    const moreArr = Array.from(moreCand);
+    try{
+      const { data: cp } = await sb.from('cadastro_produtos').select('ean1, descricao').in('ean1', moreArr);
+      (cp||[]).forEach(r=>{
+        if (!r || !r.ean1) return;
+        const orig = candidateToOriginal.get(String(r.ean1)) || String(r.ean1);
+        if (!map.has(orig)) map.set(orig, r.descricao || '');
+      });
+    }catch(e){
+      console.warn('cadastro_produtos lookup falhou:', e?.message||e);
+    }
+  }
+
+  return map;
+}
+
 /* ========= Oportunidades: MEU PREÇO vs MENOR CONCORRENTE (server-side description filter) ========= */
 function median(nums){
   if (!nums.length) return NaN;
@@ -942,7 +1009,7 @@ function renderCaros(){
   decorateHeaders('caros');
 }
 
-/* ========= Maiores alterações (NOVA LÓGICA: período atual vs período anterior) ========= */
+/* ========= Maiores alterações (AGORA COM DESCRIÇÃO POR EAN) ========= */
 
 async function loadMaioresAlt(){
   const lim = DEFAULT_TOP_LIMIT;
@@ -960,15 +1027,26 @@ async function loadMaioresAlt(){
   const { data, error } = await q;
   if (error){ console.error(error); lastAlt=[]; renderAlt(); return; }
 
-  lastAlt = (data||[]).map(r => {
+  const rows = data || [];
+  const eans = Array.from(new Set(rows.map(r => String(r.ean||'')).filter(Boolean)));
+  let descMap = new Map();
+  try {
+    descMap = await getDescriptionsByEan(eans);
+  } catch(e){
+    console.warn('Descrição por EAN falhou:', e?.message||e);
+  }
+
+  lastAlt = rows.map(r => {
     const prev = Number(r.penultimo_preco);
     const curr = Number(r.ultimo_preco);
     const delta = Number(r.diff_preco);
     const perc = (prev && isFinite(prev) && prev !== 0) ? ( (curr - prev) / prev * 100 ) : 0;
+    const eanStr = String(r.ean||'');
+    const desc = descMap.get(eanStr) || '';
     return {
-      desc: String(r.ean||''),   // provisório: usa EAN na coluna de descrição
-      ean: String(r.ean||''),
-      site: String(r.site_id||''),
+      desc: desc || eanStr,     // se não achar descrição, mostra o EAN
+      ean: eanStr,
+      site: siteMap.get(Number(r.site_id)) || String(r.site_id||''),
       prev, curr, delta, perc
     };
   });
@@ -984,7 +1062,7 @@ function renderAlt(){
     tr.innerHTML = `
       <td>${(r.desc||'').replace(/</g,'&lt;')}</td>
       <td class="mono">${r.ean}</td>
-      <td>${r.site||NA}</td>
+      <td>${(r.site||NA).toString().replace(/</g,'&lt;')}</td>
       <td class="right">${formatBRL(r.prev)}</td>
       <td class="right">${formatBRL(r.curr)}</td>
       <td class="right">${formatBRL(r.delta)}</td>
@@ -1162,7 +1240,7 @@ async function loadTopSearches(){
   for (const r of (data||[])){
     const e = (r.ean_query||'').trim();
     const d = (r.desc_query||'').trim().toLowerCase();
-    if (e && /^\d{8,14}$/.test(e)){
+    if (e && /^\\d{8,14}$/.test(e)){
       const curr = byEan.get(e) || { ean: e, n: 0 };
       curr.n++; byEan.set(e, curr);
     } else if (d){
@@ -1177,18 +1255,6 @@ async function loadTopSearches(){
   ].sort((a,b)=> b.n - a.n).slice(0, 30);
 
   const uniqueEansRaw = merged.filter(x=>x.type==='ean').map(x=>x.key);
-  const onlyDigits = (s)=> (s||'').replace(/\D+/g,'');
-  const toCandidates = (code)=>{
-    const d = onlyDigits(code);
-    const out = new Set();
-    if (!d) return out;
-    out.add(d);
-    if (d.length === 12) out.add('0'+d);
-    if (d.length === 14 && d.startsWith('0')) out.add(d.slice(1));
-    if (d.length < 13) out.add(d.padStart(13,'0'));
-    if (d.length > 13) out.add(d.slice(-13));
-    return out;
-  };
   const candidateToOriginal = new Map();
   const candidates = new Set();
   uniqueEansRaw.forEach(e=>{
@@ -1258,7 +1324,7 @@ async function loadWordCloud(){
   const freq = new Map();
   (data||[]).forEach(r=>{
     const txt = (r.desc_query||'').toLowerCase();
-    txt.split(/[\s,.;:/\\\-+()]+/).forEach(w=>{
+    txt.split(/[\\s,.;:/\\\\\\-+()]+/).forEach(w=>{
       if(!w || w.length<3 || stop.has(w)) return;
       freq.set(w, (freq.get(w)||0)+1);
     });
@@ -1390,7 +1456,7 @@ async function sair(){
   try{
     await sb.auth.signOut();
   }catch(_){}
-  const base = (window.CONFIG && window.CONFIG.SITE_URL) ? window.CONFIG.SITE_URL.replace(/\/+$/,'') : '';
+  const base = (window.CONFIG && window.CONFIG.SITE_URL) ? window.CONFIG.SITE_URL.replace(/\\/+$/,'') : '';
   const url = base ? (base + '/index.html') : 'index.html';
   window.location.assign(url);
 }
