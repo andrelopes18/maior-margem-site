@@ -950,6 +950,8 @@ async function loadMaioresAlt(){
 
   let q = sb.from('v_maiores_diferencas_preco')
     .select('site_id, ean, ultimo_preco, penultimo_preco, diff_preco')
+    .not('diff_preco','is',null)
+    .neq('diff_preco', 0)
     .order('diff_preco', { ascending:false })
     .limit(Math.max(4000, lim*50));
 
