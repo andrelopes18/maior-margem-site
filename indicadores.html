@@ -238,7 +238,7 @@
       </select>
     </div>
 
-    <!-- NOVO: filtro de descrição para “Mais baratos” e “Mais caros” (server-side) -->
+    <!-- Filtro de descrição (server-side) -->
     <div class="group">
       <label for="qOportunidades">Descrição:</label>
       <input id="qOportunidades" type="text" placeholder="Filtrar por descrição…" />
@@ -505,13 +505,13 @@ quickRange.addEventListener('change', ()=>{
 });
 const qOportunidades = document.getElementById('qOportunidades');
 
-// >>> ALTERAÇÃO: filtro de descrição dispara nova consulta (server-side) com debounce
+// filtro de descrição com debounce
 let qDebounce = 0;
 if (qOportunidades){
   qOportunidades.addEventListener('input', ()=>{
     clearTimeout(qDebounce);
     qDebounce = setTimeout(()=>{
-      loadOportunidadesVsMin(true); // força recarregar com filtro na BASE
+      loadOportunidadesVsMin(true);
     }, 400);
   });
 }
@@ -523,8 +523,8 @@ const comboRows  = document.getElementById('comboSitesRows');
 const comboTags  = document.getElementById('comboTags');
 const optAll     = document.getElementById('opt_all');
 
-let siteMap = new Map();     // id -> nome
-let selectedSites = new Set(); // controla seleção (vazia = todos via optAll)
+let siteMap = new Map();
+let selectedSites = new Set();
 
 comboBtn.addEventListener('click', ()=>{
   const open = comboList.style.display === 'block';
@@ -569,7 +569,7 @@ function updateComboTags(){
   }
 }
 function getSelectedSiteIds(){
-  if (optAll.checked || selectedSites.size===0) return null; // null = todos (padrão)
+  if (optAll.checked || selectedSites.size===0) return null;
   return Array.from(selectedSites);
 }
 
@@ -636,7 +636,6 @@ async function populateSitesIntoCombo(){
     comboRows.appendChild(row);
   });
 
-  // Padrão: Todos marcado
   optAll.checked = true;
   selectedSites.clear();
   updateComboTags();
@@ -773,7 +772,7 @@ async function fetchMyPriceMap(eanList){
     .in('ean', eanList)
     .not('meu_preco','is',null)
     .order('data', { ascending:false })
-    .limit(eanList.length * 10); // margem
+    .limit(eanList.length * 10);
 
   if (error){ console.warn('fetchMyPriceMap error:', error.message||error); return map; }
   for (const r of (data||[])){
@@ -786,8 +785,8 @@ async function fetchMyPriceMap(eanList){
   return map;
 }
 
-/* ========= Normalização de EAN e busca de descrição por EAN (NOVO) ========= */
-const onlyDigits = (s)=> (String(s||'')).replace(/\\D+/g,'');
+/* ========= Normalização / descrições por EAN ========= */
+const onlyDigits = (s)=> (String(s||'')).replace(/\D+/g,'');
 function toCandidates(code){
   const d = onlyDigits(code);
   const out = new Set();
@@ -799,61 +798,41 @@ function toCandidates(code){
   if (d.length > 13) out.add(d.slice(-13));
   return out;
 }
-
-/** Busca a descrição do item pelo cliente (produtos_cliente.descricao) usando EAN,
- * com fallback em cadastro_produtos.descricao.
- * Tenta filtrar por user_id se existir; se a coluna não existir, ignora o filtro. */
 async function getDescriptionsByEan(eanList){
   const map = new Map();
   if (!eanList || !eanList.length) return map;
 
-  // Mapeia candidatos (ex.: 12, 13, 14 dígitos) -> EAN original
   const candidateToOriginal = new Map();
   const candidates = new Set();
-  eanList.forEach(e=>{
-    toCandidates(e).forEach(c=>{ candidates.add(c); if(!candidateToOriginal.has(c)) candidateToOriginal.set(c, e); });
-  });
+  eanList.forEach(e=> toCandidates(e).forEach(c=>{ candidates.add(c); if(!candidateToOriginal.has(c)) candidateToOriginal.set(c,e); }));
   const candArr = Array.from(candidates);
 
-  // 1) produtos_cliente (preferência do cliente)
   try{
     const { data:{ session } } = await sb.auth.getSession();
     let q = sb.from('produtos_cliente').select('ean13, descricao');
-    // tenta aplicar filtro por usuário, se a coluna existir nas RLS/políticas
-    try { q = q.eq('user_id', session?.user?.id || ''); } catch(_) {}
+    try { q = q.eq('user_id', session?.user?.id || ''); } catch(_){}
     const rs = await q.in('ean13', candArr);
-    const data = rs.data || [];
-    data.forEach(r=>{
-      if (!r || !r.ean13) return;
+    (rs.data||[]).forEach(r=>{
       const orig = candidateToOriginal.get(String(r.ean13)) || String(r.ean13);
       if (!map.has(orig)) map.set(orig, r.descricao || '');
     });
-  }catch(e){
-    console.warn('produtos_cliente lookup falhou:', e?.message||e);
-  }
+  }catch(e){ console.warn('produtos_cliente lookup falhou:', e?.message||e); }
 
-  // 2) cadastro_produtos (fallback para o que faltar)
   const missing = eanList.filter(e => !map.has(String(e)));
   if (missing.length){
-    const moreCand = new Set();
-    missing.forEach(e=> toCandidates(e).forEach(c=> moreCand.add(c)));
-    const moreArr = Array.from(moreCand);
+    const more = new Set(); missing.forEach(e=> toCandidates(e).forEach(c=> more.add(c)));
     try{
-      const { data: cp } = await sb.from('cadastro_produtos').select('ean1, descricao').in('ean1', moreArr);
+      const { data: cp } = await sb.from('cadastro_produtos').select('ean1, descricao').in('ean1', Array.from(more));
       (cp||[]).forEach(r=>{
-        if (!r || !r.ean1) return;
         const orig = candidateToOriginal.get(String(r.ean1)) || String(r.ean1);
         if (!map.has(orig)) map.set(orig, r.descricao || '');
       });
-    }catch(e){
-      console.warn('cadastro_produtos lookup falhou:', e?.message||e);
-    }
+    }catch(e){ console.warn('cadastro_produtos lookup falhou:', e?.message||e); }
   }
-
   return map;
 }
 
-/* ========= Oportunidades: MEU PREÇO vs MENOR CONCORRENTE (server-side description filter) ========= */
+/* ========= Oportunidades ========= */
 function median(nums){
   if (!nums.length) return NaN;
   const arr = nums.slice().sort((a,b)=>a-b);
@@ -875,22 +854,20 @@ function currentQuery(){ const el = document.getElementById('qOportunidades'); r
 async function loadOportunidadesVsMin(){
   const lim = DEFAULT_TOP_LIMIT;
   const tol = DEFAULT_OUTLIER_TOL;
-  const siteIds = getSelectedSiteIds(); // null = todos
+  const siteIds = getSelectedSiteIds();
   const qDesc = currentQuery();
 
-  // 1) Busca preços dos concorrentes no período selecionado COM filtro de descrição NA BASE
   let qry = applyDateFilter(
     sb.from(VIEW).select('ean, descricao, site_id, site_nome, preco_num, meu_preco, data')
       .not('preco_num','is',null)
       .order('data', { ascending:false })
   );
   if (siteIds) qry = qry.in('site_id', siteIds);
-  if (qDesc)   qry = qry.ilike('descricao', `%${qDesc}%`); // <<<<<< filtro servidor
+  if (qDesc)   qry = qry.ilike('descricao', `%${qDesc}%`);
 
   const { data, error } = await qry.limit(Math.max(30000, lim*200));
   if (error) throw error;
 
-  // Agrupa por EAN para coletar mercados e tentativas de meu_preco do período
   const byEan = new Map();
   for (const r of (data||[])){
     const e = String(r.ean);
@@ -908,21 +885,18 @@ async function loadOportunidadesVsMin(){
     if (obj.my===null && isFiniteNum(mp) && mp>0) obj.my = mp;
   }
 
-  // 2) Fallback: para os EANs sem meu_preco no período, busca o mais recente (sem período)
   const missingEans = Array.from(byEan.values()).filter(x=>x.my===null).map(x=>x.ean);
   let myMap = new Map();
   if (missingEans.length){
     myMap = await fetchMyPriceMap(missingEans);
   }
 
-  // 3) Calcula as oportunidades
   const baratos=[], caros=[];
   for (const obj of byEan.values()){
     if (!isFiniteNum(obj.my) || obj.my<=0){
       const mp = myMap.get(obj.ean);
       if (isFiniteNum(mp) && mp>0) obj.my = mp;
     }
-
     if (!isFiniteNum(obj.my) || obj.my<=0) continue;
     let market = filterValidCompetitors(obj.market);
     if (!market.length) continue;
@@ -936,18 +910,10 @@ async function loadOportunidadesVsMin(){
     if (obj.my < minc.price){
       const prox = nextAbove || minc;
       const gapUp = prox.price - obj.my;
-      baratos.push({
-        ean: obj.ean, desc: obj.desc, my: obj.my,
-        next: prox.price, next_site: prox.site,
-        gap_up: gapUp
-      });
+      baratos.push({ ean: obj.ean, desc: obj.desc, my: obj.my, next: prox.price, next_site: prox.site, gap_up: gapUp });
     } else if (obj.my > minc.price){
       const diff = obj.my - minc.price;
-      caros.push({
-        ean: obj.ean, desc: obj.desc, my: obj.my,
-        minc: minc.price, min_site: minc.site,
-        diff
-      });
+      caros.push({ ean: obj.ean, desc: obj.desc, my: obj.my, minc: minc.price, min_site: minc.site, diff });
     }
   }
 
@@ -1009,11 +975,11 @@ function renderCaros(){
   decorateHeaders('caros');
 }
 
-/* ========= Maiores alterações (AGORA COM DESCRIÇÃO POR EAN) ========= */
+/* ========= Maiores alterações (com descrição por EAN) ========= */
 
 async function loadMaioresAlt(){
   const lim = DEFAULT_TOP_LIMIT;
-  const siteIds = getSelectedSiteIds(); // null = todos
+  const siteIds = getSelectedSiteIds();
 
   let q = sb.from('v_maiores_diferencas_preco')
     .select('site_id, ean, ultimo_preco, penultimo_preco, diff_preco')
@@ -1044,7 +1010,7 @@ async function loadMaioresAlt(){
     const eanStr = String(r.ean||'');
     const desc = descMap.get(eanStr) || '';
     return {
-      desc: desc || eanStr,     // se não achar descrição, mostra o EAN
+      desc: desc || eanStr,
       ean: eanStr,
       site: siteMap.get(Number(r.site_id)) || String(r.site_id||''),
       prev, curr, delta, perc
@@ -1074,7 +1040,7 @@ function renderAlt(){
   decorateHeaders('alt');
 }
 
-/* ========= Região (inalterado) ========= */
+/* ========= Região ========= */
 async function loadRegiao(){
   try{
     const { data: rs } = await sb.from('sites').select('id, regiao').limit(1);
@@ -1102,7 +1068,7 @@ async function loadRegiao(){
     document.querySelector('#blocoRegiao .empty').style.display='none';
     canvas.style.display='block';
     const W=canvas.width, H=canvas.height, pad=30;
-    ctx.clearRect(0,0,0,0);
+    ctx.clearRect(0,0,W,H);
     ctx.fillStyle='#00b140';
     const max = Math.max(...pares.map(p=>p[1]));
     const bw = (W - pad*2)/Math.max(1,pares.length);
@@ -1118,7 +1084,7 @@ async function loadRegiao(){
   }
 }
 
-/* ========= Abaixo do custo (inalterado) ========= */
+/* ========= Abaixo do custo ========= */
 async function watchAbaixoCusto(){
   try{
     const { data: probe } = await sb.from(VIEW).select('ean, meu_custo, meu_preco').limit(1);
@@ -1188,12 +1154,13 @@ function decorateHeaders(tableKey){
   if (th) th.classList.add(st.dir);
 }
 
-/* ========= Limite visual com rolagem ========= */
+/* ========= Limite visual com rolagem (CORRIGIDO) ========= */
 function applyVisibleHeights(){
   const vis = DEFAULT_VISIBLE_ROWS;
-  ['wrapBaratos','wrapCaros','wrapAlt','wrapAbaixoCusto','wrapTopSearches','wrapWordList'].forEach(id=>{
+  const wraps = ['wrapBaratos','wrapCaros','wrapAlt','wrapAbaixoCusto','wrapTopSearches','wrapWordList'];
+  for (const id of wraps){
     const wrap = document.getElementById(id);
-    if (!wrap || wrap.style.display==='none') return;
+    if (!wrap || wrap.style.display==='none') continue;
     const table = wrap.querySelector('table');
     const thead = table ? table.querySelector('thead') : null;
     const row   = table ? table.querySelector('tbody tr') : null;
@@ -1201,8 +1168,8 @@ function applyVisibleHeights(){
     const rowH  = row ? row.getBoundingClientRect().height : 38;
     wrap.style.maxHeight = (headH + rowH * vis + 6) + 'px';
     wrap.style.overflow = 'auto';
-  
-  // Equalizar altura dos dois quadros de Oportunidades
+  }
+  // equalizar alturas entre "Mais baratos" e "Mais caros"
   const wb = document.getElementById('wrapBaratos');
   const wc = document.getElementById('wrapCaros');
   if (wb && wc && wb.style.display !== 'none' && wc.style.display !== 'none') {
@@ -1219,10 +1186,9 @@ function applyVisibleHeights(){
     wc.style.maxHeight = h + 'px';
     wb.style.overflow = wc.style.overflow = 'auto';
   }
-});
 }
 
-/* ================= RELATÓRIOS DE BUSCA (inalterados) ================= */
+/* ================= RELATÓRIOS DE BUSCA ================= */
 document.getElementById('btnAtualizarPesquisas').addEventListener('click', loadTopSearches);
 document.getElementById('btnListaPalavras').addEventListener('click', toggleWordList);
 
@@ -1240,7 +1206,7 @@ async function loadTopSearches(){
   for (const r of (data||[])){
     const e = (r.ean_query||'').trim();
     const d = (r.desc_query||'').trim().toLowerCase();
-    if (e && /^\\d{8,14}$/.test(e)){
+    if (e && /^\d{8,14}$/.test(e)){
       const curr = byEan.get(e) || { ean: e, n: 0 };
       curr.n++; byEan.set(e, curr);
     } else if (d){
@@ -1324,7 +1290,7 @@ async function loadWordCloud(){
   const freq = new Map();
   (data||[]).forEach(r=>{
     const txt = (r.desc_query||'').toLowerCase();
-    txt.split(/[\\s,.;:/\\\\\\-+()]+/).forEach(w=>{
+    txt.split(/[\s,.;:/\\\-+()]+/).forEach(w=>{
       if(!w || w.length<3 || stop.has(w)) return;
       freq.set(w, (freq.get(w)||0)+1);
     });
@@ -1415,7 +1381,7 @@ function attachTooltip(el, text){
   el.addEventListener('mouseleave', hide);
 }
 
-/* ========= Botão de minimizar (inalterado) ========= */
+/* ========= Botão de minimizar ========= */
 function installMinimizeButtons(){
   document.querySelectorAll('.panel').forEach(panel=>{
     const hdr = panel.querySelector('header');
@@ -1451,12 +1417,12 @@ function installMinimizeButtons(){
   });
 }
 
-/* ===== Logout (igual ao index) ===== */
+/* ===== Logout ===== */
 async function sair(){
   try{
     await sb.auth.signOut();
   }catch(_){}
-  const base = (window.CONFIG && window.CONFIG.SITE_URL) ? window.CONFIG.SITE_URL.replace(/\\/+$/,'') : '';
+  const base = (window.CONFIG && window.CONFIG.SITE_URL) ? window.CONFIG.SITE_URL.replace(/\/+$/,'') : '';
   const url = base ? (base + '/index.html') : 'index.html';
   window.location.assign(url);
 }
