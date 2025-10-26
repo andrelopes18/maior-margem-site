@@ -283,7 +283,7 @@
         <div class="val" id="kpiSites">—</div>
         <canvas id="sparkSites" class="spark" width="300" height="54" aria-hidden="true"></canvas>
       </div>
-      <div class="muted">Total em <code>sites</code> (tendência usa a view).</div>
+      <div class="muted">Total liberado p/ você.</div>
     </div>
     <div class="card">
       <h3>Economia estimada (baseado em vendas)</h3>
@@ -525,6 +525,7 @@ const optAll     = document.getElementById('opt_all');
 
 let siteMap = new Map();
 let selectedSites = new Set();
+let allowedSiteIds = []; // << NOVO: sites permitidos para o usuário
 
 comboBtn.addEventListener('click', ()=>{
   const open = comboList.style.display === 'block';
@@ -556,7 +557,7 @@ document.addEventListener('click', (e)=>{
 
 function updateComboTags(){
   comboTags.innerHTML = '';
-  if (optAll.checked || selectedSites.size === 0){
+  if (selectedSites.size === 0){
     comboTags.innerHTML = '<span class="t">Todos</span>';
     return;
   }
@@ -569,8 +570,9 @@ function updateComboTags(){
   }
 }
 function getSelectedSiteIds(){
-  if (optAll.checked || selectedSites.size===0) return null;
-  return Array.from(selectedSites);
+  // "Todos" agora significa "todos os sites liberados ao usuário"
+  if (selectedSites.size>0) return Array.from(selectedSites);
+  return allowedSiteIds.slice();
 }
 
 /* ========= Dados em memória ========= */
@@ -601,7 +603,7 @@ const collator = new Intl.Collator('pt-BR', { sensitivity:'base', numeric:true }
     planChip.textContent = 'Plano: ' + raw.charAt(0).toUpperCase()+raw.slice(1);
   }catch{}
 
-  await populateSitesIntoCombo();
+  await fetchAllowedSitesAndBuildCombo(); // << NOVO
 
   const today = new Date(); const from = new Date(today.getTime() - 30*24*3600*1000);
   dateTo.value   = today.toISOString().slice(0,10);
@@ -612,11 +614,47 @@ const collator = new Intl.Collator('pt-BR', { sensitivity:'base', numeric:true }
   await reloadAll();
 })();
 
-async function populateSitesIntoCombo(){
-  const { data, error } = await sb.from('sites').select('id, nome').order('nome', { ascending:true });
-  if (error){ console.warn('Falha ao carregar sites:', error.message||error); return; }
-  siteMap = new Map((data||[]).map(s => [Number(s.id), s.nome || String(s.id)]));
+/* ========= SCOPE POR SITE (NOVO) ========= */
+function applySiteScope(q){
+  if (Array.isArray(allowedSiteIds) && allowedSiteIds.length){
+    return q.in('site_id', allowedSiteIds);
+  }
+  return q;
+}
 
+/* ========= Sites permitidos e combo ========= */
+async function fetchAllowedSitesAndBuildCombo(){
+  // pega o usuário atual
+  const { data:{ session } } = await sb.auth.getSession();
+  const uid = session?.user?.id || '';
+
+  // busca as permissões do usuário
+  allowedSiteIds = [];
+  try{
+    const { data: us } = await sb.from('user_sites').select('site_id').eq('user_id', uid).order('site_id', {ascending:true});
+    if (Array.isArray(us) && us.length){
+      allowedSiteIds = Array.from(new Set(us.map(r => Number(r.site_id)).filter(Number.isFinite)));
+    }
+  }catch(e){
+    console.warn('user_sites falhou:', e?.message||e);
+  }
+
+  // carrega nomes/ids dos sites liberados
+  let sitesData = [];
+  if (allowedSiteIds.length){
+    const { data: sdata } = await sb.from('sites').select('id, nome').in('id', allowedSiteIds).order('nome', {ascending:true});
+    sitesData = sdata || [];
+  } else {
+    // Sem permissões explícitas → mantém vazio (nenhum site)
+    sitesData = [];
+  }
+
+  // preenche mapa e constrói combo
+  siteMap = new Map((sitesData).map(s => [Number(s.id), s.nome || String(s.id)]));
+  await buildComboFromSites(sitesData);
+}
+
+async function buildComboFromSites(data){
   comboRows.innerHTML = '';
   (data||[]).forEach(s=>{
     const row = document.createElement('div');
@@ -629,13 +667,14 @@ async function populateSitesIntoCombo(){
     const chk = row.querySelector('input');
     chk.addEventListener('change', ()=>{
       const id = Number(s.id);
-      if (chk.checked){ selectedSites.add(id); optAll.checked = false; }
-      else { selectedSites.delete(id); if (selectedSites.size===0) optAll.checked = true; }
+      if (chk.checked){ selectedSites.add(id); optAll.checked = (selectedSites.size===0); }
+      else { selectedSites.delete(id); optAll.checked = (selectedSites.size===0); }
     });
     row.addEventListener('click', (e)=>{ if (e.target.tagName !== 'INPUT') { chk.checked = !chk.checked; chk.dispatchEvent(new Event('change')); } });
     comboRows.appendChild(row);
   });
 
+  // estado inicial = "Todos" (todos os permitidos)
   optAll.checked = true;
   selectedSites.clear();
   updateComboTags();
@@ -692,7 +731,9 @@ async function seriesCountByDay(distinctField){
     map.set(d.toISOString().slice(0,10), new Set());
   }
   const { data, error } = await applyDateFilter(
-    sb.from(VIEW).select('data,'+distinctField).not(''+distinctField,'is',null).order('data',{ascending:true}).limit(5000)
+    applySiteScope(
+      sb.from(VIEW).select('data,'+distinctField).not(''+distinctField,'is',null).order('data',{ascending:true}).limit(5000)
+    )
   );
   if (error) throw error;
   for (const r of (data||[])){
@@ -727,8 +768,8 @@ async function mostRecentDateChunked(eans, from, to){
   for (let i=0;i<eans.length;i+=chunk){
     const sub = eans.slice(i,i+chunk);
     let q = sb.from(VIEW).select('data').in('ean', sub)
-      .gte('data', from.toISOString()).lte('data', to.toISOString())
-      .order('data', { ascending:false }).limit(1);
+      .gte('data', from.toISOString()).lte('data', to.toISOString());
+    q = applySiteScope(q).order('data', { ascending:false }).limit(1);
     const { data } = await q;
     if (data && data.length){
       const d = new Date(data[0].data);
@@ -744,11 +785,12 @@ async function pricesAtDateForEANs(eans, targetDate){
   const end   = new Date(targetDate.getTime() + 12*3600*1000).toISOString();
   for (let i=0;i<eans.length;i+=chunk){
     const sub = eans.slice(i,i+chunk);
-    const { data } = await sb.from(VIEW)
-      .select('ean, site_id, preco_num, data')
-      .in('ean', sub).gte('data', start).lte('data', end)
-      .not('preco_num','is',null).gt('preco_num', 0)
-      .order('data', { ascending:false }).limit(20000);
+    const { data } = await applySiteScope(
+      sb.from(VIEW)
+        .select('ean, site_id, preco_num, data')
+        .in('ean', sub).gte('data', start).lte('data', end)
+        .not('preco_num','is',null).order('data', { ascending:false }).limit(20000)
+    );
     if (data) out.push(...data);
   }
   return out;
@@ -758,11 +800,12 @@ async function prevPricesBeforeDate(eans, from){
   const chunk = 150;
   for (let i=0;i<eans.length;i+=chunk){
     const sub = eans.slice(i,i+chunk);
-    const { data } = await sb.from(VIEW)
-      .select('ean, site_id, preco_num, data')
-      .in('ean', sub).lt('data', from.toISOString())
-      .not('preco_num','is',null).gt('preco_num', 0)
-      .order('data', { ascending:false }).limit(20000);
+    const { data } = await applySiteScope(
+      sb.from(VIEW)
+        .select('ean, site_id, preco_num, data')
+        .in('ean', sub).lt('data', from.toISOString())
+        .not('preco_num','is',null).order('data', { ascending:false }).limit(20000)
+    );
     if (data) out.push(...data);
   }
   const best = new Map();
@@ -831,7 +874,8 @@ async function loadKpis(){
   }catch(e){ kpiProdutos.textContent = '—'; }
 
   try{
-    const totalSites = await countRows('sites');
+    // Agora mostra apenas a contagem de sites liberados ao usuário
+    const totalSites = Array.isArray(allowedSiteIds) ? allowedSiteIds.length : 0;
     kpiSites.textContent = totalSites.toLocaleString('pt-BR');
   }catch(e){ kpiSites.textContent = '—'; }
 
@@ -840,8 +884,10 @@ async function loadKpis(){
 
   try{
     const { data } = await applyDateFilter(
-      sb.from(VIEW).select('ean, site_id, preco_num, data')
-        .not('preco_num','is',null).order('data',{ascending:true}).limit(8000)
+      applySiteScope(
+        sb.from(VIEW).select('ean, site_id, preco_num, data')
+          .not('preco_num','is',null).order('data',{ascending:true}).limit(8000)
+      )
     );
     if (data && data.length){
       const key = (r)=> String(r.ean)+'|'+String(r.site_id);
@@ -890,13 +936,15 @@ async function fetchMyPriceMap(eanList){
   const map = new Map();
   if (!eanList || !eanList.length) return map;
 
-  const { data, error } = await sb
-    .from(VIEW)
-    .select('ean, meu_preco, data')
-    .in('ean', eanList)
-    .not('meu_preco','is',null)
-    .order('data', { ascending:false })
-    .limit(eanList.length * 10);
+  const { data, error } = await applySiteScope(
+    sb
+      .from(VIEW)
+      .select('ean, meu_preco, data, site_id')
+      .in('ean', eanList)
+      .not('meu_preco','is',null)
+      .order('data', { ascending:false })
+      .limit(eanList.length * 10)
+  );
 
   if (error){ console.warn('fetchMyPriceMap error:', error.message||error); return map; }
   for (const r of (data||[])){
@@ -978,15 +1026,15 @@ function currentQuery(){ const el = document.getElementById('qOportunidades'); r
 async function loadOportunidadesVsMin(){
   const lim = DEFAULT_TOP_LIMIT;
   const tol = DEFAULT_OUTLIER_TOL;
-  const siteIds = getSelectedSiteIds();
-  const qDesc = currentQuery();
+  const siteIds = getSelectedSiteIds(); // já retorna só permitidos ou um subconjunto
 
   let qry = applyDateFilter(
     sb.from(VIEW).select('ean, descricao, site_id, site_nome, preco_num, meu_preco, data')
       .not('preco_num','is',null)
       .order('data', { ascending:false })
   );
-  if (siteIds) qry = qry.in('site_id', siteIds);
+  qry = qry.in('site_id', siteIds); // força escopo permitido
+  const qDesc = currentQuery();
   if (qDesc)   qry = qry.ilike('descricao', `%${qDesc}%`);
 
   const { data, error } = await qry.limit(Math.max(30000, lim*200));
@@ -1000,8 +1048,7 @@ async function loadOportunidadesVsMin(){
 
     const sid = Number(r.site_id);
     const pn  = Number(r.preco_num);
-    const allowedSite = !siteIds || siteIds.includes(sid);
-    if (allowedSite && isFiniteNum(pn) && pn>0){
+    if (isFiniteNum(pn) && pn>0){
       obj.market.push({ price: pn, site: r.site_nome || sid });
     }
 
@@ -1040,16 +1087,13 @@ async function loadOportunidadesVsMin(){
       if (!band.length) { continue; }
       mincCaros = band[0];
     }
-if (obj.my < minc.price){
-const prox = nextAbove || minc;
+    if (obj.my < minc.price){
+      const prox = nextAbove || minc;
       const gapUp = prox.price - obj.my;
       baratos.push({ ean: obj.ean, desc: obj.desc, my: obj.my, next: prox.price, next_site: prox.site, gap_up: gapUp });
-    
-}
-else if (obj.my > mincCaros.price){
-const diff = obj.my - mincCaros.price;
-      caros.push({ ean: obj.ean, desc: obj.desc, my: obj.my, minc: mincCaros.price, min_site: mincCaros.site, diff 
-});
+    } else if (obj.my > mincCaros.price){
+      const diff = obj.my - mincCaros.price;
+      caros.push({ ean: obj.ean, desc: obj.desc, my: obj.my, minc: mincCaros.price, min_site: mincCaros.site, diff });
     }
   }
 
@@ -1123,7 +1167,6 @@ function renderCaros(){
 async function loadMaioresAlt(){
   const lim = DEFAULT_TOP_LIMIT;
   const siteIds = getSelectedSiteIds();
-
   let q = sb.from('v_maiores_diferencas_preco')
     .select('site_id, ean, ultimo_preco, penultimo_preco, diff_preco')
     .not('diff_preco','is',null)
@@ -1131,7 +1174,8 @@ async function loadMaioresAlt(){
     .order('diff_preco', { ascending:false })
     .limit(Math.max(4000, lim*50));
 
-  if (siteIds) q = q.in('site_id', siteIds);
+  // força escopo permitido (ou subconjunto selecionado)
+  q = q.in('site_id', siteIds);
 
   const { data, error } = await q;
   if (error){ console.error(error); lastAlt=[]; renderAlt(); return; }
@@ -1187,15 +1231,18 @@ function renderAlt(){
 /* ========= Região ========= */
 async function loadRegiao(){
   try{
-    const { data: rs } = await sb.from('sites').select('id, regiao').limit(1);
+    // apenas se houver 'regiao' e sites permitidos
+    if (!allowedSiteIds.length) return;
+    const { data: rs } = await sb.from('sites').select('id, regiao').in('id', allowedSiteIds).limit(1);
     if (!(rs && rs.length && rs[0].regiao)) return;
 
     const {from,to} = getPeriod();
     const { data } = await sb.from(VIEW).select('preco_num, site_id, data')
       .gte('data',from.toISOString()).lte('data',to.toISOString())
+      .in('site_id', allowedSiteIds)
       .not('preco_num','is',null).limit(10000);
 
-    const { data: allSites } = await sb.from('sites').select('id, regiao').not('regiao','is',null);
+    const { data: allSites } = await sb.from('sites').select('id, regiao').in('id', allowedSiteIds).not('regiao','is',null);
     const m = new Map((allSites||[]).map(s=>[Number(s.id), String(s.regiao)]));
 
     const mapReg = new Map();
@@ -1305,7 +1352,7 @@ function applyVisibleHeights(){
   for (const id of wraps){
     const wrap = document.getElementById(id);
     if (!wrap || wrap.style.display==='none') continue;
-    const table = wrap.querySelector('table');
+    const table = wrap ? wrap.querySelector('table') : null;
     const thead = table ? table.querySelector('thead') : null;
     const row   = table ? table.querySelector('tbody tr') : null;
     const headH = thead ? thead.getBoundingClientRect().height : 40;
@@ -1350,7 +1397,7 @@ async function loadTopSearches(){
   for (const r of (data||[])){
     const e = (r.ean_query||'').trim();
     const d = (r.desc_query||'').trim().toLowerCase();
-    if (e && /^\d{8,14}$/.test(e)){
+    if (e && /^\\d{8,14}$/.test(e)){
       const curr = byEan.get(e) || { ean: e, n: 0 };
       curr.n++; byEan.set(e, curr);
     } else if (d){
@@ -1434,7 +1481,7 @@ async function loadWordCloud(){
   const freq = new Map();
   (data||[]).forEach(r=>{
     const txt = (r.desc_query||'').toLowerCase();
-    txt.split(/[\s,.;:/\\\-+()]+/).forEach(w=>{
+    txt.split(/[\\s,.;:/\\\\\\-+()]+/).forEach(w=>{
       if(!w || w.length<3 || stop.has(w)) return;
       freq.set(w, (freq.get(w)||0)+1);
     });
@@ -1566,7 +1613,7 @@ async function sair(){
   try{
     await sb.auth.signOut();
   }catch(_){}
-  const base = (window.CONFIG && window.CONFIG.SITE_URL) ? window.CONFIG.SITE_URL.replace(/\/+$/,'') : '';
+  const base = (window.CONFIG && window.CONFIG.SITE_URL) ? window.CONFIG.SITE_URL.replace(/\\/+$/,'') : '';
   const url = base ? (base + '/index.html') : 'index.html';
   window.location.assign(url);
 }
