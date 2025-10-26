@@ -500,17 +500,27 @@ function analyzeAllItemsOutliers(){
   for (const item of produtosList){
     const nums = [];
     const entries = Object.values(item.sites||{});
-    for (const s of entries){ if (Number.isFinite(s.precoNum)) nums.push(s.precoNum); }
+    // Coleta preços válidos dos sites
+    for (const s of entries){
+      if (Number.isFinite(s.precoNum)) nums.push(Number(s.precoNum));
+    }
+    // Inclui 'meu_preco' na média quando disponível (fortalece a referência)
+    let usedUser = false;
+    if (typeof item.meu_preco === 'number' && Number.isFinite(item.meu_preco)){
+      nums.push(Number(item.meu_preco));
+      usedUser = true;
+    }
     if (nums.length >= 2){
       const mean = nums.reduce((a,b)=>a+b,0)/nums.length;
       const lo = mean*(1-OUTLIER_TOL), hi = mean*(1+OUTLIER_TOL);
-      item.analysis = { mean, lo, hi, n:nums.length };
+      item.analysis = { mean, lo, hi, n: nums.length, usedUser };
       for (const s of entries){
         if (!Number.isFinite(s.precoNum)){ s.valid = false; continue; }
         s.valid = (s.precoNum >= lo && s.precoNum <= hi);
       }
     } else {
-      item.analysis = { mean: null, lo: null, hi: null, n: nums.length };
+      // Sem base estatística suficiente, não marcamos outliers — apenas validação de número
+      item.analysis = { mean: null, lo: null, hi: null, n: nums.length, usedUser };
       for (const s of entries){ s.valid = Number.isFinite(s.precoNum); }
     }
   }
@@ -596,7 +606,8 @@ function createPriceCell(item, label, isLocked, minLabel, maxLabel){
       if (d.precoRaw === null || d.precoRaw === undefined || String(d.precoRaw).trim() === '') {
       span.title = 'Preço não encontrado (indisponível no site)';
     } else if (item.analysis?.mean!=null) {
-      span.title = `Filtrado por discrepância (>±${Math.round(OUTLIER_TOL*100)}% da média ${formatBRL(item.analysis.mean)})`;
+      const __baseMsg = `Filtrado por discrepância (>±${Math.round(OUTLIER_TOL*100)}% da média ${formatBRL(item.analysis.mean)})`;
+      span.title = (item.analysis && item.analysis.usedUser) ? (__baseMsg + ' (média inclui Meu Preço)') : __baseMsg;
     } else {
       span.title = 'Preço indisponível';
     }
