@@ -306,7 +306,7 @@
   <section class="grid" style="margin-top:14px;">
     <div class="panel">
       <header>
-        <h2>Oportunidades — Eu sou o mais barato</h2>
+        <h2 id="titleBaratos">Oportunidades — Eu sou o mais barato</h2>
         <div><span class="pill">Critério: <code>meu_preco &lt; menor_concorrente</code></span></div>
       </header>
       <div class="content">
@@ -329,7 +329,7 @@
 
     <div class="panel">
       <header>
-        <h2>Oportunidades — Eu estou mais caro</h2>
+        <h2 id="titleCaros">Oportunidades — Eu estou mais caro</h2>
         <div><span class="pill">Critério: <code>meu_preco &gt; menor_concorrente</code></span></div>
       </header>
       <div class="content">
@@ -375,7 +375,7 @@
     </div>
 
     <div class="panel">
-      <header><h2>Maiores alterações de preço</h2></header>
+      <header><h2 id="titleAlt">Maiores alterações de preço</h2></header>
       <div class="content">
         <div class="tablewrap" id="wrapAlt">
           <table id="tblMaioresAlt">
@@ -965,7 +965,8 @@ function renderBaratos(){
     `;
     tb.appendChild(tr);
   });
-  applyVisibleHeights();
+  const t_titleBaratos = document.getElementById('titleBaratos'); if (t_titleBaratos) t_titleBaratos.textContent = 'Oportunidades — Eu sou o mais barato (' + data.length.toLocaleString('pt-BR') + ')';
+    applyVisibleHeights();
   decorateHeaders('baratos');
 }
 function renderCaros(){
@@ -983,7 +984,8 @@ function renderCaros(){
     `;
     tb.appendChild(tr);
   });
-  applyVisibleHeights();
+  const t_titleCaros = document.getElementById('titleCaros'); if (t_titleCaros) t_titleCaros.textContent = 'Oportunidades — Eu estou mais caro (' + data.length.toLocaleString('pt-BR') + ')';
+    applyVisibleHeights();
   decorateHeaders('caros');
 }
 
@@ -1048,7 +1050,8 @@ function renderAlt(){
     `;
     tb.appendChild(tr);
   });
-  applyVisibleHeights();
+  const t_titleAlt = document.getElementById('titleAlt'); if (t_titleAlt) t_titleAlt.textContent = 'Maiores alterações de preço (' + data.length.toLocaleString('pt-BR') + ')';
+    applyVisibleHeights();
   decorateHeaders('alt');
 }
 
