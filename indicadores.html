@@ -840,6 +840,7 @@ function median(nums){
   return arr.length%2 ? arr[m] : (arr[m-1]+arr[m])/2;
 }
 function filterOutliersAroundMedian(list, tol){
+  /* mantém apenas preços no intervalo [mediana(1-tol), mediana(1+tol)] */
   if (!list.length) return list;
   const med = median(list.map(x=>x.price));
   const lo = med*(1-tol), hi = med*(1+tol);
@@ -847,6 +848,13 @@ function filterOutliersAroundMedian(list, tol){
   return filtered.length ? filtered : list;
 }
 function filterValidCompetitors(list){
+function filterAgainstMyPrice(list, my, tol){
+  if (!Array.isArray(list) || !list.length || !my || !isFinite(my) || my<=0) return list;
+  const lo = my * (1 - tol), hi = my * (1 + tol);
+  const filtered = list.filter(x => x.price >= lo && x.price <= hi);
+  return filtered.length ? filtered : list;
+}
+
   return list.filter(x => isFiniteNum(x.price) && x.price > 0);
 }
 function currentQuery(){ const el = document.getElementById('qOportunidades'); return el ? (el.value||'').trim() : ''; }
@@ -901,7 +909,8 @@ async function loadOportunidadesVsMin(){
     let market = filterValidCompetitors(obj.market);
     if (!market.length) continue;
 
-    market = filterOutliersAroundMedian(market, tol).sort((a,b)=>a.price-b.price);
+    market = filterOutliersAroundMedian(market, tol);
+    market = filterAgainstMyPrice(market, obj.my, tol).sort((a,b)=>a.price-b.price);
     if (!market.length) continue;
 
     const minc = market[0];
@@ -1062,7 +1071,14 @@ async function loadRegiao(){
     });
     if (!mapReg.size) return;
 
-    const pares = Array.from(mapReg.entries()).map(([reg, arr])=>[reg, arr.reduce((a,b)=>a+b,0)/arr.length]);
+    /*__OUTLIER_REGIAO__*/
+const pares = Array.from(mapReg.entries()).map(([reg, arr])=>{
+  const lst = arr.map(v=>({price:Number(v)}));
+  const mid = filterOutliersAroundMedian(lst, DEFAULT_OUTLIER_TOL);
+  const clean = mid.map(x=>x.price);
+  const avg = clean.length ? clean.reduce((a,b)=>a+b,0)/clean.length : (arr.reduce((a,b)=>a+b,0)/arr.length);
+  return [reg, avg];
+});
     const canvas = document.getElementById('chartRegiao');
     const ctx = canvas.getContext('2d');
     document.querySelector('#blocoRegiao .empty').style.display='none';
