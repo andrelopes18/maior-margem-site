@@ -570,9 +570,10 @@ function updateComboTags(){
   }
 }
 function getSelectedSiteIds(){
-  // "Todos" agora significa "todos os sites liberados ao usuário"
+  // "Todos" agora significa "todos os sites permitidos"; se não conseguimos resolver permissões, retornamos null para não bloquear a consulta
   if (selectedSites.size>0) return Array.from(selectedSites);
-  return allowedSiteIds.slice();
+  if (Array.isArray(allowedSiteIds) && allowedSiteIds.length>0) return allowedSiteIds.slice();
+  return null; // << importante: sem filtro se não houver resolução
 }
 
 /* ========= Dados em memória ========= */
@@ -631,9 +632,17 @@ async function fetchAllowedSitesAndBuildCombo(){
   // busca as permissões do usuário
   allowedSiteIds = [];
   try{
-    const { data: us } = await sb.from('user_sites').select('site_id').eq('user_id', uid).order('site_id', {ascending:true});
-    if (Array.isArray(us) && us.length){
-      allowedSiteIds = Array.from(new Set(us.map(r => Number(r.site_id)).filter(Number.isFinite)));
+    // aceita 'site_id' (padrão) e fallback 'site' caso a coluna tenha outro nome
+    let rs = await sb.from('user_sites').select('site_id').eq('user_id', uid).order('site_id', {ascending:true});
+    let arr = rs.data || [];
+    if (!arr.length){
+      const rs2 = await sb.from('user_sites').select('site').eq('user_id', uid).order('site', {ascending:true});
+      arr = rs2.data || [];
+      if (arr.length){
+        allowedSiteIds = Array.from(new Set(arr.map(r => Number(r.site)).filter(Number.isFinite)));
+      }
+    } else {
+      allowedSiteIds = Array.from(new Set(arr.map(r => Number(r.site_id)).filter(Number.isFinite)));
     }
   }catch(e){
     console.warn('user_sites falhou:', e?.message||e);
@@ -645,8 +654,11 @@ async function fetchAllowedSitesAndBuildCombo(){
     const { data: sdata } = await sb.from('sites').select('id, nome').in('id', allowedSiteIds).order('nome', {ascending:true});
     sitesData = sdata || [];
   } else {
-    // Sem permissões explícitas → mantém vazio (nenhum site)
-    sitesData = [];
+    // Tenta fallback suave: listar todos os sites para não travar a UI (o filtro só é aplicado quando tivermos allowedSiteIds)
+    try{
+      const { data: all } = await sb.from('sites').select('id, nome').order('nome', {ascending:true}).limit(50);
+      sitesData = all || [];
+    }catch{ sitesData = []; }
   }
 
   // preenche mapa e constrói combo
@@ -674,7 +686,7 @@ async function buildComboFromSites(data){
     comboRows.appendChild(row);
   });
 
-  // estado inicial = "Todos" (todos os permitidos)
+  // estado inicial = "Todos"
   optAll.checked = true;
   selectedSites.clear();
   updateComboTags();
@@ -874,9 +886,9 @@ async function loadKpis(){
   }catch(e){ kpiProdutos.textContent = '—'; }
 
   try{
-    // Agora mostra apenas a contagem de sites liberados ao usuário
+    // Agora mostra apenas a contagem de sites liberados ao usuário (se conhecido)
     const totalSites = Array.isArray(allowedSiteIds) ? allowedSiteIds.length : 0;
-    kpiSites.textContent = totalSites.toLocaleString('pt-BR');
+    kpiSites.textContent = totalSites ? totalSites.toLocaleString('pt-BR') : '—';
   }catch(e){ kpiSites.textContent = '—'; }
 
   try{ const s1 = await seriesCountByDay('ean');     drawSpark(document.getElementById('sparkProdutos').getContext('2d'), s1); }catch{}
@@ -1026,14 +1038,20 @@ function currentQuery(){ const el = document.getElementById('qOportunidades'); r
 async function loadOportunidadesVsMin(){
   const lim = DEFAULT_TOP_LIMIT;
   const tol = DEFAULT_OUTLIER_TOL;
-  const siteIds = getSelectedSiteIds(); // já retorna só permitidos ou um subconjunto
+  const siteIds = getSelectedSiteIds(); // pode ser array ou null
 
   let qry = applyDateFilter(
     sb.from(VIEW).select('ean, descricao, site_id, site_nome, preco_num, meu_preco, data')
       .not('preco_num','is',null)
       .order('data', { ascending:false })
   );
-  qry = qry.in('site_id', siteIds); // força escopo permitido
+  if (Array.isArray(siteIds) && siteIds.length>0){
+    qry = qry.in('site_id', siteIds); // quando há seleção ou permissões resolvidas
+  } else {
+    // fallback: aplica escopo permitido se disponível (applySiteScope usa allowedSiteIds)
+    qry = applySiteScope(qry);
+  }
+
   const qDesc = currentQuery();
   if (qDesc)   qry = qry.ilike('descricao', `%${qDesc}%`);
 
@@ -1174,8 +1192,11 @@ async function loadMaioresAlt(){
     .order('diff_preco', { ascending:false })
     .limit(Math.max(4000, lim*50));
 
-  // força escopo permitido (ou subconjunto selecionado)
-  q = q.in('site_id', siteIds);
+  if (Array.isArray(siteIds) && siteIds.length>0){
+    q = q.in('site_id', siteIds);
+  } else {
+    q = applySiteScope(q);
+  }
 
   const { data, error } = await q;
   if (error){ console.error(error); lastAlt=[]; renderAlt(); return; }
@@ -1231,8 +1252,7 @@ function renderAlt(){
 /* ========= Região ========= */
 async function loadRegiao(){
   try{
-    // apenas se houver 'regiao' e sites permitidos
-    if (!allowedSiteIds.length) return;
+    if (!Array.isArray(allowedSiteIds) || !allowedSiteIds.length) return; // sem permissão resolvida, não exibe
     const { data: rs } = await sb.from('sites').select('id, regiao').in('id', allowedSiteIds).limit(1);
     if (!(rs && rs.length && rs[0].regiao)) return;
 
