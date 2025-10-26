@@ -840,22 +840,6 @@ function median(nums){
   return arr.length%2 ? arr[m] : (arr[m-1]+arr[m])/2;
 }
 function filterOutliersAroundMedian(list, tol){
-function filterOutliersAroundMedianInclMy(list, tol, my){
-  try{
-    if(!Array.isArray(list) || !list.length) return list || [];
-    const prices = list.map(x=>Number(x.price)).filter(v=>Number.isFinite(v) && v>0);
-    if (Number.isFinite(my) && my>0) prices.push(Number(my));
-    if(!prices.length) return list;
-    prices.sort((a,b)=>a-b);
-    const mid = prices.length%2 ? prices[(prices.length-1)/2] : (prices[prices.length/2 - 1] + prices[prices.length/2]) / 2;
-    const lo = mid * (1 - tol), hi = mid * (1 + tol);
-    const filtered = list.filter(x => Number(x.price)>=lo && Number(x.price)<=hi);
-    if (filtered.length) return filtered;
-    if (list.length === 1) return []; // single absurd competitor -> drop
-    return list; // keep original if 2+ competitors to avoid over-trimming
-  }catch(e){ return list || []; }
-}
-
   if (!list.length) return list;
   const med = median(list.map(x=>x.price));
   const lo = med*(1-tol), hi = med*(1+tol);
@@ -916,19 +900,32 @@ async function loadOportunidadesVsMin(){
     if (!isFiniteNum(obj.my) || obj.my<=0) continue;
     let market = filterValidCompetitors(obj.market);
     if (!market.length) continue;
-    market = filterOutliersAroundMedianInclMy(market, tol, obj.my).sort((a,b)=>a.price-b.price);
+
+    // filtro padrão por mediana (mantido para a aba 'Eu sou o mais barato')
+    market = filterOutliersAroundMedian(market, tol).sort((a,b)=>a.price-b.price);
     if (!market.length) continue;
 
     const minc = market[0];
     const nextAbove = market.find(x => x.price > obj.my) || null;
 
-    if (obj.my < minc.price){
-      const prox = nextAbove || minc;
+    // Para a aba 'Eu estou mais caro', usamos apenas preços dentro de ±tol do MEU PREÇO
+    let mincCaros = minc;
+    if (isFiniteNum(obj.my) && obj.my>0 && obj.my > minc.price){
+      const lo = obj.my * (1 - tol), hi = obj.my * (1 + tol);
+      const band = market.filter(x => x.price >= lo && x.price <= hi).sort((a,b)=>a.price-b.price);
+      if (!band.length) { continue; }
+      mincCaros = band[0];
+    }
+if (obj.my < minc.price){
+const prox = nextAbove || minc;
       const gapUp = prox.price - obj.my;
       baratos.push({ ean: obj.ean, desc: obj.desc, my: obj.my, next: prox.price, next_site: prox.site, gap_up: gapUp });
-    } else if (obj.my > minc.price){
-      const diff = obj.my - minc.price;
-      caros.push({ ean: obj.ean, desc: obj.desc, my: obj.my, minc: minc.price, min_site: minc.site, diff });
+    
+}
+else if (obj.my > mincCaros.price){
+const diff = obj.my - mincCaros.price;
+      caros.push({ ean: obj.ean, desc: obj.desc, my: obj.my, minc: mincCaros.price, min_site: mincCaros.site, diff 
+});
     }
   }
 
