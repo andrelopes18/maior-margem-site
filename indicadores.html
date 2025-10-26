@@ -1060,6 +1060,11 @@ const diff = obj.my - mincCaros.price;
   lastCaros   = caros.slice(0, lim);
   renderBaratos();
   renderCaros();
+  // Atualiza KPI de Economia estimada (nesse momento: soma do gap onde sou mais barato)
+  const economiaTotal = baratos.reduce((acc, it) => acc + (isFiniteNum(it.gap_up) ? Math.max(0, Number(it.gap_up)) : 0), 0);
+  const elKpiEco = document.getElementById('kpiEconomia');
+  if (elKpiEco) elKpiEco.textContent = formatBRL(economiaTotal);
+
 }
 
 
