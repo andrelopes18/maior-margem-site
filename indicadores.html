@@ -701,6 +701,129 @@ async function seriesCountByDay(distinctField){
   }
   return Array.from(map.values()).map(set=>set.size);
 }
+/* ========= KPI Variação média (apenas itens enviados pelo usuário) ========= */
+async function getUserEANs(){
+  const cols = ['ean13','ean','ean_norm','nrocodbarr','codigo_barras'];
+  try{
+    const { data:{ session } } = await sb.auth.getSession();
+    const uid = session?.user?.id || '';
+    let q = sb.from('produtos_cliente').select('*');
+    if (uid) q = q.eq('user_id', uid);
+    const { data, error } = await q.limit(10000);
+    if (error || !data) return [];
+    const set = new Set();
+    for (const r of data){
+      const col = cols.find(c => Object.prototype.hasOwnProperty.call(r,c));
+      const v = col ? (r[col] ?? '') : '';
+      const digits = String(v).replace(/\D+/g,'');
+      if (digits && digits.length >= 8) set.add(digits);
+    }
+    return Array.from(set);
+  }catch(_){ return []; }
+}
+async function mostRecentDateChunked(eans, from, to){
+  let best = null;
+  const chunk = 200;
+  for (let i=0;i<eans.length;i+=chunk){
+    const sub = eans.slice(i,i+chunk);
+    let q = sb.from(VIEW).select('data').in('ean', sub)
+      .gte('data', from.toISOString()).lte('data', to.toISOString())
+      .order('data', { ascending:false }).limit(1);
+    const { data } = await q;
+    if (data && data.length){
+      const d = new Date(data[0].data);
+      if (!best || d > best) best = d;
+    }
+  }
+  return best;
+}
+async function pricesAtDateForEANs(eans, targetDate){
+  const out = [];
+  const chunk = 200;
+  const start = new Date(targetDate.getTime() - 12*3600*1000).toISOString();
+  const end   = new Date(targetDate.getTime() + 12*3600*1000).toISOString();
+  for (let i=0;i<eans.length;i+=chunk){
+    const sub = eans.slice(i,i+chunk);
+    const { data } = await sb.from(VIEW)
+      .select('ean, site_id, preco_num, data')
+      .in('ean', sub).gte('data', start).lte('data', end)
+      .not('preco_num','is',null).gt('preco_num', 0)
+      .order('data', { ascending:false }).limit(20000);
+    if (data) out.push(...data);
+  }
+  return out;
+}
+async function prevPricesBeforeDate(eans, from){
+  const out = [];
+  const chunk = 150;
+  for (let i=0;i<eans.length;i+=chunk){
+    const sub = eans.slice(i,i+chunk);
+    const { data } = await sb.from(VIEW)
+      .select('ean, site_id, preco_num, data')
+      .in('ean', sub).lt('data', from.toISOString())
+      .not('preco_num','is',null).gt('preco_num', 0)
+      .order('data', { ascending:false }).limit(20000);
+    if (data) out.push(...data);
+  }
+  const best = new Map();
+  for (const r of out){
+    const k = String(r.ean)+'|'+String(r.site_id);
+    if (!best.has(k)) best.set(k, r);
+  }
+  return Array.from(best.values());
+}
+function computeDeltaPercentUser(recentRows, prevRows){
+  const cur = new Map();
+  for (const r of recentRows){
+    const k = String(r.ean)+'|'+String(r.site_id);
+    if (!cur.has(k)){
+      const v = Number(r.preco_num);
+      if (isFinite(v) && v > 0) cur.set(k, v);
+    }
+  }
+  const deltas = [];
+  for (const p of prevRows){
+    const k = String(p.ean)+'|'+String(p.site_id);
+    if (!cur.has(k)) continue;
+    const prev = Number(p.preco_num);
+    const now  = Number(cur.get(k));
+    if (isFinite(prev) && isFinite(now) && prev>0 && now>0){
+      deltas.push((now - prev) / prev * 100.0);
+    }
+  }
+  const avg = deltas.length ? deltas.reduce((a,b)=>a+b,0)/deltas.length : NaN;
+  return { avg, deltas };
+}
+async function recomputeKpiVariacaoUser(){
+  try{
+    const { from, to } = getPeriod();
+    const eans = await getUserEANs();
+    if (!eans.length){
+      document.getElementById('kpiVariacao').textContent = '—';
+      drawSpark(document.getElementById('sparkVariacao').getContext('2d'), []);
+      return;
+    }
+    const most = await mostRecentDateChunked(eans, from, to);
+    if (!most){
+      document.getElementById('kpiVariacao').textContent = '—';
+      drawSpark(document.getElementById('sparkVariacao').getContext('2d'), []);
+      return;
+    }
+    const rec = await pricesAtDateForEANs(eans, most);
+    const prv = await prevPricesBeforeDate(eans, from);
+    const { avg, deltas } = computeDeltaPercentUser(rec, prv);
+    if (isFinite(avg)){
+      document.getElementById('kpiVariacao').textContent = (avg>=0?'+':'') + avg.toFixed(1) + '%';
+      drawSpark(document.getElementById('sparkVariacao').getContext('2d'), deltas.slice(-30).map(Math.abs));
+    }else{
+      document.getElementById('kpiVariacao').textContent = '—';
+      drawSpark(document.getElementById('sparkVariacao').getContext('2d'), []);
+    }
+  }catch(e){
+    document.getElementById('kpiVariacao').textContent = '—';
+  }
+}
+
 async function loadKpis(){
   try{
     const totalProdutos = await countRows('cadastro_produtos');
@@ -741,6 +864,7 @@ async function loadKpis(){
   }catch(e){ document.getElementById('kpiVariacao').textContent = '—'; }
 
   document.getElementById('kpiEconomia').textContent = '—';
+  await recomputeKpiVariacaoUser();
 }
 
 /* ========= Desenho spark simples ========= */
