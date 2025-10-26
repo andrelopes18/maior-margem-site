@@ -839,12 +839,6 @@ function median(nums){
   const m = Math.floor(arr.length/2);
   return arr.length%2 ? arr[m] : (arr[m-1]+arr[m])/2;
 }
-
-function applyOutliersIfAny(list){
-  const cleaned = filterOutliersAroundMedian(list, DEFAULT_OUTLIER_TOL);
-  return (Array.isArray(cleaned) && cleaned.length) ? cleaned : list;
-}
-
 function filterOutliersAroundMedian(list, tol){
   if (!list.length) return list;
   const med = median(list.map(x=>x.price));
@@ -907,10 +901,23 @@ async function loadOportunidadesVsMin(){
     let market = filterValidCompetitors(obj.market);
     if (!market.length) continue;
 
-    let _origMarket = market.slice();
-    market = filterOutliersAroundMedian(market, DEFAULT_OUTLIER_TOL).sort((a,b)=>a.price-b.price);
-    if (!market.length) market = _origMarket.sort((a,b)=>a.price-b.price);
+    // 1) Filtra por mediana ±tol
+    market = filterOutliersAroundMedian(market, tol).sort((a,b)=>a.price-b.price);
     if (!market.length) continue;
+
+    // 2) Se meu preço existe, aplica um segundo filtro não-destrutivo em torno do meu preço
+    if (isFiniteNum(obj.my) && obj.my>0){
+      const lo = obj.my * (1 - tol);
+      const hi = obj.my * (1 + tol);
+      const band = market.filter(x => x.price >= lo && x.price <= hi);
+      // usa a banda se houver pelo menos 1; se banda esvaziar e só existir 1 concorrente, ignoramos (evita falso-positivo)
+      if (band.length >= 1){
+        market = band.sort((a,b)=>a.price-b.price);
+      } else if (market.length === 1){
+        // com apenas 1 concorrente fora da banda, descartamos o item para evitar distorção
+        continue;
+      } // se houver >=2 concorrentes, mantemos a lista pela mediana
+    }
 
     const minc = market[0];
     const nextAbove = market.find(x => x.price > obj.my) || null;
