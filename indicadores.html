@@ -578,6 +578,17 @@ function getSelectedSiteIds(){
   return Array.from(allowedSites); // quando "Todos", aplicamos allowedSites
 }
 
+
+function isSiteAllowed(sid){
+  sid = Number(sid);
+  if (!Number.isFinite(sid)) return false;
+  if (allowedSites && allowedSites.size > 0){
+    return allowedSites.has(sid);
+  }
+  // sem mapeamento, não bloqueia nada
+  return true;
+}
+
 /* ========= Dados em memória ========= */
 let lastBaratos = [];
 let lastCaros   = [];
@@ -608,6 +619,7 @@ const collator = new Intl.Collator('pt-BR', { sensitivity:'base', numeric:true }
 
   // carregar sites permitidos e preencher combo
   await loadAllowedSites();
+  if (!allowedSiteRows.length){ setStatus('Nenhum site habilitado para este usuário (exibindo vazio).'); }
   await populateSitesIntoCombo();
 
   const today = new Date(); const from = new Date(today.getTime() - 30*24*3600*1000);
@@ -705,11 +717,7 @@ function applyDateFilter(q){
   return q;
 }
 // Aplica restrição de sites permitidos (sempre)
-function applyAllowedSites(q){
-  const ids = Array.from(allowedSites);
-  if (ids.length) q = q.in('site_id', ids);
-  return q;
-}
+function applyAllowedSites(q){ return q; }
 
 /* ========= Carregamento ========= */
 async function reloadAll(){
@@ -1069,7 +1077,8 @@ async function loadOportunidadesVsMin(){
 
     const sid = Number(r.site_id);
     const pn  = Number(r.preco_num);
-    const allowedSite = allowedSites.has(sid);
+    const inSubset = (selectedSites && selectedSites.size>0) ? selectedSites.has(sid) : true;
+    const allowedSite = isSiteAllowed(sid) && inSubset;
     if (allowedSite && isFiniteNum(pn) && pn>0){
       obj.market.push({ price: pn, site: r.site_nome || sid });
     }
@@ -1206,7 +1215,13 @@ async function loadMaioresAlt(){
   const { data, error } = await q;
   if (error){ console.error(error); lastAlt=[]; renderAlt(); return; }
 
-  const rows = data || [];
+  let rows = data || [];
+  // filtro client-side por sites permitidos e seleção do usuário
+  rows = rows.filter(r=>{
+    const sid = Number(r.site_id);
+    const subsetOk = (selectedSites && selectedSites.size>0) ? selectedSites.has(sid) : true;
+    return isSiteAllowed(sid) && subsetOk;
+  });
   const eans = Array.from(new Set(rows.map(r => String(r.ean||'')).filter(Boolean)));
   let descMap = new Map();
   try {
@@ -1272,7 +1287,9 @@ async function loadRegiao(){
 
     const mapReg = new Map();
     (data||[]).forEach(r=>{
-      const reg = m.get(Number(r.site_id)); if(!reg) return;
+      const sid = Number(r.site_id);
+      if (!isSiteAllowed(sid)) return;
+      const reg = m.get(sid); if(!reg) return;
       const pn = Number(r.preco_num); if(!isFinite(pn)) return;
       if(!mapReg.has(reg)) mapReg.set(reg, []); mapReg.get(reg).push(pn);
     });
@@ -1310,7 +1327,8 @@ async function watchAbaixoCusto(){
         .gte('data',from.toISOString()).lte('data',to.toISOString()).limit(10000);
       q = applyAllowedSites(q);
       const { data } = await q;
-      const rows = (data||[]).filter(r=>isFiniteNum(r.meu_custo)&&isFiniteNum(r.meu_preco)&&r.meu_preco<r.meu_custo)
+      const filt = (data||[]).filter(r=> isSiteAllowed(r.site_id) );
+      const rows = filt.filter(r=>isFiniteNum(r.meu_custo)&&isFiniteNum(r.meu_preco)&&r.meu_preco<r.meu_custo)
         .map(r=>({ ean:r.ean, desc:r.descricao||'', meu_custo:Number(r.meu_custo), meu_preco:Number(r.meu_preco), delta:Number(r.meu_preco)-Number(r.meu_custo) }));
       lastAbaixo = rows;
       renderAbaixo();
