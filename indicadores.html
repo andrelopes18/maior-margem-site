@@ -525,6 +525,7 @@ const optAll     = document.getElementById('opt_all');
 
 let siteMap = new Map();
 let selectedSites = new Set();
+let allowedSiteIds = [];
 
 comboBtn.addEventListener('click', ()=>{
   const open = comboList.style.display === 'block';
@@ -569,7 +570,9 @@ function updateComboTags(){
   }
 }
 function getSelectedSiteIds(){
-  if (optAll.checked || selectedSites.size===0) return null;
+  if (optAll.checked || selectedSites.size===0){
+    return (allowedSiteIds && allowedSiteIds.length) ? Array.from(allowedSiteIds) : null;
+  }
   return Array.from(selectedSites);
 }
 
@@ -613,12 +616,41 @@ const collator = new Intl.Collator('pt-BR', { sensitivity:'base', numeric:true }
 })();
 
 async function populateSitesIntoCombo(){
-  const { data, error } = await sb.from('sites').select('id, nome').order('nome', { ascending:true });
-  if (error){ console.warn('Falha ao carregar sites:', error.message||error); return; }
-  siteMap = new Map((data||[]).map(s => [Number(s.id), s.nome || String(s.id)]));
-
+  // carrega somente os sites liberados para o usuário (user_sites)
+  const { data: sess } = await sb.auth.getSession();
+  const uid = sess?.session?.user?.id || null;
   comboRows.innerHTML = '';
-  (data||[]).forEach(s=>{
+  siteMap = new Map();
+  allowedSiteIds = [];
+
+  if (!uid){
+    updateComboTags();
+    return;
+  }
+
+  // Busca na tabela user_sites e junta com sites (FK: site_id)
+  const { data, error } = await sb
+    .from('user_sites')
+    .select('site_id, sites(id, nome)')
+    .eq('user_id', uid)
+    .order('site_id', { ascending: true });
+
+  if (error){
+    console.warn('Falha ao carregar sites do usuário:', error.message || error);
+    updateComboTags();
+    return;
+  }
+
+  const rows = (data || []).map(r => {
+    const id = Number(r.site_id || (r.sites && r.sites.id));
+    const nome = (r.sites && r.sites.nome) ? r.sites.nome : String(id);
+    return { id, nome };
+  }).filter(r => Number.isFinite(r.id));
+
+  rows.forEach(r => { if (!siteMap.has(r.id)) siteMap.set(r.id, r.nome); });
+  allowedSiteIds = Array.from(siteMap.keys());
+
+  rows.forEach(s=>{
     const row = document.createElement('div');
     row.className = 'row';
     row.dataset.id = String(s.id);
@@ -636,6 +668,7 @@ async function populateSitesIntoCombo(){
     comboRows.appendChild(row);
   });
 
+  // "Todos" = todos os sites liberados
   optAll.checked = true;
   selectedSites.clear();
   updateComboTags();
